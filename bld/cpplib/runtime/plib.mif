@@ -101,10 +101,8 @@ objs_cpp = &
     $(_subdir_)stabact.obj  &
     $(_subdir_)stabactv.obj &
     $(_subdir_)stabadt.obj  &
-    $(x_subdir)/stabdisp.obj &
     $(_subdir_)stabdtor.obj &
     stabinit.obj &
-    $(x_subdir)/stabthrw.obj &
     stabtrav.obj &
     termnate.obj &
     thrddata.obj &

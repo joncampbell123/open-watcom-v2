@@ -17,4 +17,3 @@ libsx += $(cpplib_dir)/string/$(system).$(processor)/$(subdir)$(subdir_suffix)/$
 libsx += $(cpplib_dir)/contain/$(system).$(processor)/$(subdir)$(subdir_suffix)/$(cont_x)$(suffix).lib
 
 target_lib = $(prefix)$(suffix).lib
-target_lib_x = $(prefix_x)$(suffix).lib

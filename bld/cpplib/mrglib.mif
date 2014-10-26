@@ -35,7 +35,7 @@ subdir_suffix = .dll
 
 !include $(cpplib_dir)/pliblibs.mif
 
-libs : .symbolic $(target_lib) $(target_lib_x)
+libs : .symbolic $(target_lib)
     @%null
 
 $(target_lib) : $(libs) $(__MAKEFILES__)
@@ -48,14 +48,3 @@ $(target_lib) : $(libs) $(__MAKEFILES__)
     sed -f $(lib_misc_dir)/sed/export.sed export.tmp > export.def
 !endif
 
-!ifdef target_lib_x
-$(target_lib_x) : $(libsx) $(__MAKEFILES__)
-    %create $^&.lbc
-    @for %i in ($(libsx)) do @%append $^&.lbc +%i
-    @rm -f exportx.tmp
-    @rm -f exportx.def
-    $(librarian) $(lib_flags) $(exp_libx_flags) $^@ @$^&.lbc
-!ifeq linkage dynamic
-    sed -f $(lib_misc_dir)/sed/export.sed exportx.tmp > exportx.def
-!endif
-!endif

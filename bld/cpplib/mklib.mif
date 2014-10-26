@@ -2,10 +2,6 @@ proj_name = cpplib
 
 suppress_zc = 1
 
-x_subdir = xobjs
-
-additional_cleanup_subdir = $(x_subdir)
-
 !include $(cpplib_dir)/libtarg.mif
 
 !ifdef mem_model_$(model)
@@ -53,20 +49,13 @@ lib_flags = -b-c-n-pa
 lib_flags += -s-t-zld
 !endif
 
-libs : .symbolic $(target_lib) $(target_lib_x) $(files)
+libs : .symbolic $(target_lib) $(files)
     @%null
 
 $(target_lib) : $(target_objs) $(__MAKEFILES__)
     %create $^&.lbc
     @for %i in ($(target_objs)) do @%append $^&.lbc +%i
     $(librarian) $(lib_flags) $^@ @$^&.lbc
-
-!ifdef target_lib_x
-$(target_lib_x) : $(target_xobjs) $(__MAKEFILES__)
-    %create $^&.lbc
-    @for %i in ($(target_xobjs)) do @%append $^&.lbc +%i
-    $(librarian) $(lib_flags) $^@ @$^&.lbc
-!endif
 
 # Include system headers in dependency lists
 extra_cpp_flags=-D_ENABLE_AUTODEPEND -D__OBSCURE_STREAM_INTERNALS
@@ -164,15 +153,6 @@ inc_dirs = -I"$(lib_misc_dir)/h" -I"../../h" -I"$(plusplus_dir)/h" -I"$(cpplib_d
 !else
     @echo c++ $@
     @$(cxx) $(comp_flags) $(br_flags_$(sw_br_$[&)) $(inc_dirs) -nm=$[& $(pch_flags) $(pch_flags_$[&) $[@
-!endif
-
-.cpp{$(x_subdir)}.obj : .autodepend
-    @if not exist $(x_subdir) mkdir $(x_subdir)
-!ifeq verbose 1
-    $(cxx) -xs $(comp_flags) $(br_flags_$(sw_br_$[&)) $(inc_dirs) -nm=$[& $(pch_flags_x) $(pch_flags_x_$[&) $[@
-!else
-    @echo xc++ $@
-    @$(cxx) -xs $(comp_flags) $(br_flags_$(sw_br_$[&)) $(inc_dirs) -nm=$[& $(pch_flags_x) $(pch_flags_x_$[&) $[@
 !endif
 
 .asm.obj : .autodepend
