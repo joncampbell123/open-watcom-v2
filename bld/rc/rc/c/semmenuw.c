@@ -242,7 +242,7 @@ static bool SemWriteMenuItem( FullMenuItem *item, int islastitem,
     return( error );
 }
 
-static bool SemWriteSubMenu( FullMenu *submenu, int *err_code, YYTOKENTYPE tokentype )
+static bool SemWriteSubMenu( FullMenu *submenu, int *err_code, YYTOKENTYPE tokentype, unsigned int depth )
 /************************************************************************************/
 {
     bool            error;
@@ -258,9 +258,15 @@ static bool SemWriteSubMenu( FullMenu *submenu, int *err_code, YYTOKENTYPE token
     for( curritem = submenu->head; curritem != NULL && !error; curritem = curritem->next ) {
         islastitem = (curritem == submenu->tail);
         if( !ErrorHasOccured ) {
+            /* Windows 2.0 does not support submenus, though it will still parse the overall menu correctly.
+             * Emit only at depth 1 to avoid spewing warnings for each sub-submenu within.
+             * Once per popup at depth == 1 is enough to get the point across. */
+            if ( CmdLineParms.VersionStamp20 && curritem->IsPopup && depth == 1 )
+                RcWarning( WARN_SUBMENUS_WIN2X );
+
             error = SemWriteMenuItem( curritem, islastitem, err_code, tokentype );
             if( !error && curritem->IsPopup ) {
-                error = SemWriteSubMenu( curritem->item.popup.submenu, err_code, tokentype );
+                error = SemWriteSubMenu( curritem->item.popup.submenu, err_code, tokentype, depth + 1u );
             }
         }
     }
@@ -331,7 +337,7 @@ void SemWINWriteMenu( WResID *name, ResMemFlags flags, FullMenu *menu,
         if( error ) {
             err_code = LastWresErr();
         } else {
-            error = SemWriteSubMenu( menu, &err_code, tokentype );
+            error = SemWriteSubMenu( menu, &err_code, tokentype, 0u );
         }
         if( !error && CmdLineParms.MSResFormat && CmdLineParms.TargetOS == RC_TARGET_OS_WIN32 ) {
             error = ResWritePadDWord( CurrResFile.fp );
