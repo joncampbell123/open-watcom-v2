@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -30,12 +30,14 @@
 ****************************************************************************/
 
 
+#include "wf77defs.h"
+#include "cg.h"
 #include "symdefs.h"
 #include "symflgs.h"
 #include "symtypes.h"
 #include "symacc.h"
 #include "ifdefs.h"
-#include "cg.h"
+
 
 #define SEG_NULL        0       // NULL segment id
 #if _INTEL_CPU
@@ -61,8 +63,6 @@
 #define ALIGN_SEGMENT   16      // align segment on segment boundary
 
 
-typedef back_handle     obj_addr;              // back handle
-
 typedef unsigned_32     db_handle;
 
 #include "struct.h"
@@ -74,14 +74,14 @@ typedef unsigned_32     db_handle;
 typedef union vi {
     struct com_eq       *ec_ext;        // common/equivalence extension
     segment_id          segid;          //   variables not in common/equivalence
-    void                *alt_scb;       // SCB for character arguments
-    unsigned short      cg_typ;         // cg-type for local character
+    temp_handle         alt_scb;        // SCB for character arguments
+    cg_type             cgtyp;          // cg-type for local character
 } vi;
 
 typedef struct var {
     union {
         struct act_dim_list *dim_ext;   // pointer to dimension extension
-        void                *bck_hdl;
+        back_handle         cgbck;
     } u;
     union vi            vi;             // variable information
 } var;
@@ -109,7 +109,7 @@ typedef struct subprog {
         label_id        entry;          // entry label
         segment_id      segid;          // segment id for external subprograms
     } u;
-    void                *alt_scb;       // SCB for character*(*) functions
+    temp_handle         alt_scb;        // SCB for character*(*) functions
 } subprog;
 
 // symbol table information for intrinsic functions:
@@ -197,7 +197,7 @@ typedef struct m_sym {
     sym_id              sym;            // shadowed symbol
     union {
         intstar4        *value;         // value of implied-DO variables
-        unsigned short  cg_typ;         // cg-type for character temporaries
+        cg_type         cgtyp;          // cg-type for character temporaries
     } u;                                //   and equivalence sets allocated
 } m_sym;
 
@@ -206,7 +206,7 @@ typedef struct m_sym {
 
 typedef struct constant {
     sym_id              link;           // pointer to next constant in chain
-    void                *address;       // back handle
+    back_handle         address;        // back handle
     TYPE                typ;            // type of constant
     size_t              size;           // size of constant
     ftn_type            value;          // value of constant
@@ -215,18 +215,21 @@ typedef struct constant {
 // symbol table structure for literals:
 // ====================================
 
+typedef enum {
+    LT_NONE               = 0x00,
+    LT_DATA_STMT          = 0x01,   // literal used in DATA statement
+    LT_EXEC_STMT          = 0x02,   // literal used in executable statement
+    LT_SCB_TMP_REFERENCE  = 0x04,   // temporary reference to SCB
+    LT_SCB_REQUIRED       = 0x08,   // SCB required
+} lt_flags;
+
 typedef struct literal {
     sym_id              link;           // pointer to next literal in chain
-    void                *address;       // back handle
+    back_handle         address;        // back handle
     size_t              length;         // length of literal
-    unsigned_8          flags;          // constant appeared in DATA statement
-    byte                value;          // value of literal
+    lt_flags            flags;          // constant appeared in DATA statement
+    char                value[1];       // value of literal
 } literal;
-
-#define LT_DATA_STMT            0x01    // literal used in DATA statement
-#define LT_EXEC_STMT            0x02    // literal used in executable statement
-#define LT_SCB_TMP_REFERENCE    0x04    // temporary reference to SCB
-#define LT_SCB_REQUIRED         0x08    // SCB required
 
 // symbol table structure for statement numbers:
 // =============================================
@@ -234,11 +237,11 @@ typedef struct literal {
 typedef struct stmtno {
     sym_id              link;           // link to next statement # entry
     uint                ref_count;      // reference count
-    unsigned_16         block;          // block # statement # appeared in
+    block_num           block;          // block # statement # appeared in
     unsigned_16         flags;          // statement # flags
-    label_id            address;        // label of statement #
+    label_id            label;          // label of statement #
     int                 line;           // source line statement # appeared in
-    unsigned_16         number;         // statement #
+    stmt_num            number;         // statement #
 } stmtno;
 
 // union of all symbols:
@@ -268,8 +271,8 @@ typedef struct named_symbol {
         byte            magic_flags;    // information about the magic symbol
     } u2;
     union {
-      obj_addr          address;        // address of symbol
-      db_handle         dbh;            // browse handle
+        back_handle     address;        // address of symbol
+        db_handle       dbh;            // browse handle
     } u3;
     ext_inf             xt;             // extended info
     union {

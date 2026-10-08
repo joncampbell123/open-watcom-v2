@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -44,13 +44,14 @@
 #endif
 #include "ldstr.h"
 #include "uistr.grh"
-#include "wclbproc.h"
-#include "pathgrp2.h"
-#ifdef __NT__
+#if defined( __WINDOWS__ )
+    #include "wclbproc.h"
+#elif defined( __NT__ )
     #undef _WIN32_IE
     #define _WIN32_IE   0x0400
     #include <commctrl.h>
 #endif
+#include "pathgrp2.h"
 
 #include "clibext.h"
 
@@ -167,11 +168,17 @@ bool GetSaveFName( HWND mainhwnd, char *fname )
     of.Flags = OFN_HIDEREADONLY;
 #ifndef NOUSE3D
     of.Flags |= OFN_ENABLEHOOK;
+  #ifdef __WINDOWS__
     of.lpfnHook = MakeProcInstance_OFNHOOK( LBSaveOFNHookProc, GET_HINSTANCE( mainhwnd ) );
+  #else
+    of.lpfnHook = LBSaveOFNHookProc;
+  #endif
 #endif
     rc = GetSaveFileName( &of );
 #ifndef NOUSE3D
+  #ifdef __WINDOWS__
     FreeProcInstance_OFNHOOK( of.lpfnHook );
+  #endif
 #endif
     return( rc != 0 );
 
@@ -223,11 +230,13 @@ bool GenTmpFileName( const char *tmpname, char *buf )
  */
 static void relToAbs( const char *path, char *out )
 {
-    char        *cwd;
-    int         old_drive;
-    pgroup2     pg1;
-    pgroup2     pg2;
-    size_t      len;
+    char            *cwd;
+    int             old_drive;
+    pgroup2         pg1;
+    pgroup2         pg2;
+    size_t          len;
+    int             c;
+    char            *p;
 
     /* remove directory separator on the path end */
     _splitpath2( path, pg1.buffer, &pg1.drive, &pg1.dir, &pg1.fname, &pg1.ext );
@@ -255,10 +264,14 @@ static void relToAbs( const char *path, char *out )
     out[len++] = 'a';   /* add fake file name for _splitpath2 */
     out[len] = '\0';
     _splitpath2( out, pg2.buffer, &pg2.drive, &pg2.dir, NULL, NULL );
-
-    /* create absolute path for file */
-    strupr( pg1.fname );
-    strupr( pg1.ext );
+    p = pg1.fname;
+    while( (c = *(unsigned char *)p) != '\0' ) {
+        *p++ = (char)toupper( c );
+    }
+    p = pg1.ext;
+    while( (c = *(unsigned char *)p) != '\0' ) {
+        *p++ = (char)toupper( c );
+    }
     _makepath( out, pg2.drive, pg2.dir, pg1.fname, pg1.ext );
 
 } /* relToAbs */

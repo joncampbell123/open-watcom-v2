@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -40,9 +40,7 @@
 #include "diskos.h"
 #include "clcommon.h"
 #include "pathgrp2.h"
-#ifdef TRMEM
 #include "trmem.h"
-#endif
 
 #include "clibext.h"
 
@@ -72,7 +70,8 @@ static char *DebugOptions[] = {
 };
 
 #ifdef TRMEM
-static _trmem_hdl   TRMemHandle;
+
+static _trmem_hdl   TrHdl = _TRMEM_HDL_NONE;
 
 static void memPrintLine( void *fh, const char *buf, size_t len )
 {
@@ -80,7 +79,8 @@ static void memPrintLine( void *fh, const char *buf, size_t len )
 
     PrintMsg( "%s\n", buf );
 }
-#endif
+
+#endif  /* TRMEM */
 
 void PrintMsg( const char *fmt, ... )
 /***********************************/
@@ -171,9 +171,8 @@ void  MemInit( void )
 /*******************/
 {
 #ifdef TRMEM
-    TRMemHandle = _trmem_open( malloc, free, realloc, NULL, NULL, memPrintLine,
-            _TRMEM_ALLOC_SIZE_0 | _TRMEM_REALLOC_SIZE_0 |
-            _TRMEM_OUT_OF_MEMORY | _TRMEM_CLOSE_CHECK_FREE );
+    TrHdl = _trmem_open( malloc, free, realloc, strdup,
+            NULL, memPrintLine, _TRMEM_DEF );
 #endif
 }
 
@@ -181,91 +180,80 @@ void  MemFini( void )
 /*******************/
 {
 #ifdef TRMEM
-    _trmem_prt_usage( TRMemHandle );
-    _trmem_prt_list( TRMemHandle );
-    _trmem_close( TRMemHandle );
+    _trmem_prt_usage( TrHdl );
+    _trmem_prt_list( TrHdl );
+    _trmem_close( TrHdl );
 #endif
 }
 
+static void *check_nomem( void *ptr )
+{
+    if( ptr == NULL ) {
+        PrintMsg( WclMsgs[OUT_OF_MEMORY] );
+        exit( 1 );
+    }
+    return( ptr );
+}
+
+TRMEMAPI( MemAlloc )
 void  *MemAlloc( size_t size )
 /****************************/
 {
-    void        *ptr;
-
 #ifdef TRMEM
-    ptr = _trmem_alloc( size, _trmem_guess_who(), TRMemHandle );
+    return( check_nomem( _trmem_alloc( size, _TRMEM_WHO( 1 ), TrHdl ) ) );
 #else
-    ptr = malloc( size );
+    return( check_nomem( malloc( size ) ) );
 #endif
-    if( ptr == NULL ) {
-        PrintMsg( WclMsgs[OUT_OF_MEMORY] );
-        exit( 1 );
-    }
-    return( ptr );
 }
 
-char *MemStrDup( const char *str )
+TRMEMAPI( MemStrdup )
+char *MemStrdup( const char *str )
 /********************************/
 {
-    char        *ptr;
-
 #ifdef TRMEM
-    ptr = _trmem_strdup( str, _trmem_guess_who(), TRMemHandle );
+    return( check_nomem( _trmem_strdup( str, _TRMEM_WHO( 2 ), TrHdl ) ) );
 #else
-    ptr = strdup( str );
+    return( check_nomem( strdup( str ) ) );
 #endif
-    if( ptr == NULL ) {
-        PrintMsg( WclMsgs[OUT_OF_MEMORY] );
-        exit( 1 );
-    }
-    return( ptr );
 }
 
 #if 0
+TRMEMAPI( MemStrLenDup )
 char *MemStrLenDup( const char *str, size_t len )
 /***********************************************/
 {
     char        *ptr;
 
 #ifdef TRMEM
-    ptr = _trmem_alloc( len + 1, _trmem_guess_who(), TRMemHandle );
+    ptr = check_nomem( _trmem_alloc( len + 1, _TRMEM_WHO( 3 ), TrHdl ) );
 #else
-    ptr = malloc( len + 1 );
+    ptr = check_nomem( malloc( len + 1 ) );
 #endif
-    if( ptr == NULL ) {
-        PrintMsg( WclMsgs[OUT_OF_MEMORY] );
-        exit( 1 );
-    }
     memcpy( ptr, str, len );
     ptr[len] = '\0';
     return( ptr );
 }
 #endif
 
+TRMEMAPI( MemRealloc )
 void  *MemRealloc( void *p, size_t size )
 /***************************************/
 {
-    void        *ptr;
-
 #ifdef TRMEM
-    ptr = _trmem_realloc( p, size, _trmem_guess_who(), TRMemHandle );
+    return( check_nomem( _trmem_realloc( p, size, _TRMEM_WHO( 4 ), TrHdl ) ) );
 #else
-    ptr = realloc( p, size );
+    return( check_nomem( realloc( p, size ) ) );
 #endif
-    if( ptr == NULL ) {
-        PrintMsg( WclMsgs[OUT_OF_MEMORY] );
-        exit( 1 );
-    }
-    return( ptr );
 }
 
+TRMEMAPI( MemFree )
 void  MemFree( void *ptr )
 /************************/
 {
 #ifdef TRMEM
-        _trmem_free( ptr, _trmem_guess_who(), TRMemHandle );;
+    _trmem_free( ptr, _TRMEM_WHO( 5 ), TrHdl );;
 #else
-        free( ptr );
+    free( ptr );
 #endif
 }
 
@@ -320,13 +308,13 @@ void  AddNameObj( const char *name )
     } else {
         last_name->next = new_name;
     }
-    new_name->item = MemStrDup( name );
+    new_name->item = MemStrdup( name );
     new_name->next = NULL;
     if( Obj_Name != NULL ) {
         /* construct full name of object file from Obj_Name information */
         _splitpath2( Obj_Name, pg1.buffer, &pg1.drive, &pg1.dir, &pg1.fname, &pg1.ext );
         if( pg1.ext[0] == '\0' )
-            pg1.ext = OBJ_EXT;
+            pg1.ext = FEXT_OBJ;
         if( pg1.fname[0] == '\0' || pg1.fname[0] == '*' ) {
             /* there's no usable basename in the -fo= pattern, but there drive and directory
              * and extension should still be applied.
@@ -362,7 +350,7 @@ char  *MakePath( const char *path )
     }
 #endif
     if( p == NULL ) {
-        return( MemStrDup( "" ) );
+        return( MemStrdup( "" ) );
     } else {
         len = p + 1 - path;
         p = MemAlloc( len + 1 );
@@ -521,4 +509,21 @@ void  MakeName( char *name, const char *ext )
     if( strrchr( name, '.' ) <= strpbrk( name, PATH_SEPS_STR ) ) {
         strcat( name, ext );
     }
+}
+
+
+int UseCPlusPlus( const char *p )
+/*******************************/
+{
+    return( *p++ == '.' && (
+        fname_cmp( p, "cp" ) == 0 ||
+        fname_cmp( p, "cpp" ) == 0 ||
+        fname_cmp( p, "cxx" ) == 0 ||
+        fname_cmp( p, "cc" )  == 0 ||
+#ifdef __UNIX__
+        strcmp( p, "c++" ) == 0 ||
+        strcmp( p, "C" ) == 0 ||
+#endif
+        fname_cmp( p, "hpp" ) == 0 ||
+        fname_cmp( p, "hxx" ) == 0 ) );
 }

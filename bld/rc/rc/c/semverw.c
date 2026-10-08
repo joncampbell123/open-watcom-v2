@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -51,34 +51,27 @@ static void FreeVerBlockNest( FullVerBlockNest *nest );
 FullVerValueList *SemWINAddVerValueList( FullVerValueList *list, VerValueItem item )
 /**********************************************************************************/
 {
-    if( CmdLineParms.TargetOS == RC_TARGET_OS_WIN32 ) {
+    if( list == NULL ) {
+        list = MemAllocSafe( sizeof( FullVerValueList ) );
+        list->NumItems = 0;
+        list->Item = NULL;
+    }
+    if( CmdLineParms.iswin32 ) {
         item.strlen = VER_CALC_SIZE;    // terminate at the first NULLCHAR
     }                                   // instead of using the full string.
                                         // This is what Microsoft does.
     list->NumItems++;
-    list->Item = RCREALLOC( list->Item, list->NumItems * sizeof( VerValueItem ) );
+    list->Item = MemReallocSafe( list->Item, list->NumItems * sizeof( VerValueItem ) );
     list->Item[list->NumItems - 1] = item;
 
     return( list );
-}
-
-FullVerValueList *SemWINNewVerValueList( VerValueItem item )
-/**********************************************************/
-{
-    FullVerValueList    *list;
-
-    list = RESALLOC( sizeof( FullVerValueList ) );
-    list->NumItems = 0;
-    list->Item = NULL;
-
-    return( SemWINAddVerValueList( list, item ) );
 }
 
 static void FreeValItem( VerValueItem *item )
 /*******************************************/
 {
     if( !item->IsNum ) {
-        RESFREE( item->Value.String );
+        MemFree( item->Value.String );
     }
 }
 
@@ -90,19 +83,19 @@ static void FreeValList( FullVerValueList *list )
     for( i = 0; i < list->NumItems; i++ ) {
         FreeValItem( list->Item + i );
     }
-    RESFREE( list->Item );
-    RESFREE( list );
+    MemFree( list->Item );
+    MemFree( list );
 }
 
-static bool semWriteVerValueList( FullVerValueList *list, bool use_unicode, FILE *fp, int *err_code )
-/***************************************************************************************************/
+static bool semWriteVerValueList( FullVerValueList *list, bool iswin32, FILE *fp, int *err_code )
+/***********************************************************************************************/
 {
     bool        error;
     unsigned    i;
 
     error = false;
     for( i = 0; !error && i < list->NumItems; i++ ) {
-        error = ResWriteVerValueItem( list->Item + i, use_unicode, fp );
+        error = ResWriteVerValueItem( list->Item + i, iswin32, fp );
     }
     *err_code = LastWresErr();
     return( error );
@@ -114,12 +107,12 @@ FullVerBlock *SemWINNewBlockVal( char *name, FullVerValueList *list )
 {
     FullVerBlock    *block;
 
-    block = RESALLOC( sizeof( FullVerBlock ) );
+    block = MemAllocSafe( sizeof( FullVerBlock ) );
     block->Next = NULL;
     block->Prev = NULL;
     block->Head.Key = name;
-    block->UseUnicode = ( CmdLineParms.TargetOS == RC_TARGET_OS_WIN32 );
-    block->Value = list;
+    block->iswin32 = CmdLineParms.iswin32;
+    block->Values = list;
     block->Nest = NULL;
 
     return( block );
@@ -130,12 +123,12 @@ FullVerBlock *SemWINNameVerBlock( char *name, FullVerBlockNest *nest )
 {
     FullVerBlock    *block;
 
-    block = RESALLOC( sizeof( FullVerBlock ) );
+    block = MemAllocSafe( sizeof( FullVerBlock ) );
     block->Next = NULL;
     block->Prev = NULL;
     block->Head.Key = name;
-    block->UseUnicode = ( CmdLineParms.TargetOS == RC_TARGET_OS_WIN32 );
-    block->Value = NULL;
+    block->iswin32 = CmdLineParms.iswin32;
+    block->Values = NULL;
     block->Nest = nest;
 
     return( block );
@@ -148,22 +141,16 @@ static uint_16 CalcBlockSize( FullVerBlock *block )
     uint_16         padding;
     uint_16         head_size;
     uint_16         nest_size;
-    WResTargetOS    res_os;
 
-    if( CmdLineParms.TargetOS == RC_TARGET_OS_WIN32 ) {
-        res_os = WRES_OS_WIN32;
-    } else {
-        res_os = WRES_OS_WIN16;
-    }
-    head_size = ResSizeVerBlockHeader( &block->Head, block->UseUnicode, res_os );
+    head_size = ResSizeVerBlockHeader( &block->Head, block->iswin32 );
     val_size = 0;
-    if( block->Value == NULL ) {
+    if( block->Values == NULL ) {
         padding = 0;
     } else {
         unsigned    i;
 
-        for( i = 0; i < block->Value->NumItems; i++ ) {
-            val_size += ResSizeVerValueItem( block->Value->Item + i, block->UseUnicode );
+        for( i = 0; i < block->Values->NumItems; i++ ) {
+            val_size += ResSizeVerValueItem( block->Values->Item + i, block->iswin32 );
         }
         padding = RES_PADDING_DWORD( val_size );
     }
@@ -177,7 +164,7 @@ static uint_16 CalcBlockSize( FullVerBlock *block )
     if( stricmp( block->Head.Key, "Translation" ) == 0 ) {
         block->Head.Type = 0;
     } else {
-        if( block->UseUnicode )
+        if( block->iswin32 )
             block->Head.ValSize /= 2;
         block->Head.Type = 1;
     }
@@ -190,18 +177,12 @@ static bool SemWriteVerBlock( FullVerBlock *block, FILE *fp, int *err_code )
 /**************************************************************************/
 {
     bool            error;
-    WResTargetOS    res_os;
 
-    if( CmdLineParms.TargetOS == RC_TARGET_OS_WIN32 ) {
-        res_os = WRES_OS_WIN32;
-    } else {
-        res_os = WRES_OS_WIN16;
-    }
-    error = ResWriteVerBlockHeader( &block->Head, block->UseUnicode, res_os, fp );
+    error = ResWriteVerBlockHeader( &block->Head, block->iswin32, fp );
     *err_code = LastWresErr();
     if( !error
-      && block->Value != NULL ) {
-        error = semWriteVerValueList( block->Value, block->UseUnicode, fp, err_code );
+      && block->Values != NULL ) {
+        error = semWriteVerValueList( block->Values, block->iswin32, fp, err_code );
         if( !error ) {
             error = ResWritePadDWord( fp );
             *err_code = LastWresErr();
@@ -218,32 +199,25 @@ static bool SemWriteVerBlock( FullVerBlock *block, FILE *fp, int *err_code )
 static void FreeVerBlock( FullVerBlock *block )
 /*********************************************/
 {
-    RESFREE( block->Head.Key );
-    if( block->Value != NULL ) {
-        FreeValList( block->Value );
+    MemFree( block->Head.Key );
+    if( block->Values != NULL ) {
+        FreeValList( block->Values );
     }
     if( block->Nest != NULL ) {
         FreeVerBlockNest( block->Nest );
     }
 
-    RESFREE( block );
-}
-
-FullVerBlockNest *SemWINNewBlockNest( FullVerBlock *child )
-/*********************************************************/
-{
-    FullVerBlockNest    *parent;
-
-    parent = RESALLOC( sizeof( FullVerBlockNest ) );
-    parent->Head = NULL;
-    parent->Tail = NULL;
-
-    return( SemWINAddBlockNest( parent, child ) );
+    MemFree( block );
 }
 
 FullVerBlockNest *SemWINAddBlockNest( FullVerBlockNest *parent, FullVerBlock *child )
 /***********************************************************************************/
 {
+    if( parent == NULL ) {
+        parent = MemAllocSafe( sizeof( FullVerBlockNest ) );
+        parent->Head = NULL;
+        parent->Tail = NULL;
+    }
     ResAddLLItemAtEnd( (void **)&(parent->Head), (void **)&(parent->Tail), child );
     return( parent );
 }
@@ -257,7 +231,7 @@ FullVerBlockNest *SemWINMergeBlockNest( FullVerBlockNest *nest1, FullVerBlockNes
         ResAddLLItemAtEnd( (void **)&nest1->Head, (void **)&nest1->Tail, block );
     }
 
-    RESFREE( nest2 );
+    MemFree( nest2 );
 
     return( nest1 );
 }
@@ -287,7 +261,7 @@ static void FreeVerBlockNest( FullVerBlockNest *nest )
         FreeVerBlock( block );
     }
 
-    RESFREE( nest );
+    MemFree( nest );
 }
 
 static bool SemWriteVerBlockNest( FullVerBlockNest *nest, FILE *fp, int *err_code )
@@ -305,24 +279,16 @@ static bool SemWriteVerBlockNest( FullVerBlockNest *nest, FILE *fp, int *err_cod
 }
 
 
-VerFixedInfo *SemWINNewVerFixedInfo( VerFixedOption option )
-/**********************************************************/
-{
-    VerFixedInfo    *info;
-
-    info = RESALLOC( sizeof( VerFixedInfo ) );
-    memset( info, 0, sizeof( VerFixedInfo ) );
-
-    return( SemWINAddVerFixedInfo( info, option ) );
-}
-
-
 #define MakeVersion( verp ) ((uint_32)(verp).LowWord | \
                             ((uint_32)(verp).HighWord << 16 ))
 
 VerFixedInfo *SemWINAddVerFixedInfo( VerFixedInfo *info, VerFixedOption option )
 /******************************************************************************/
 {
+    if( info == NULL ) {
+        info = MemAllocSafe( sizeof( VerFixedInfo ) );
+        memset( info, 0, sizeof( VerFixedInfo ) );
+    }
     switch( option.token ) {
     case Y_FILEFLAGS:
         info->FileFlags = option.u.Option;
@@ -352,8 +318,8 @@ VerFixedInfo *SemWINAddVerFixedInfo( VerFixedInfo *info, VerFixedOption option )
     return( info );
 }
 
-void SemWINWriteVerInfo( WResID *name, ResMemFlags flags, VerFixedInfo *info, FullVerBlockNest *nest )
-/****************************************************************************************************/
+void SemWINWriteVerInfo( WResID *res_id, ResMemFlags res_flags, VerFixedInfo *info, FullVerBlockNest *nest )
+/**********************************************************************************************************/
 {
 #if 0
     WResLangType    lang;
@@ -362,22 +328,13 @@ void SemWINWriteVerInfo( WResID *name, ResMemFlags flags, VerFixedInfo *info, Fu
     ResLocation     loc;
     int             padding;
     bool            error;
-    bool            use_unicode;
-    WResTargetOS    res_os;
     int             err_code;
 
-    if( CmdLineParms.TargetOS == RC_TARGET_OS_WIN32 ) {
-        use_unicode = true;
-        res_os = WRES_OS_WIN32;
-    } else {
-        use_unicode = false;
-        res_os = WRES_OS_WIN16;
-    }
     root.Key = "VS_VERSION_INFO";
     root.ValSize = sizeof( VerFixedInfo );
     root.Type = 0;
     padding = RES_PADDING_DWORD( root.ValSize );
-    root.Size = ResSizeVerBlockHeader( &root, use_unicode, res_os )
+    root.Size = ResSizeVerBlockHeader( &root, CmdLineParms.iswin32 )
                     + root.ValSize + padding + CalcNestSize( nest );
     /*
      * pad the start of the resource so that padding within the resource
@@ -392,7 +349,7 @@ void SemWINWriteVerInfo( WResID *name, ResMemFlags flags, VerFixedInfo *info, Fu
     if( !ErrorHasOccured ) {
         loc.start = SemStartResource();
 
-        error = ResWriteVerBlockHeader( &root, use_unicode, res_os, CurrResFile.fp );
+        error = ResWriteVerBlockHeader( &root, CmdLineParms.iswin32, CurrResFile.fp );
         if( error ) {
             err_code = LastWresErr();
             goto OutputWriteError;
@@ -427,20 +384,20 @@ void SemWINWriteVerInfo( WResID *name, ResMemFlags flags, VerFixedInfo *info, Fu
         lang.sublang = DEF_SUBLANG;
         SemWINSetResourceLanguage( &lang, false );
 #endif
-        SemAddResourceAndFree( name, WResIDFromNum( RESOURCE2INT( RT_VERSIONINFO ) ), flags, loc );
+        SemAddResourceAndFree( res_id, WResIDFromNum( RESOURCE2INT( RT_VERSIONINFO ) ), res_flags, loc );
     } else {
-        RESFREE( name );
+        MemFree( res_id );
     }
 
-    RESFREE( info );
+    MemFree( info );
     FreeVerBlockNest( nest );
 
     return;
 
 OutputWriteError:
-    RcError( ERR_WRITTING_RES_FILE, CurrResFile.filename, strerror( err_code )  );
+    RcError( ERR_WRITTING_RES, CurrResFile.filename, strerror( err_code )  );
     ErrorHasOccured = true;
-    RESFREE( info );
+    MemFree( info );
     FreeVerBlockNest( nest );
     return;
 }

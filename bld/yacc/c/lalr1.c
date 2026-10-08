@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2023      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2023-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -41,20 +41,27 @@
 
 #define INFINITY        (unsigned short)-1
 
-static a_look **stk, **top;
+static a_look       **stk;
+static a_look       **top;
+
+static a_word       *lset_saved = NULL;
+static a_word       *rset_saved = NULL;
 
 static void Reads( a_look *x )
 {
-    a_shift_action  *tx;
+    a_shift_action  *saction;
     a_look          *y;
     unsigned short  k;
+    a_sym           *sym;
+    sym_n           sym_idx;
 
     *top++ = x;
     k = (unsigned short)( top - stk );
     x->depth = k;
-    for( tx = x->trans->state->trans; tx->sym != NULL; ++tx ) {
-        if( tx->sym->pro == NULL ) {
-            SetBit( x->follow, tx->sym->idx );
+    for( saction = x->trans->state->trans; (sym = saction->sym) != NULL; ++saction ) {
+        if( sym->pro == NULL ) {
+            sym_idx = sym->idx;
+            SetBit( x->follow, sym_idx, WSIZE );
         }
     }
     for( y = x->trans->state->look; y->trans != NULL; ++y ) {
@@ -79,8 +86,8 @@ static void Reads( a_look *x )
 
 static void CalcReads( void )
 {
-    a_state     *state;
-    a_look      *p;
+    a_state         *state;
+    a_look          *p;
 
     for( state = statelist; state != NULL; state = state->next ) {
         for( p = state->look; p->trans != NULL; ++p ) {
@@ -93,10 +100,10 @@ static void CalcReads( void )
 
 static void Nullable( void )
 {
-    a_sym       *sym;
-    a_pro       *pro;
-    an_item     *p;
-    bool        nullable_added;
+    a_sym           *sym;
+    a_pro           *pro;
+    an_item         *p;
+    bool            nullable_added;
 
     for( sym = symlist; sym != NULL; sym = sym->next ) {
         sym->nullable = false;
@@ -106,12 +113,12 @@ static void Nullable( void )
         for( sym = symlist; sym != NULL; sym = sym->next ) {
             if( !sym->nullable ) {
                 for( pro = sym->pro; pro != NULL; pro = pro->next ) {
-                    for( p = pro->items; p->p.sym != NULL; ++p ) {
-                        if( !p->p.sym->nullable ) {
+                    for( p = pro->items; p->u.sym != NULL; ++p ) {
+                        if( !p->u.sym->nullable ) {
                             break;
                         }
                     }
-                    if( p->p.sym == NULL ) {
+                    if( p->u.sym == NULL ) {
                         /*
                          * all of the RHS symbols are nullable
                          * (the vacuous case means the LHS is nullable)
@@ -157,39 +164,45 @@ static void CalcIncludes( void )
 {
     a_state         *state;
     a_state         *state1;
-    a_shift_action  *tx;
-    a_look          *p, *q;
+    a_shift_action  *saction;
+    a_look          *p;
+    a_look          *q;
     a_sym           *sym;
     a_pro           *pro;
-    an_item         *nullable, *item;
-    a_link          *free;
+    an_item         *nullable;
+    an_item         *item;
+    a_link          *include;
 
     for( state = statelist; state != NULL; state = state->next ) {
         for( p = state->look; p->trans != NULL; ++p ) {
             p->depth = 0;
             for( pro = p->trans->sym->pro; pro != NULL; pro = pro->next ) {
                 nullable = pro->items;
-                for( item = pro->items; (sym = item->p.sym) != NULL; ++item ) {
+                for( item = pro->items; (sym = item->u.sym) != NULL; ++item ) {
                     if( !sym->nullable ) {
                         nullable = item;
                     }
                 }
                 state1 = state;
-                for( item = pro->items; (sym = item->p.sym) != NULL; ++item ) {
+                for( item = pro->items; (sym = item->u.sym) != NULL; ++item ) {
                     if( sym->pro == NULL ) {
-                        for( tx = state1->trans; tx->sym != sym; ) {
-                            ++tx;
+                        for( saction = state1->trans; saction->sym != NULL; ++saction ) {
+                            if( saction->sym == sym ) {
+                                break;
+                            }
                         }
-                        state1 = tx->state;
+                        state1 = saction->state;
                     } else {
-                        for( q = state1->look; q->trans->sym != sym; ) {
-                            ++q;
+                        for( q = state1->look; q->trans->sym != NULL; ++q ) {
+                            if( q->trans->sym == sym ) {
+                                break;
+                            }
                         }
                         if( item >= nullable ) {
-                            free = CALLOC( 1, a_link );
-                            free->el = p;
-                            free->next = q->include;
-                            q->include = free;
+                            include = MemCAllocSafe( 1, sizeof( *include ) );
+                            include->el = p;
+                            include->next = q->include;
+                            q->include = include;
                         }
                         state1 = q->trans->state;
                     }
@@ -204,15 +217,27 @@ static void CalcIncludes( void )
             }
         }
     }
+    /*
+     * free a_link chains built previously
+     * they are no longer needed after Includes()
+     */
+    for( state = statelist; state != NULL; state = state->next ) {
+        for( p = state->look; p->trans != NULL; ++p ) {
+            while( (include = p->include) != NULL ) {
+                p->include = include->next;
+                MemFree( include );
+            }
+        }
+    }
 }
 
 static void Lookback( void )
 {
     a_state         *state;
     a_state         *state1;
-    a_shift_action  *tx;
+    a_shift_action  *saction;
     a_look          *p;
-    a_reduce_action *rx;
+    a_reduce_action *raction;
     a_sym           *sym;
     a_pro           *pro;
     an_item         *item;
@@ -221,16 +246,20 @@ static void Lookback( void )
         for( p = state->look; p->trans != NULL; ++p ) {
             for( pro = p->trans->sym->pro; pro != NULL; pro = pro->next ) {
                 state1 = state;
-                for( item = pro->items; (sym = item->p.sym) != NULL; ++item ) {
-                    for( tx = state1->trans; tx->sym != sym; ) {
-                        ++tx;
+                for( item = pro->items; (sym = item->u.sym) != NULL; ++item ) {
+                    for( saction = state1->trans; saction->sym != NULL; ++saction ) {
+                        if( saction->sym == sym ) {
+                            break;
+                        }
                     }
-                    state1 = tx->state;
+                    state1 = saction->state;
                 }
-                for( rx = state1->redun; rx->pro != NULL && rx->pro != pro; ) {
-                    ++rx;
+                for( raction = state1->redun; raction->pro != NULL; ++raction ) {
+                    if( raction->pro == pro ) {
+                        break;
+                    }
                 }
-                Union( rx->follow, p->follow );
+                Union( raction->follow, p->follow );
             }
         }
     }
@@ -240,25 +269,25 @@ static a_pro *extract_pro( an_item *p )
 {
     an_item     *q;
 
-    for( q = p; q->p.sym != NULL; ) {
+    for( q = p; q->u.sym != NULL; ) {
         ++q;
     }
-    return( q[1].p.pro );
+    return( q[1].u.pro );
 }
 
 static void check_for_user_hooks( a_state *state, a_shift_action *saction, index_n rule )
 {
-    bool                min_max_set;
-    bool                all_match;
-    conflict_id         min_id;
-    conflict_id         max_id;
-    conflict_id         id;
-    an_item             **item;
-    a_pro               *pro;
-    a_SR_conflict       *conflict;
-    a_SR_conflict       *last_conflict;
-    a_SR_conflict_list  *cx;
-    a_sym               *sym;
+    bool            min_max_set;
+    bool            all_match;
+    conflict_id     min_id;
+    conflict_id     max_id;
+    conflict_id     id;
+    an_item         **item;
+    a_pro           *pro;
+    a_SR_conflict   *conflict;
+    a_SR_conflict   *last_conflict;
+    a_SR_conflict_list *cx;
+    a_sym           *sym;
 
     if( state->kersize < 2 ) {
         return;
@@ -332,28 +361,32 @@ static void check_for_user_hooks( a_state *state, a_shift_action *saction, index
     }
 }
 
-static void resolve( a_state *state, set_size *work, a_reduce_action **reduce )
+static void resolve( a_state *state, bitnum *work, a_reduce_action **reduce )
 {
-    a_shift_action  *tx, *ux;
-    a_reduce_action *rx;
-    set_size        *w;
-    set_size        *mp;
-    index_n         i;
-    a_prec          symprec, proprec, prevprec;
-
+    a_shift_action  *saction;
+    a_shift_action  *ux;
+    a_reduce_action *raction;
+    bitnum          *w;
+    bitnum          *mp;
+    sym_n           sym_idx;
+    a_prec          symprec;
+    a_prec          proprec;
+    a_prec          prevprec;
+    a_sym           *sym;
 
     w = work;
-    for( rx = state->redun; rx->pro != NULL; ++rx ) {
-        for( mp = Members( rx->follow ); mp-- != setmembers; ) {
-            if( reduce[*mp] != NULL ) {
-                prevprec = reduce[*mp]->pro->prec;
-                proprec = rx->pro->prec;
+    for( raction = state->redun; raction->pro != NULL; ++raction ) {
+        for( mp = Members( raction->follow ); mp-- != setmembers; ) {
+            sym_idx = *mp;
+            if( reduce[sym_idx] != NULL ) {
+                prevprec = reduce[sym_idx]->pro->prec;
+                proprec = raction->pro->prec;
                 if( prevprec.prec == 0 || proprec.prec == 0 || prevprec.prec == proprec.prec ) {
-                    *w++ = *mp;
+                    *w++ = sym_idx;
                     /*
                      * resolve to the earliest production
                      */
-                    if( rx->pro->pidx >= reduce[*mp]->pro->pidx ) {
+                    if( raction->pro->pidx >= reduce[sym_idx]->pro->pidx ) {
                         continue;
                     }
                 } else if( prevprec.prec > proprec.prec ) {
@@ -363,79 +396,77 @@ static void resolve( a_state *state, set_size *work, a_reduce_action **reduce )
                     continue;
                 }
             }
-            reduce[*mp] = rx;
+            reduce[sym_idx] = raction;
         }
     }
-    while( w != work ) {
-        --w;
-        if( symtab[*w]->token == errsym->token )
+    while( w-- != work ) {
+        sym_idx = *w;
+        if( symtab[sym_idx]->token == errsym->token )
             continue;
-        printf( "r/r conflict in state %d on %s:\n", state->idx, symtab[*w]->name);
+        printf( "r/r conflict in state %d on %s:\n", state->sidx, symtab[sym_idx]->name);
         ++RR_conflicts;
-        for( rx = state->redun; rx->pro != NULL; ++rx ) {
-            if( IsBitSet( rx->follow, *w ) ) {
-                showitem( rx->pro->items, "" );
+        for( raction = state->redun; raction->pro != NULL; ++raction ) {
+            if( IsBitSet( raction->follow, sym_idx, WSIZE ) ) {
+                showitem( raction->pro->items, "" );
             }
         }
         printf( "\n" );
-        for( rx = state->redun; rx->pro != NULL; ++rx ) {
-            if( IsBitSet( rx->follow, *w ) ) {
-                ShowSentence( state, symtab[*w], rx->pro, NULL );
+        for( raction = state->redun; raction->pro != NULL; ++raction ) {
+            if( IsBitSet( raction->follow, sym_idx, WSIZE ) ) {
+                ShowSentence( state, symtab[sym_idx], raction->pro, NULL );
             }
         }
         printf( "---\n\n" );
     }
     ux = state->trans;
-    for( tx = ux; tx->sym != NULL; ++tx ) {
-        i = tx->sym->idx;
-        if( i >= nterm || reduce[i] == NULL ) {
-            *ux++ = *tx;
+    for( saction = state->trans; (sym = saction->sym) != NULL; ++saction ) {
+        sym_idx = sym->idx;
+        if( sym_idx >= nterm || reduce[sym_idx] == NULL ) {
+            *ux++ = *saction;
         } else {
             /*
              * shift/reduce conflict detected
              */
-            check_for_user_hooks( state, tx, reduce[i]->pro->pidx );
-            symprec = tx->sym->prec;
-            proprec = reduce[i]->pro->prec;
+            check_for_user_hooks( state, saction, reduce[sym_idx]->pro->pidx );
+            symprec = sym->prec;
+            proprec = reduce[sym_idx]->pro->prec;
             if( symprec.prec == 0 || proprec.prec == 0 ) {
-                if( tx->sym != errsym ) {
-                    printf( "s/r conflict in state %d on %s:\n", state->idx, tx->sym->name );
+                if( sym != errsym ) {
+                    printf( "s/r conflict in state %d on %s:\n", state->sidx, sym->name );
                     ++SR_conflicts;
-                    printf( "\tshift to %d\n", tx->state->idx );
-                    showitem( reduce[i]->pro->items, "" );
+                    printf( "\tshift to %d\n", saction->state->sidx );
+                    showitem( reduce[sym_idx]->pro->items, "" );
                     printf( "\n" );
-                    ShowSentence( state, tx->sym, reduce[i]->pro, NULL );
-                    ShowSentence( state, tx->sym, NULL, tx->state );
+                    ShowSentence( state, sym, reduce[sym_idx]->pro, NULL );
+                    ShowSentence( state, sym, NULL, saction->state );
                     printf( "---\n\n" );
                 }
-                *ux++ = *tx;
-                reduce[i] = NULL;
-            } else {
-                if( symprec.prec > proprec.prec ) {
-                    *ux++ = *tx;
-                    reduce[i] = NULL;
-                } else if( symprec.prec == proprec.prec ) {
-                    if( symprec.assoc == R_ASSOC ) {
-                        *ux++ = *tx;
-                        reduce[i] = NULL;
-                    } else if( symprec.assoc == NON_ASSOC ) {
-                        ux->sym = tx->sym;
-                        ux->state = errstate;
-                        ++ux;
-                        reduce[i] = NULL;
-                    }
+                *ux++ = *saction;
+                reduce[sym_idx] = NULL;
+            } else if( symprec.prec > proprec.prec ) {
+                *ux++ = *saction;
+                reduce[sym_idx] = NULL;
+            } else if( symprec.prec == proprec.prec ) {
+                if( symprec.assoc == R_ASSOC ) {
+                    *ux++ = *saction;
+                    reduce[sym_idx] = NULL;
+                } else if( symprec.assoc == NON_ASSOC ) {
+                    ux->sym = sym;
+                    ux->state = errstate;
+                    ++ux;
+                    reduce[sym_idx] = NULL;
                 }
             }
         }
     }
     ux->sym = NULL;
-    for( rx = state->redun; rx->pro != NULL; ++rx ) {
-        Clear( rx->follow );
+    for( raction = state->redun; raction->pro != NULL; ++raction ) {
+        Clear( raction->follow );
     }
-    for( i = 0; i < nterm; ++i ) {
-        if( reduce[i] != NULL ) {
-            SetBit( reduce[i]->follow, i );
-            reduce[i] = NULL;
+    for( sym_idx = 0; sym_idx < nterm; ++sym_idx ) {
+        if( reduce[sym_idx] != NULL ) {
+            SetBit( reduce[sym_idx]->follow, sym_idx, WSIZE );
+            reduce[sym_idx] = NULL;
         }
     }
 }
@@ -444,70 +475,76 @@ static void Conflict( void )
 {
     a_word          *set;
     a_state         *state;
-    a_shift_action  *tx;
-    a_reduce_action *rx;
+    a_shift_action  *saction;
+    a_reduce_action *raction;
     a_reduce_action **reduce;
-    set_size        *work;
-    set_size        i;
+    bitnum          *work;
+    unsigned        i;
+    a_sym           *sym;
+    sym_n           sym_idx;
 
-    set = AllocSet( 1 );
-    reduce = CALLOC( nterm, a_reduce_action * );
-    work = CALLOC( nterm, set_size );
+    set = MemAllocSetSafe( 1 );
+    reduce = MemCAllocSafe( nterm, sizeof( *reduce ) );
+    work = MemCAllocSafe( nterm, sizeof( *work ) );
     for( state = statelist; state != NULL; state = state->next ) {
         Clear( set );
-        for( tx = state->trans; tx->sym != NULL; ++tx ) {
-            if( tx->sym->pro == NULL ) {
-                SetBit( set, tx->sym->idx );
+        for( saction = state->trans; (sym = saction->sym) != NULL; ++saction ) {
+            if( sym->pro == NULL ) {
+                sym_idx = sym->idx;
+                SetBit( set, sym_idx, WSIZE );
             }
         }
-        for( rx = state->redun; rx->pro != NULL; ++rx ) {
+        for( raction = state->redun; raction->pro != NULL; ++raction ) {
             for( i = 0; i < GetSetSize( 1 ); ++i ) {
-                if( rx->follow[i] & set[i] ) {
+                if( raction->follow[i] & set[i] ) {
                     resolve( state, work, reduce );
                     break;
                 }
-                set[i] |= rx->follow[i];
+                set[i] |= raction->follow[i];
             }
             if( i < GetSetSize( 1 ) ) {
                 break;
             }
         }
     }
-    FreeSet( set );
-    FREE( reduce );
-    FREE( work );
+    MemFree( work );
+    MemFree( reduce );
+    MemFreeSet( set );
 }
 
 void lalr1( void )
 {
     a_state         *state;
-    a_shift_action  *tx;
-    a_reduce_action *rx;
-    a_look          *lk, *look;
-    a_word          *lp, *lset;
-    a_word          *rp, *rset;
+    a_shift_action  *saction;
+    a_reduce_action *raction;
+    a_look          *lk;
+    a_look          *look;
+    a_word          *lp;
+    a_word          *lset;
+    a_word          *rp;
+    a_word          *rset;
 
     InitSets( nterm );
-    lk = look = CALLOC( nvtrans + nstate, a_look );
-    lp = lset = AllocSet( nvtrans );
-    rp = rset = AllocSet( nredun );
+    lp = lset = MemAllocSetSafe( nvtrans );
+    rp = rset = MemAllocSetSafe( nredun );
+    lk = look = MemCAllocSafe( nvtrans + nstate, sizeof( *look ) );
     for( state = statelist; state != NULL; state = state->next ) {
         state->look = lk;
-        for( tx = state->trans; tx->sym != NULL; ++tx ) {
-            if( tx->sym->pro != NULL ) {
-                lk->trans = tx;
+        for( saction = state->trans; saction->sym != NULL; ++saction ) {
+            if( saction->sym->pro != NULL ) {
+                lk->trans = saction;
                 lk->follow = lp;
                 lp += GetSetSize( 1 );
                 ++lk;
             }
         }
         ++lk;
-        for( rx = state->redun; rx->pro != NULL; ++rx ) {
-            rx->follow = rp;
+        for( raction = state->redun; raction->pro != NULL; ++raction ) {
+            raction->follow = rp;
             rp += GetSetSize( 1 );
         }
     }
-    stk = CALLOC( nvtrans, a_look * );
+    stk = MemCAllocSafe( nvtrans, sizeof( *stk ) );
     top = stk;
     Nullable();
     CalcReads();
@@ -522,35 +559,54 @@ void lalr1( void )
     if( rp - rset != GetSetSize( nredun ) ) {
         puts( "internal error" );
     }
-    FREE( look );
-    FREE( stk );
+    MemFree( stk );
+    MemFree( look );
     Conflict();
     nbstate = nstate;
+    lset_saved = lset;
+    rset_saved = rset;
+}
+
+void FreeLalr1Sets( void )
+/***********************/
+{
+    if( rset_saved != NULL ) {
+        MemFreeSet( rset_saved );
+        rset_saved = NULL;
+    }
+    if( lset_saved != NULL ) {
+        MemFreeSet( lset_saved );
+        lset_saved = NULL;
+    }
 }
 
 void showstates( void )
 {
-    int         i;
+    action_n        sidx;
 
-    for( i = 0; i < nstate; ++i ) {
+    for( sidx = 0; sidx < nstate; ++sidx ) {
         printf( "\n" );
-        showstate( statetab[i] );
+        showstate( statetab[sidx] );
     }
 }
 
 void showstate( a_state *state )
 {
     a_parent        *parent;
-    a_shift_action  *tx;
-    a_reduce_action *rx;
-    size_t          col, new_col;
-    set_size        *mp;
+    a_shift_action  *saction;
+    a_reduce_action *raction;
+    size_t          col;
+    size_t          new_col;
+    bitnum          *mp;
     an_item         **item;
+    a_pro           *pro;
+    a_sym           *sym;
+    sym_n           sym_idx;
 
-    printf( "state %d:\n", state->idx );
+    printf( "state %d:\n", state->sidx );
     col = printf( "  parent states:" );
     for( parent = state->parents; parent != NULL; parent = parent->next ) {
-        col += printf( " %d", parent->state->idx );
+        col += printf( " %d", parent->state->sidx );
         if( col > 79 ) {
             printf( "\n" );
             col = 0;
@@ -562,26 +618,27 @@ void showstate( a_state *state )
     }
     printf( "actions:" );
     col = 8;
-    for( tx = state->trans; tx->sym != NULL; ++tx ) {
-        new_col = col + 1 + strlen( tx->sym->name ) + 1 + 1 + 3;
+    for( saction = state->trans; (sym = saction->sym) != NULL; ++saction ) {
+        new_col = col + 1 + strlen( sym->name ) + 1 + 1 + 3;
         if( new_col > 79 ) {
             putchar('\n');
             new_col -= col;
         }
         col = new_col;
-        printf( " %s:s%03d", tx->sym->name, tx->state->idx );
+        printf( " %s:s%03d", sym->name, saction->state->sidx );
     }
     putchar( '\n' );
     col = 0;
-    for( rx = state->redun; rx->pro != NULL; ++rx ) {
-        for( mp = Members( rx->follow ); mp-- != setmembers; ) {
-            new_col = col + 1 + strlen( symtab[*mp]->name );
+    for( raction = state->redun; (pro = raction->pro) != NULL; ++raction ) {
+        for( mp = Members( raction->follow ); mp-- != setmembers; ) {
+            sym_idx = *mp;
+            new_col = col + 1 + strlen( symtab[sym_idx]->name );
             if( new_col > 79 ) {
                 putchar('\n');
                 new_col -= col;
             }
             col = new_col;
-            printf( " %s", symtab[*mp]->name );
+            printf( " %s", symtab[sym_idx]->name );
         }
         new_col = col + 1 + 5;
         if( new_col > 79 ) {
@@ -589,7 +646,7 @@ void showstate( a_state *state )
             new_col -= col;
         }
         col = new_col;
-        printf( ":r%03d", rx->pro->pidx );
+        printf( ":r%03d", pro->pidx );
     }
     putchar( '\n' );
 }

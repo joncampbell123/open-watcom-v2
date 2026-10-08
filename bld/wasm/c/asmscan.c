@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -138,23 +138,28 @@ static bool get_string( asm_tok *tok, const char **input, char **output )
 
     symbol_o = **input;
 
-    tok->class = TC_STRING;
     switch( symbol_o ) {
     case '"':
+        tok->class = TC_STRING_DQUOTE;
+        symbol_c = 0;
+        break;  // end of string marker is the same
     case '\'':
+        tok->class = TC_STRING_SQUOTE;
         symbol_c = 0;
         break;  // end of string marker is the same
     case '<':
+        tok->class = TC_STRING_ANGLE;
         symbol_c = '>';
         break;
     case '{':
+        tok->class = TC_STRING_BRACE;
         symbol_c = '}';
         break;
     default:
         /* this is an undelimited string,
          * so just copy it until we hit something that looks like the end
          */
-
+        tok->class = TC_STRING;
         for( count = 0; **input != '\0' && !isspace( **input ) && **input != ','; count++ ) {
             *(*output)++ = *(*input)++; /* keep the 2nd one */
         }
@@ -487,42 +492,49 @@ static bool get_id( asm_tok *tok, const char **input, char **output )
             break;
         }
 #endif
-
+        tok->class = TC_INSTR;
         if( ins->opnd_type1 == OP_SPECIAL ) {
-            if( ins->rm_byte == OP_REGISTER ) {
+            switch( ins->rm_byte ) {
+            case OP_REGISTER:
                 tok->class = TC_REG;
-            } else if( ins->rm_byte == OP_RES_ID ) {
+                break;
+            case OP_RES_ID:
                 tok->class = TC_RES_ID;
                 if( tok->u.token == T_DP ) {
                     tok->u.token = T_DF;
                 }
-            } else if( ins->rm_byte == OP_RES_ID_PTR_MODIF ) {
+                break;
+            case OP_RES_ID_PTR_MODIF:
                 tok->class = TC_RES_ID;
                 if( tok->u.token == T_PWORD ) {
                     tok->u.token = T_FWORD;
                 }
-            } else if( ins->rm_byte == OP_UNARY_OPERATOR ) {
+                break;
+            case OP_UNARY_OPERATOR:
                 tok->class = TC_UNARY_OPERATOR;
+                break;
 #if defined( _STANDALONE_ )
-            } else if( ins->rm_byte == OP_RELATION_OPERATOR ) {
+            case OP_RELATION_OPERATOR:
                 tok->class = TC_RELATION_OPERATOR;
+                break;
 #endif
-            } else if( ins->rm_byte == OP_ARITH_OPERATOR ) {
+            case OP_ARITH_OPERATOR:
                 tok->class = TC_ARITH_OPERATOR;
-            } else if( ins->rm_byte == OP_DIRECTIVE ) {
+                break;
+            case OP_DIRECTIVE:
                 tok->class = TC_DIRECTIVE;
 #if defined( _STANDALONE_ )
                 if( ins->token == T_ENUM ) {
                     EnumDirective = true;
                 }
-            } else if( ins->rm_byte == OP_DIRECT_EXPR ) {
-                tok->class = TC_DIRECT_EXPR;
 #endif
-            } else {
-                tok->class = TC_INSTR;
+                break;
+#if defined( _STANDALONE_ )
+            case OP_DIRECT_EXPR:
+                tok->class = TC_DIRECT_EXPR;
+                break;
+#endif
             }
-        } else {
-            tok->class = TC_INSTR;
         }
     }
     return( RC_OK );
@@ -535,9 +547,9 @@ static bool get_comment( asm_tok *tok, const char **input, char **output )
     size_t  len;
     /* save the whole line .. we need to check
      * if the delim. char shows up 2 times */
-    tok->string_ptr = *output;
     len = strlen( *input );
-    memcpy( tok->string_ptr, *input, len );
+    tok->string_ptr = *output;
+    memcpy( *output, *input, len );
     (*output) += len;
     *(*output)++ = '\0';
     *input += len;
@@ -591,6 +603,13 @@ static bool get_special_symbol( asm_tok *tok, const char **input, char **output 
         cls = TC_CL_BRACKET;
         break;
     case ':' :
+#if defined( _STANDALONE_ )
+        if( (*input)[1] == '=' ) {
+            cls = TC_COLON_EQU;
+            *(*output)++ = *(*input)++;
+            break;
+        }
+#endif
         cls = TC_COLON;
         break;
     case '%' :
@@ -662,11 +681,13 @@ static bool get_inc_path( asm_tok *tok, const char **input, char **output )
 }
 #endif
 
-static bool endFinalToken( asm_tok *tok, char *buff, bool rc )
+void SetFinalToken( token_buffer *tokbuf, token_idx count )
 {
-    tok->string_ptr = buff;
-    tok->class = TC_FINAL;
-    return( rc );
+    if( count > MAX_TOKEN_COUNT )
+        count = MAX_TOKEN_COUNT;
+    tokbuf->tokens[count].class = TC_FINAL;
+    tokbuf->tokens[count].string_ptr = NULL;
+    tokbuf->count = count;
 }
 
 bool AsmScan( token_buffer *tokbuf, const char *string )
@@ -681,6 +702,7 @@ bool AsmScan( token_buffer *tokbuf, const char *string )
     asm_tok             *tok;
     int                 c;
     bool                base10;
+    token_idx           i;
 
 #ifdef DEBUG_OUT
     CurrString = string;
@@ -704,60 +726,64 @@ bool AsmScan( token_buffer *tokbuf, const char *string )
     *output_ptr++ = '\0';
     tokbuf->count = 0;
     tok = tokbuf->tokens;
-    while( tokbuf->count < MAX_TOKEN ) {
-        tok->string_ptr = output_ptr;
+    i = 0;
+    while( i < MAX_TOKEN_COUNT ) {
+        tok[i].string_ptr = output_ptr;
         while( isspace( *ptr ) ) {
             ptr++;
         }
         c = *(unsigned char *)ptr;
         if( c == NULLC ) {
-            return( endFinalToken( tok, tokbuf->stringbuf, RC_OK ) );
+            SetFinalToken( tokbuf, i );
+            return( RC_OK );
         }
 
         if( IS_VALID_ID_CHAR_FIRST( c )
           || c == '\\'
-          || ( c == '.' && tokbuf->count == 0 ) ) {
-            if( get_id( tok, &ptr, &output_ptr ) ) {
-                return( endFinalToken( tok + 1, tokbuf->stringbuf, RC_ERROR ) );
+          || ( c == '.' && i == 0 ) ) {
+            if( get_id( tok + i, &ptr, &output_ptr ) ) {
+                SetFinalToken( tokbuf, i + 1 );
+                return( RC_ERROR );
             }
 #if defined( _STANDALONE_ )
-            if( tok->class == TC_DIRECTIVE ) {
-                if( tok->u.token == T_COMMENT ) {
-                    tok++;
-                    tokbuf->count++;
-                    if( tokbuf->count >= MAX_TOKEN )
+            if( tok[i].class == TC_DIRECTIVE ) {
+                if( tok[i].u.token == T_COMMENT ) {
+                    i++;
+                    if( i >= MAX_TOKEN_COUNT )
                         break;
-                    get_comment( tok, &ptr, &output_ptr );
-                } else if( tok->u.token == T_INCLUDE || tok->u.token == T_INCLUDELIB ) {
+                    get_comment( tok + i, &ptr, &output_ptr );
+                } else if( tok[i].u.token == T_INCLUDE || tok[i].u.token == T_INCLUDELIB ) {
                     // this mess allows include directives with undelimited file names
-                    tok++;
-                    tokbuf->count++;
-                    if( tokbuf->count >= MAX_TOKEN )
+                    i++;
+                    if( i >= MAX_TOKEN_COUNT )
                         break;
-                    get_inc_path( tok, &ptr, &output_ptr );
-                } else if( tok->u.token == T_DOT_RADIX ) {
+                    get_inc_path( tok + i, &ptr, &output_ptr );
+                } else if( tok[i].u.token == T_DOT_RADIX ) {
                     base10 = true;
                 }
             }
 #endif
         } else if( isdigit( c ) ) {
-            if( get_number( tok, &ptr, &output_ptr, base10 ) ) {
-                return( endFinalToken( tok + 1, tokbuf->stringbuf, RC_ERROR ) );
+            if( get_number( tok + i, &ptr, &output_ptr, base10 ) ) {
+                SetFinalToken( tokbuf, i + 1 );
+                return( RC_ERROR );
             }
         } else if( c == '`' ) {
-            if( get_id_in_backquotes( tok, &ptr, &output_ptr ) ) {
-                return( endFinalToken( tok + 1, tokbuf->stringbuf, RC_ERROR ) );
+            if( get_id_in_backquotes( tok + i, &ptr, &output_ptr ) ) {
+                SetFinalToken( tokbuf, i + 1 );
+                return( RC_ERROR );
             }
         } else {
-            if( get_special_symbol( tok, &ptr, &output_ptr ) ) {
-                return( endFinalToken( tok + 1, tokbuf->stringbuf, RC_ERROR ) );
+            if( get_special_symbol( tok + i, &ptr, &output_ptr ) ) {
+                SetFinalToken( tokbuf, i + 1 );
+                return( RC_ERROR );
             }
         }
-        tok++;
-        tokbuf->count++;
+        i++;
     }
     AsmError( TOO_MANY_TOKENS );
-    return( endFinalToken( tok, tokbuf->stringbuf, RC_ERROR ) );
+    SetFinalToken( tokbuf, i );
+    return( RC_ERROR );
 }
 
 void RadixSet( unsigned new_base )

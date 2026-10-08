@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -37,8 +37,9 @@
 #include "watcom.h"
 #include "toolbr.h"
 #include "loadcc.h"
-#include "wclbproc.h"
-#ifdef __NT__
+#if defined( __WINDOWS__ )
+    #include "wclbproc.h"
+#elif defined( __NT__ )
     #include <commctrl.h>
 #endif
 
@@ -246,7 +247,7 @@ static void reinsertButtons( toolbar *bar )
         for( t = bar->tool_list; t != NULL; t = t->next ) {
             if( !(t->flags & ITEM_BLANK) ) {
                 GetObject( t->u.hbitmap, sizeof( BITMAP ), &bm );
-                SendMessage( bar->hwnd, TB_SETBITMAPSIZE, 0, MAKELONG( bm.bmWidth, bm.bmHeight ) );
+                SendMessage( bar->hwnd, TB_SETBITMAPSIZE, 0, MAKELPARAM( bm.bmWidth, bm.bmHeight ) );
                 tbab.hInst = NULL;
                 tbab.nID = (UINT_PTR)TB_CreateTransparentBitmap( t->u.hbitmap, bm.bmWidth, bm.bmHeight );
                 tbb.iBitmap = (int)SendMessage( bar->hwnd, TB_ADDBITMAP, 1, (LPARAM)&tbab );
@@ -315,7 +316,11 @@ toolbar *ToolBarInit( HWND parent )
     if( LoadCommCtrl() ) {
         if( !GetClassInfo( instance, containerClassName, &wc ) ) {
             wc.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
+#ifdef __WINDOWS__
             wc.lpfnWndProc = GetWndProc( ToolContainerWndProc );
+#else
+            wc.lpfnWndProc = ToolContainerWndProc;
+#endif
             wc.cbClsExtra = 0;
             wc.cbWndExtra = 0;
             wc.hInstance = instance;
@@ -330,7 +335,11 @@ toolbar *ToolBarInit( HWND parent )
   #endif
         if( !GetClassInfo( instance, className, &wc ) ) {
             wc.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
+#ifdef __WINDOWS__
             wc.lpfnWndProc = GetWndProc( ToolBarWndProc );
+#else
+            wc.lpfnWndProc = ToolBarWndProc;
+#endif
             wc.lpszMenuName = NULL;
             wc.cbClsExtra = 0;
             wc.cbWndExtra = sizeof( LPVOID );
@@ -364,9 +373,15 @@ toolbar *ToolBarInit( HWND parent )
     appInst.mod_handle = (HMODULE)0;
 
     if( !toolBarClassRegistered ) {
+#ifdef __WINDOWS__
         rc = WinRegisterClass( hab, className, GetWndProc( ToolBarWndProc ),
                                CS_MOVENOTIFY | CS_SIZEREDRAW | CS_CLIPSIBLINGS,
                                sizeof( PVOID ) );
+#else
+        rc = WinRegisterClass( hab, className, ToolBarWndProc,
+                               CS_MOVENOTIFY | CS_SIZEREDRAW | CS_CLIPSIBLINGS,
+                               sizeof( PVOID ) );
+#endif
         toolBarClassRegistered = true;
     }
     clr_btnshadow = CLR_DARKGRAY;
@@ -376,9 +391,9 @@ toolbar *ToolBarInit( HWND parent )
     btnColor = CLR_PALEGRAY;
 #endif
 
-    bar = (toolbar *)CUIMemAlloc( sizeof( toolbar ) );
-    if ( bar ) {
-        memset( bar, 0, sizeof( toolbar ) );
+    bar = MemAlloc( sizeof( *bar ) );
+    if( bar != NULL ) {
+        memset( bar, 0, sizeof( *bar ) );
         bar->border_width = 1;
         bar->owner = parent;
     }
@@ -456,12 +471,12 @@ void ToolBarDestroy ( toolbar *bar )
 #endif
         for( curr = bar->tool_list; curr != NULL; curr = next ) {
             next = curr->next;
-            CUIMemFree( curr );
+            MemFree( curr );
         }
         if( bar->bgbrush != WPI_NULL ) {
             _wpi_deletebrush( bar->bgbrush );
         }
-        CUIMemFree( bar );
+        MemFree( bar );
     }
 
 } /* ToolBarDestroy */
@@ -499,7 +514,7 @@ void ToolBarAddItem( toolbar *bar, TOOLITEMINFO *info )
     TOOLINFO    ti;
 #endif
 
-    t = (tool *)CUIMemAlloc( sizeof( tool ) );
+    t = MemAlloc( sizeof( *t ) );
     if( info->flags & ITEM_BLANK ) {
         t->u.blank_space = info->u.blank_space;
     } else {
@@ -522,7 +537,7 @@ void ToolBarAddItem( toolbar *bar, TOOLITEMINFO *info )
     if( IsCommCtrlLoaded() ) {
         if( !(info->flags & ITEM_BLANK) ) {
             GetObject( info->u.hbitmap, sizeof( BITMAP ), &bm );
-            SendMessage( bar->hwnd, TB_SETBITMAPSIZE, 0, MAKELONG( bm.bmWidth, bm.bmHeight ) );
+            SendMessage( bar->hwnd, TB_SETBITMAPSIZE, 0, MAKELPARAM( bm.bmWidth, bm.bmHeight ) );
             tbab.hInst = NULL;
             tbab.nID = (UINT_PTR)TB_CreateTransparentBitmap( info->u.hbitmap, bm.bmWidth, bm.bmHeight );
             tbb.iBitmap = (int)SendMessage( bar->hwnd, TB_ADDBITMAP, 1, (LPARAM)&tbab );
@@ -573,7 +588,7 @@ void ToolBarSetState( toolbar *bar, ctl_id id, WORD state )
         _wpi_invalidaterect( bar->hwnd, &t->area, FALSE );
 #ifdef __NT__
     } else {
-        SendMessage( bar->hwnd, TB_CHECKBUTTON, (WPARAM)id, MAKELONG( state & BUTTON_DOWN, 0 ) );
+        SendMessage( bar->hwnd, TB_CHECKBUTTON, (WPARAM)id, MAKELPARAM( state & BUTTON_DOWN, 0 ) );
     }
 #endif
 
@@ -765,7 +780,11 @@ void ToolBarDisplay( toolbar *bar, TOOLDISPLAYINFO *disp )
         }
         bar->old_wndproc = (WNDPROC)GET_WNDPROC( bar->hwnd );
         SetProp( bar->hwnd, "bar", (LPVOID)bar );
+#ifdef __WINDOWS__
         SET_WNDPROC( bar->hwnd, (LONG_PTR)GetWndProc( WinToolWndProc ) );
+#else
+        SET_WNDPROC( bar->hwnd, (LONG_PTR)WinToolWndProc );
+#endif
         SendMessage( bar->hwnd, TB_BUTTONSTRUCTSIZE, sizeof( TBBUTTON ), 0L );
         if( disp->use_tips ) {
             bar->tooltips = CreateWindow( TOOLTIPS_CLASS, NULL,

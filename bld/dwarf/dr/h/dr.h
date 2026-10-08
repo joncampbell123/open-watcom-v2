@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -235,31 +235,31 @@ typedef unsigned        dr_fileidx;
 typedef struct dr_dbg_info  *dr_dbg_handle;
 
 typedef struct {
-    dr_typek kind;
     uint_32  size;
-    dr_store acc;
-    dr_mod   mclass;
     union {
         dr_ptr   ptr;
         bool     sign;
         uint_32  beg_scope;
     } modifier;
+    dr_typek kind;
+    dr_store acc;
+    dr_mod   mclass;
 } dr_typeinfo;
 
 typedef struct {
+    drmem_hdl  child;
     uint_32    byte_size;
     uint_32    stride_size;
     uint_32    count;
     dw_ord     ordering;
-    drmem_hdl  child;
 } dr_array_info;
 
 typedef struct {
-    dr_val_class val_class;
     union{
         drmem_hdl ref;
         uint_32   s;
     } val;
+    dr_val_class val_class;
 } dr_val32;
 
 typedef struct {
@@ -282,7 +282,7 @@ typedef struct {
     bool        is_start;
 } dr_pubname_data;
 
-typedef struct dr_cu_info   *dr_cu_handle;
+typedef struct dr_cu_info   *dr_cui_handle;
 
 typedef struct {
     uint_32     addr;
@@ -307,41 +307,41 @@ typedef struct { /* current state of stmt prog */
 } dr_line_data;
 
 typedef struct {
-    uint_16     index;
     char        *name;
+    uint_16     index;
 } dr_line_dir;
 
 /* walk directory and  file names */
 typedef struct {
-    uint_16     index;
-    char        *name;
-    uint_16     dir;
-    uint_32     time;
-    uint_32     len;
+    char                *name;
+    uint_16             index;
+    uint_16             dir;
+    uint_32             time;
+    uint_32             len;
 } dr_line_file;
 
 typedef struct {
-    int         size;   /* available room */
-    int         free;   /* next free entry */
-    drmem_hdl   *stack; /* values */
+    int                 size;   /* available room */
+    int                 free;   /* next free entry */
+    drmem_hdl           *stack; /* values */
 } dr_scope_stack;
 
 typedef struct {
-    dr_scope_stack  scope;
-    drmem_hdl       dependent;
-    char            *file;
-    unsigned_32     line;
-    unsigned_16     column;
+    dr_scope_stack      scope;
+    drmem_hdl           dependent;
+    char                *file;
+    unsigned_32         line;
+    unsigned_16         column;
 } dr_ref_info;
 
 typedef struct dr_context_stack {
-    int         size;   /* available room */
-    int         free;   /* next free entry */
-    drmem_hdl   *stack; /* values */
+    int                 size;   /* available room */
+    int                 free;   /* next free entry */
+    drmem_hdl           *stack; /* values */
 } dr_context_stack;
 
 typedef struct dr_search_context {
-    dr_cu_handle        compunit;       /* current compile unit */
+    dr_cui_handle       cui;            /* current compile unit */
     drmem_hdl           start;          /* die to start from */
     drmem_hdl           end;            /* end of compile unit */
     drmem_hdl           functionhdl;    /* containing function */
@@ -350,10 +350,10 @@ typedef struct dr_search_context {
 } dr_search_context;
 
 typedef struct dr_sym_context {
-    drmem_hdl               handle;         /* symbol's handle */
-    dr_sym_type             type;           /* symbol's type */
-    char                    *name;          /* symbol's name */
-    dr_search_context       *context;       /* context to resume search */
+    char                *name;          /* symbol's name */
+    dr_search_context   *context;       /* context to resume search */
+    drmem_hdl           handle;         /* symbol's handle */
+    dr_sym_type         type;           /* symbol's type */
 } dr_sym_context;
 
 typedef struct {
@@ -374,8 +374,8 @@ typedef struct {                                                /* defaults */
     void   (*cli_read)( void *, dr_section, void *, size_t );   // read
     void   (*cli_seek)( void *, dr_section, long );             // lseek
 /* memory routines */
-    void * (*cli_alloc)( size_t );                              // malloc
-    void * (*cli_realloc)( void *, size_t );                    // realloc
+    void   *(*cli_alloc)( size_t );                             // malloc
+    void   *(*cli_realloc)( void *, size_t );                   // realloc
     void   (*cli_free)( void * );                               // free
     void   (*cli_except)( dr_except );                          // fatal error handler
 } DRRoutines;

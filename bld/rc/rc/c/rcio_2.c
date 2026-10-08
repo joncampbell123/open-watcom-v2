@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -59,13 +59,44 @@
 
 #define BUFFER_SIZE         1024
 
+RcStatus CopyDataUntilEOF( long offset, FILE *fpi, FILE *fpo,
+                         unsigned block_size, int *err_code )
+/***********************************************************/
+{
+    size_t      numread;
+    char        *buff;
+    RcStatus    rc;
+
+    if( RESSEEK( fpi, offset, SEEK_SET ) ) {
+        *err_code = errno;
+        return( RS_READ_ERROR );
+    }
+
+    rc = RS_OK;
+    buff = MemAllocSafe( block_size );
+    while( (numread = RESREAD( fpi, buff, block_size )) != 0 ) {
+        if( numread != block_size
+          && RESIOERR( fpi, numread ) ) {
+            *err_code = errno;
+            rc = RS_READ_ERROR;
+            break;
+        }
+        if( RESWRITE( fpo, buff, numread ) != numread ) {
+            *err_code = errno;
+            rc = RS_WRITE_ERROR;
+            break;
+        }
+    }
+    MemFree( buff );
+    return( rc );
+}
+
 bool CopyFileToOutFile( FILE *inp_fp, const char *out_name, bool isexe )
 /**********************************************************************/
 {
     RcStatus    status;      /* error while deleting or renaming */
     FILE        *out_fp;
-    size_t      numread;
-    char        *buffer;
+    int         err_code;
 
     status = RS_OK;
     /*
@@ -75,9 +106,6 @@ bool CopyFileToOutFile( FILE *inp_fp, const char *out_name, bool isexe )
         remove( out_name );
     }
 
-    buffer = RESALLOC( BUFFER_SIZE );
-
-    RESSEEK( inp_fp, 0, SEEK_SET );
     /*
      * create output file and copy content to it
      */
@@ -85,23 +113,12 @@ bool CopyFileToOutFile( FILE *inp_fp, const char *out_name, bool isexe )
     if( out_fp == NULL ) {
         RcError( ERR_CANT_OPEN_FILE, out_name, "unknown error" );
     } else {
-        while( (numread = RESREAD( inp_fp, buffer, BUFFER_SIZE )) != 0 ) {
-            if( numread != BUFFER_SIZE
-              && RESIOERR( inp_fp, numread ) ) {
-                status = RS_READ_ERROR;
-                break;
-            }
-            if( RESWRITE( out_fp, buffer, numread ) != numread ) {
-                status = RS_WRITE_ERROR;
-                break;
-            }
-        }
+        status = CopyDataUntilEOF( 0, inp_fp, out_fp, BUFFER_SIZE, &err_code );
         ResCloseFile( out_fp );
         if( isexe ) {
             chmod( out_name, PMODE_RWX );
         }
     }
-    RESFREE( buffer );
     return( status == RS_OK );
 
 } /* CopyFileToOutFile */
@@ -122,7 +139,7 @@ static bool OpenResFileInfo( ExeType type )
     }
     Pass2Info.AllResFilesOpen = true;
     if( CmdLineParms.NoResFile ) {
-        Pass2Info.ResFile = RESALLOC( sizeof( ResFileInfo ) );
+        Pass2Info.ResFile = MemAllocSafe( sizeof( ResFileInfo ) );
         Pass2Info.ResFile->next = NULL;
         Pass2Info.ResFile->name = NULL;
         Pass2Info.ResFile->fp = NULL;
@@ -135,7 +152,7 @@ static bool OpenResFileInfo( ExeType type )
     } else {
         name = CmdLineParms.OutResFileName;
     }
-    curfile = RESALLOC( sizeof( ExtraRes ) + strlen( name ) );
+    curfile = MemAllocSafe( sizeof( ExtraRes ) + strlen( name ) );
     curfile->next = CmdLineParms.ExtraResFiles;
     CmdLineParms.ExtraResFiles = curfile;
     strcpy( curfile->name, name );
@@ -206,15 +223,15 @@ static void FreeNEFileInfoPtrs( NEExeInfo *info )
 /***********************************************/
 {
     if( info->Seg.Segments != NULL ) {
-        RESFREE( info->Seg.Segments );
+        MemFree( info->Seg.Segments );
         info->Seg.Segments = NULL;
     }
     if( info->Res.Str.StringBlock != NULL ) {
-        RESFREE( info->Res.Str.StringBlock );
+        MemFree( info->Res.Str.StringBlock );
         info->Res.Str.StringBlock = NULL;
     }
     if( info->Res.Str.StringList != NULL ) {
-        RESFREE( info->Res.Str.StringList );
+        MemFree( info->Res.Str.StringList );
         info->Res.Str.StringList = NULL;
     }
 } /* FreeNEFileInfoPtrs */
@@ -223,7 +240,7 @@ static void FreePEFileInfoPtrs( PEExeInfo *info )
 /***********************************************/
 {
     if( info->Objects != NULL ) {
-        RESFREE( info->Objects );
+        MemFree( info->Objects );
     }
 }
 
@@ -231,13 +248,13 @@ static void FreeLXFileInfoPtrs( LXExeInfo *info )
 /***********************************************/
 {
     if( info->Objects != NULL ) {
-        RESFREE( info->Objects );
+        MemFree( info->Objects );
     }
     if( info->Pages != NULL ) {
-        RESFREE( info->Pages );
+        MemFree( info->Pages );
     }
     if( info->Res.resources != NULL ) {
-        RESFREE( info->Res.resources );
+        MemFree( info->Res.resources );
     }
 }
 
@@ -252,7 +269,7 @@ bool RcPass2IoInit( void )
     src = &(Pass2Info.OldFile);
 
     memset( &Pass2Info, 0, sizeof( RcPass2Info ) );
-    Pass2Info.IoBuffer = RESALLOC( IO_BUFFER_SIZE );
+    Pass2Info.IoBuffer = MemAllocSafe( IO_BUFFER_SIZE );
 
     noerror = openExeFileInfoRO( CmdLineParms.InExeFileName, src );
     if( noerror ) {
@@ -342,7 +359,7 @@ void RcPass2IoShutdown( bool noerror )
     }
     RCCloseFile( &(dst->fp) );
     if( Pass2Info.IoBuffer != NULL ) {
-        RESFREE( Pass2Info.IoBuffer );
+        MemFree( Pass2Info.IoBuffer );
         Pass2Info.IoBuffer = NULL;
     }
 

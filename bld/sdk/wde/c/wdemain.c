@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -76,8 +76,10 @@
 #include "wwinhelp.h"
 #include "aboutdlg.h"
 #include "ldstr.h"
-#include "wclbproc.h"
 #include "jmpbuf.h"
+#ifdef __WINDOWS__
+    #include "wclbproc.h"
+#endif
 
 #include "clibint.h"
 
@@ -147,6 +149,11 @@ static jmp_buf      WdeEnv;
 
 bool WdeCreateNewFiles  = FALSE;
 
+static void nomemcb( void )
+{
+    // handle no memory state
+}
+
 int PASCAL WinMain( HINSTANCE hinstCurrent, HINSTANCE hinstPrevious,
                     LPSTR lpszCmdLine,  int nCmdShow )
 {
@@ -168,7 +175,7 @@ int PASCAL WinMain( HINSTANCE hinstCurrent, HINSTANCE hinstPrevious,
     _argv = __argv;
 #endif
 
-    WRInit();
+    WRInit( false, nomemcb );
     WdeInitDisplayError( hinstCurrent );
 
     /* store the handle to this instance of Wde in a static variable */
@@ -1311,11 +1318,13 @@ bool WdeProcessArgs( char **argv, int argc )
 
 void WdeDisplaySplashScreen( HINSTANCE inst, HWND parent, UINT msecs )
 {
-    DLGPROC     dlgproc;
-
-    dlgproc = MakeProcInstance_DLG( WdeSplashDlgProc, hInstWde );
+#ifdef __WINDOWS__
+    DLGPROC dlgproc = MakeProcInstance_DLG( WdeSplashDlgProc, hInstWde );
     JDialogBoxParam( inst, "WdeSplashScreen", parent, dlgproc, (LPARAM)&msecs );
     FreeProcInstance_DLG( dlgproc );
+#else
+    JDialogBoxParam( inst, "WdeSplashScreen", parent, WdeSplashDlgProc, (LPARAM)&msecs );
+#endif
 }
 
 INT_PTR CALLBACK WdeSplashDlgProc( HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam )

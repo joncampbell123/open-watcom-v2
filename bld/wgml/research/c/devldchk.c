@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -215,29 +215,25 @@ int main()
 
     /* Special preparations for test01 and test02. */
 
-    if( (!stricmp( dev_name, "test01") ) || (!stricmp( dev_name, "test02") ) ) {
-        opt_font * current = mem_alloc( sizeof( opt_font ) );
+    if( ( stricmp( dev_name, "test01" ) == 0 ) || ( stricmp( dev_name, "test02" ) == 0 ) ) {
+        opt_font * current;
 
+        current = MemAllocSafe( sizeof( *current ) );
         current->nxt = NULL;
         current->font = 11;
-        current->name = mem_alloc( sizeof( "tfon08" ) + 1 );
-        strcpy_s( current->name,  sizeof( "tfon08" ) + 1, "tfon08" );
-        current->style = mem_alloc( sizeof( "plain" ) + 1 );
-        strcpy_s( current->style, sizeof( "plain" ) + 1, "plain" );
+        current->name = MemStrdupSafe( "tfon08" );
+        current->style = MemStrdupSafe( "plain" );
         current->space = 0;
         current->height = 0;
 
         opt_fonts = current;
 
-        current = mem_alloc( sizeof( opt_font ) );
-        opt_fonts->nxt = current;
+        opt_fonts->nxt = current = MemAllocSafe( sizeof( *current ) );
 
         current->nxt = NULL;
         current->font = 12;
-        current->name = mem_alloc( sizeof( "tfon09" ) + 1 );
-        strcpy_s( current->name,  sizeof( "tfon09" ) + 1, "tfon09" );
-        current->style = mem_alloc( sizeof( "bold" ) + 1 );
-        strcpy_s( current->style, sizeof( "bold" ) + 1, "bold" );
+        current->name = MemStrdupSafe( "tfon09" );
+        current->style = MemStrdupSafe( "bold" );
         current->space = 0;
         current->height = 0;
     }
@@ -256,7 +252,7 @@ int main()
     cop_teardown();
     ff_teardown();
 
-    mem_free(tgt_path);
+    MemFree(tgt_path);
     tgt_path = NULL;
 
     free_some_mem();            // wgml globals

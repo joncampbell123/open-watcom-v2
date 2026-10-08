@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -54,11 +54,11 @@ void GUIFreeDialogBoxControlPtrs( DialogBoxControl *dbc )
 {
     if( dbc ) {
         if( dbc->ClassID != NULL ) {
-            GUIMemFree( dbc->ClassID );
+            MemFree( dbc->ClassID );
             dbc->ClassID = NULL;
         }
         if( dbc->Text != NULL ) {
-            GUIMemFree( dbc->Text );
+            MemFree( dbc->Text );
             dbc->Text = NULL;
         }
     }
@@ -68,22 +68,22 @@ void GUIFreeDialogBoxHeader( DialogBoxHeader *hdr )
 {
     if( hdr != NULL ) {
         if( hdr->MenuName != NULL ) {
-            GUIMemFree( hdr->MenuName );
+            MemFree( hdr->MenuName );
             hdr->MenuName = NULL;
         }
         if( hdr->ClassName != NULL ) {
-            GUIMemFree( hdr->ClassName );
+            MemFree( hdr->ClassName );
             hdr->ClassName = NULL;
         }
         if( hdr->Caption != NULL ) {
-            GUIMemFree( hdr->Caption );
+            MemFree( hdr->Caption );
             hdr->Caption = NULL;
         }
         if( hdr->FontName != NULL ) {
-            GUIMemFree( hdr->FontName );
+            MemFree( hdr->FontName );
             hdr->FontName = NULL;
         }
-        GUIMemFree( hdr );
+        MemFree( hdr );
     }
 }
 
@@ -91,22 +91,16 @@ static char *ResNameOrOrdinalToStr( ResNameOrOrdinal *name, int base )
 {
     char        temp[15];
     char        *cp;
-    bool        ok;
 
     cp = NULL;
-
     if( name != NULL ) {
         if( name->ord.fFlag == 0xff) {
             sprintf( temp, ( base == 10 ) ? "%d" : "%x", name->ord.wOrdinalID );
-            cp = GUIStrDupOK( temp, &ok );
-        } else {
-            cp = GUIStrDupOK( name->name, &ok );
-        }
-        if( !ok || ( cp == NULL ) ) {
-            return( NULL );
+            cp = MemStrdup( temp );
+        } else if( name->name != NULL ) {
+            cp = MemStrdup( name->name );
         }
     }
-
     return( cp );
 }
 
@@ -119,7 +113,7 @@ static bool Template2Dlg( DialogBoxHeader **hdr, DialogBoxControl **cntls )
 
     if( ok ) {
         *cntls = NULL;
-        *hdr = (DialogBoxHeader *)GUIMemAlloc( sizeof(DialogBoxHeader) );
+        *hdr = MemAlloc( sizeof( **hdr ) );
         ok = ( *hdr != NULL );
     }
 
@@ -128,7 +122,7 @@ static bool Template2Dlg( DialogBoxHeader **hdr, DialogBoxControl **cntls )
     }
 
     if( ok ) {
-        *cntls = (DialogBoxControl *)GUIMemAlloc( (*hdr)->NumOfItems * sizeof( DialogBoxControl ) );
+        *cntls = MemAlloc( sizeof( **cntls ) * (*hdr)->NumOfItems );
         ok = ( *cntls != NULL );
     }
 
@@ -150,7 +144,7 @@ static bool Template2Dlg( DialogBoxHeader **hdr, DialogBoxControl **cntls )
             for( i = 0; i < (*hdr)->NumOfItems; i++ ) {
                 GUIFreeDialogBoxControlPtrs( *cntls + i );
             }
-            GUIMemFree( *cntls );
+            MemFree( *cntls );
             *cntls = NULL;
         }
     }
@@ -332,7 +326,7 @@ static bool DialogBoxControl2GUI( DialogBoxControl *ctl, gui_control_info *ctl_i
     if( !ok ) {
         if( ctl_info != NULL ) {
             if( ctl_info->text != NULL ) {
-                GUIMemFree( (void *)ctl_info->text );
+                MemFree( (void *)ctl_info->text );
             }
         }
     }
@@ -349,12 +343,12 @@ static gui_create_info *DialogBoxHeader2GUI( DialogBoxHeader *hdr )
 
     if( hdr == NULL )
         return( NULL ) ;
-    dlg_info = (gui_create_info *)GUIMemAlloc( sizeof( gui_create_info ) );
+    dlg_info = MemAlloc( sizeof( *dlg_info ) );
     if( dlg_info == NULL )
         return( NULL ) ;
 
     // initialize the create struct
-    memset( dlg_info, 0, sizeof( gui_create_info ) );
+    memset( dlg_info, 0, sizeof( *dlg_info ) );
 
     // set the initial text
     dlg_info->title = hdr->Caption; // NULL text is ok
@@ -404,7 +398,7 @@ static gui_create_info *DialogBoxHeader2GUI( DialogBoxHeader *hdr )
 
     if( !ok ) {
         if( dlg_info != NULL ) {
-            GUIMemFree( dlg_info );
+            MemFree( dlg_info );
             dlg_info = NULL;
         }
     }
@@ -443,13 +437,19 @@ bool GUICreateDialogFromRes( res_name_or_id dlg_id, gui_window *parent_wnd, GUIE
     }
 
     if( ok ) {
-        controls_info = (gui_control_info *)GUIMemAlloc( sizeof( gui_control_info ) * hdr->NumOfItems );
-        ok = ( controls_info != NULL );
+        size_t  size;
+
+        size = sizeof( *controls_info ) * hdr->NumOfItems;
+        controls_info = MemAlloc( size );
+        if( controls_info != NULL ) {
+            memset( controls_info, 0, size );
+        } else {
+            ok = false;
+        }
     }
 
     last_was_radio = -1;
     if( ok ) {
-        memset( controls_info, 0, sizeof( gui_control_info ) * hdr->NumOfItems );
         for( i = 0; i < hdr->NumOfItems; i++ ) {
             ok = DialogBoxControl2GUI( &cntls[i], &controls_info[i] );
             if( !ok )
@@ -477,20 +477,20 @@ bool GUICreateDialogFromRes( res_name_or_id dlg_id, gui_window *parent_wnd, GUIE
 
     if( controls_info != NULL ) {
         for( i = 0; i < hdr->NumOfItems; i++ ) {
-            GUIMemFree( (void *)controls_info[i].text );
+            MemFree( (void *)controls_info[i].text );
         }
-        GUIMemFree( controls_info );
+        MemFree( controls_info );
     }
 
     if( dlg_info != NULL ) {
-        GUIMemFree( dlg_info );
+        MemFree( dlg_info );
     }
 
     if( cntls != NULL ) {
         for( i = 0; i < hdr->NumOfItems; i++ ) {
             GUIFreeDialogBoxControlPtrs( &cntls[i] );
         }
-        GUIMemFree( cntls );
+        MemFree( cntls );
     }
 
     if( hdr != NULL ) {

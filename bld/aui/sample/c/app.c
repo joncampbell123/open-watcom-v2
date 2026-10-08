@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -82,9 +82,9 @@ keymap Key[] = {
 };
 
 static gui_menu_struct PopTart[] = {
-    { "Open &1", MENU_OPEN1, GUI_STYLE_MENU_ENABLED },
-    { "Open &2", MENU_OPEN2, GUI_STYLE_MENU_ENABLED },
-    { "Open &3", MENU_OPEN3, GUI_STYLE_MENU_ENABLED },
+    { "Open &1", MENU_OPEN1, GUI_STYLE_MENU_ENABLED, NULL, GUI_NO_MENU },
+    { "Open &2", MENU_OPEN2, GUI_STYLE_MENU_ENABLED, NULL, GUI_NO_MENU },
+    { "Open &3", MENU_OPEN3, GUI_STYLE_MENU_ENABLED, NULL, GUI_NO_MENU },
 };
 
 static gui_menu_items   menu_PopTart = GUI_MENU_ARRAY( PopTart );
@@ -188,7 +188,7 @@ void GUImain( void )
 
     WndMaxDirtyRects = 20;
     cmd_len = _bgetcmd( NULL, 0 ) + 1;
-    cmd_line = WndAlloc( cmd_len );
+    cmd_line = MemAlloc( cmd_len );
     _bgetcmd( cmd_line, cmd_len );
     cmd = cmd_line;
     while( *cmd == ' ' )
@@ -205,7 +205,7 @@ void GUImain( void )
 #endif
         cmd += 2;
     }
-    WndFree( cmd_line );
+    MemFree( cmd_line );
     WndGadgetInit();
     WndInit( "Sample Application" );
     WndCreateStatusWindow( &WndColours[GUI_MENU_STANDOUT] );

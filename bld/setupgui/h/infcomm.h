@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2025      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2025-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -31,11 +31,9 @@
 ****************************************************************************/
 
 
-#include "roundmac.h"
+#define INFBLK_SIZE  (_1K / 2)   // installer uses sector size
 
-#define INF_BLOCK_SIZE  (_1K / 2)   // installer uses sector size
+#define __ROUND_UP_SIZE_INFBLK(x)   __ROUND_UP_SIZE((x), INFBLK_SIZE)
 
-#define __ROUND_UP_SIZE_INF(x)  __ROUND_UP_SIZE((x), INF_BLOCK_SIZE)
-
-#define INFBLK2SIZE(x)  ((x) * INF_BLOCK_SIZE)
-#define SIZE2INFBLK(x)  ((x) / INF_BLOCK_SIZE)
+#define INFBLK2SIZE(x)  ((x) * INFBLK_SIZE)
+#define SIZE2INFBLK(x)  ((x) / INFBLK_SIZE)

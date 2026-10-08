@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -83,7 +83,8 @@ static int DoOpen( const char *name, unsigned mode, bool isexe )
     for( ;; ) {
         if( OpenFiles >= MAX_OPEN_FILES )
             CleanCachedHandles();
-        if( (mode & O_CREAT) && !stat( name, &st ) )
+        if( (mode & O_CREAT)
+          && !stat( name, &st ) )
             unlink( name );
         h = open( name, mode, pmode );
         if( h != -1 ) {
@@ -91,7 +92,7 @@ static int DoOpen( const char *name, unsigned mode, bool isexe )
             break;
         }
         if( errno == ENOMEM ) {
-            if( !FreeUpMemory() ) {
+            if( !FreeUpMemory( false ) ) {
                 break;
             }
         } else {
@@ -273,7 +274,8 @@ long QLSeek( f_handle file, long position, int start, const char *name )
 
     CheckBreak();
     h = lseek( file, position, start );
-    if( h == -1L && name != NULL ) {
+    if( h == -1L
+      && name != NULL ) {
         LnkMsg( ERR+MSG_IO_PROBLEM, "12", name, strerror( errno ) );
     }
     return( h );
@@ -319,7 +321,8 @@ void QDelete( const char *name )
     if( name == NULL )
         return;
     h = remove( name );
-    if( h == -1 && errno != ENOENT ) { /* file not found is OK */
+    if( h == -1
+      && errno != ENOENT ) { /* file not found is OK */
         LnkMsg( ERR+MSG_IO_PROBLEM, "12", name, strerror( errno ) );
     }
 }
@@ -335,7 +338,8 @@ bool QReadStr( f_handle file, char *dest, size_t size, const char *name )
     eof = false;
     while( --size > 0 ) {
         len = QRead( file, &ch, 1, name );
-        if( len == 0 || len == IOERROR ) {
+        if( len == 0
+          || len == IOERROR ) {
             eof = true;
             break;
         } else if( ch != '\r' ) {
@@ -356,7 +360,7 @@ bool QIsDevice( f_handle file )
 
     if( fstat( file, &st ) == 0 ) {
         if( S_ISCHR( st.st_mode ) ) {
-    		return( true );
+            return( true );
         }
     }
     return( false );

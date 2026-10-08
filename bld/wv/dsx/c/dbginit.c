@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -133,6 +133,7 @@ void KillDebugger( int rc )
     RestoreHandlers();
     Cleanup();
     _exit( rc );
+    /* never return */
 }
 
 #ifndef __NOUI__
@@ -145,6 +146,7 @@ void GUImain( void )
     RMData = DPMIAllocateDOSMemoryBlock( _NBPARAS( RMSegEnd - RMSegStart ) );
     if( RMData.pm == 0 ) {
         StartupErr( LIT_ENG( Unable_to_alloc_DOS_mem ) );
+        /* never return */
     }
     PMData = _MK_FP( RMData.pm, 0 );
     _fmemcpy( PMData, RMSegStart, RMSegEnd - RMSegStart );

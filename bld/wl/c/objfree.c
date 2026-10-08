@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -62,22 +62,22 @@ void FiniLinkStruct( void )
     FiniORLObj();
 }
 
-static void FreeClasses( class_entry * list )
+static void FreeClasses( class_entry *class )
 /*******************************************/
 {
-    class_entry *       next;
+    class_entry     *next;
 
-    for( ; list != NULL; list = next ) {
-        next = list->next_class;
-        RingWalk( list->segs, FreeLeader );
-        CarveFree( CarveClass, list );
+    for( ; class != NULL; class = next ) {
+        next = class->next;
+        RingWalk( class->segs, FreeLeader );
+        CarveFree( CarveClass, class );
     }
 }
 
 void FreeAMod( mod_entry *mod )
 /************************************/
 {
-    FreeObjCache( mod->f.source );
+    FreeObjCache( mod->u1.source );
     FreeModEntry( mod );
 }
 
@@ -87,76 +87,77 @@ static void FreeMods( mod_entry *head )
     void        *next;
 
     for( ; head != NULL; head = next ) {
-        next = head->n.next_mod;
+        next = head->u.next;
         FreeAMod( head );
     }
 }
 
-static void FreeFiles( file_list *list )
+static void FreeFiles( file_list *file )
 /**************************************/
 {
     void        *next;
 
-    for( ; list != NULL; list = next ) {
-        next = list->next_file;
-        CacheClose( list, 3 );
-        if( (list->flags & STAT_HAS_MEMBER) && list->u.member != NULL ) {
-            FreeList( list->u.member );
+    for( ; file != NULL; file = next ) {
+        next = file->next;
+        CacheClose( file, 3 );
+        if( (file->flags_file & STAT_HAS_MEMBER) && file->u.member != NULL ) {
+            FreeList( file->u.member );
         }
-        _PermFree( list );
+        _PermFree( file );
     }
 }
 
-static void FreeAreas( OVL_AREA *area );
+static void FreeAreas( AREASECT *area );
 
-static void FreeSections( section *sec )
-/**************************************/
-/* Free sections & classes. */
+static void FreeSections( section *sect )
+/****************************************
+ * Free sections & classes.
+ */
 {
     section             *next;
     ORDER_CLASS         *Class, *NextClass;
     ORDER_SEGMENT       *Seg, *NextSeg;
 
-    for( ; sec != NULL; sec = next ) {
-        next = sec->next_sect;
-        FreeFiles( sec->files );
+    for( ; sect != NULL; sect = next ) {
+        next = sect->next;
+        FreeFiles( sect->files );
         if( (LinkFlags & LF_INC_LINK_FLAG) == 0 ) {
-            FreeMods( sec->mods );
-            FreeClasses( sec->classlist );
+            FreeMods( sect->mods );
+            FreeClasses( sect->classes );
         }
-        DBISectCleanup( sec );
-        FreeAreas( sec->areas );
-        ZapHTable(sec->modFilesHashed, LFree);
+        DBISectCleanup( sect );
+        FreeAreas( sect->areas );
+        ZapHTable( sect->modFilesHashed, MemFree );
         // Free up any Order Class entries
-        for( Class = sec->orderlist; Class != NULL; Class = NextClass ) {
+        for( Class = sect->orderlist; Class != NULL; Class = NextClass ) {
             NextClass = Class->NextClass;
             if( Class->Name != NULL ) {   // Including members and sucessors
-                _LnkFree ( Class->Name );
+                MemFree ( Class->Name );
             }
             if( Class->Copy ) {
-                _LnkFree ( Class->SrcName );
+                MemFree ( Class->SrcName );
             }
             // Order Seg entries can also have members and sucessors
             for( Seg = Class->SegList; Seg != NULL; Seg = NextSeg ) {
                 NextSeg = Seg->NextSeg;
                 if( Seg->Name != NULL ) {
-                    _LnkFree( Seg->Name );
+                    MemFree( Seg->Name );
                 }
-                _LnkFree ( Seg );
+                MemFree ( Seg );
             }
-            _LnkFree ( Class );
+            MemFree ( Class );
         }
-        _LnkFree( sec );
+        MemFree( sect );
     }
 }
 
-static void FreeAreas( OVL_AREA *area )
+static void FreeAreas( AREASECT *area )
 /*************************************/
 {
-    OVL_AREA    *next;
+    AREASECT    *next;
 
     for( ; area != NULL; area = next ) {
-        next = area->next_area;
+        next = area->next;
         FreeSections( area->sections );
     }
 }
@@ -177,13 +178,13 @@ void CleanLinkStruct( void )
         FreeMods( LibModules );
     }
     if( SymFileName != NULL ) {
-        _LnkFree( SymFileName );
+        MemFree( SymFileName );
     }
     if( FmtData.osname != NULL ) {
-        _LnkFree( FmtData.osname );
+        MemFree( FmtData.osname );
     }
     if( FmtData.resource != NULL ) {
-        _LnkFree( FmtData.resource );
+        MemFree( FmtData.resource );
     }
     FreeRelocInfo();
     FreeGroups( Groups );
@@ -201,15 +202,15 @@ void CleanLinkStruct( void )
 }
 
 #if defined( _OS2 ) || defined( _QNX )
-void FreeSegFlags( xxx_seg_flags *curr )
-/**************************************/
+void FreeSegFlags( seg_flags_struct *curr )
+/*****************************************/
 {
-    xxx_seg_flags   *next;
+    seg_flags_struct    *next;
 
     for( ; curr != NULL; curr = next ) {
         next = curr->next;
-        _LnkFree( curr->name );
-        _LnkFree( curr );
+        MemFree( curr->name );
+        MemFree( curr );
     }
 }
 #endif
@@ -229,13 +230,13 @@ static void FreeAGroup( group_entry *group )
     CarveFree( CarveGroup, group );
 }
 
-void FreeGroups( group_entry *head )
-/*****************************************/
+void FreeGroups( group_entry *group )
+/***********************************/
 {
     group_entry *next;
 
-    for( ; head != NULL; head = next ) {
-        next = head->next_group;
-        FreeAGroup( head );
+    for( ; group != NULL; group = next ) {
+        next = group->next;
+        FreeAGroup( group );
     }
 }

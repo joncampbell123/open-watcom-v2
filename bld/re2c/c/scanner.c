@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,9 +35,9 @@
 #include <string.h>
 #include <stdio.h>
 #include "wio.h"
-#include "scanner.h"
 #include "parser.h"
-#include "ytab.h"
+#include "scanner.h"
+#include "mem.h"
 
 
 extern YYSTYPE yylval;
@@ -48,9 +48,11 @@ extern YYSTYPE yylval;
 #define YYCURSOR        cursor
 #define YYLIMIT         s->lim
 #define YYMARKER        s->ptr
-#define YYFILL(n)       {cursor = fill( s, cursor );}
+#define YYFILL(n)       {cursor = fill_buf( s, cursor );}
 
-#define RETURN(i)       {s->cur = cursor; return i;}
+#define RETURN(i)       {s->cur = cursor; return( i );}
+
+static Token            *token_pool = NULL;
 
 static void Scanner_init( Scanner *s, FILE *i )
 {
@@ -69,7 +71,15 @@ static SubStr Scanner_token( Scanner *s )
     return( r );
 }
 
-static uchar *fill( Scanner *s, uchar *cursor )
+static void delete_fill_buf( Scanner *s )
+{
+    if( s->bot != NULL ) {
+        MemFree( s->bot );
+        s->bot = NULL;
+    }
+}
+
+static uchar *fill_buf( Scanner *s, uchar *cursor )
 {
     if( s->eof == NULL ) {
         size_t cnt = s->tok - s->bot;
@@ -82,15 +92,17 @@ static uchar *fill( Scanner *s, uchar *cursor )
             s->lim -= cnt;
         }
         if( ( s->top - s->lim ) < BSIZE ) {
-            uchar *buf = malloc( ( s->lim - s->bot ) + BSIZE );
-            memcpy( buf, s->tok, s->lim - s->tok );
+            uchar *buf = MemAlloc( ( s->lim - s->bot ) + BSIZE );
+            if( s->tok != NULL ) {
+                memcpy( buf, s->tok, s->lim - s->tok );
+            }
             s->tok = buf;
             s->ptr = &buf[s->ptr - s->bot];
             cursor = &buf[cursor - s->bot];
             s->pos = &buf[s->pos - s->bot];
             s->lim = &buf[s->lim - s->bot];
             s->top = &s->lim[BSIZE];
-            free( s->bot );
+            delete_fill_buf( s );
             s->bot = buf;
         }
         if( (cnt = fread( s->lim, 1, BSIZE, s->in )) != BSIZE ) {
@@ -104,18 +116,29 @@ static uchar *fill( Scanner *s, uchar *cursor )
 
 static Token *token( Scanner *s )
 {
-    Token   *r = malloc( sizeof( Token ) );
-    size_t  len = s->cur - s->tok;
+    SubStr  substr;
+    Token   *t;
 
-    r->line = s->tline;
-    r->text.len = len;
-    r->text.str = malloc( len );
-    memcpy( r->text.str, s->tok, len );
-    return( r );
+    SubStr_init( &substr, s->tok, s->cur - s->tok );
+    t = MemAlloc( sizeof( *t ) );
+    t->line = s->tline;
+    Str_init( &t->text, &substr );
+    t->next = token_pool;
+    token_pool = t;
+    return( t );
 }
 
+static void Token_delete( void )
+{
+    while( token_pool != NULL ) {
+        Token   *next = token_pool->next;
+        Str_fini( &token_pool->text );
+        MemFree( token_pool );
+        token_pool = next;
+    }
+}
 
-int Scanner_echo( Scanner *s, FILE *out )
+bool Scanner_echo( Scanner *s, FILE *out )
 {
     uchar   *cursor = s->cur;
 
@@ -146,7 +169,7 @@ yy4:    yych = *++YYCURSOR;
 //yy5:
         {
             if( cursor == s->eof )
-                RETURN(0);
+                RETURN( false );
             fwrite( s->tok, 1, cursor - s->tok, out );
             s->tok = s->pos = cursor;
             s->cline++;
@@ -182,13 +205,13 @@ yy9:    yych = *++YYCURSOR;
         {
             fwrite( s->tok, 1, &cursor[-7] - s->tok, out );
             s->tok = cursor;
-            RETURN(1);
+            RETURN( true );
         }
     }
 }
 
 
-int Scanner_scan( Scanner *s )
+YYTOKENTYPE Scanner_scan( Scanner *s )
 {
     uchar   *cursor = s->cur;
     uint    depth;
@@ -278,14 +301,14 @@ yy19:   yych = *++YYCURSOR;
         if( yych == '*' )
             goto yy54;
 yy20:
-        { RETURN(*s->tok); }
+        { RETURN( *s->tok ); }
 yy21:   yych = *++YYCURSOR;
         if( yych == '/' )
             goto yy52;
 yy22:
         {
             yylval.op = *s->tok;
-            RETURN(CLOSE);
+            RETURN( CLOSE );
         }
 yy23:   yyaccept = 0;
         yych = *(YYMARKER = ++YYCURSOR);
@@ -309,7 +332,7 @@ yy30:
         {
             s->cur = cursor;
             yylval.symbol = Symbol_find( Scanner_token( s ) );
-            return ID;
+            return( ID );
         }
 yy31:   yych = *++YYCURSOR;
         goto yy38;
@@ -319,7 +342,7 @@ yy33:   yych = *++YYCURSOR;
 //yy34:
         {
             if( cursor == s->eof )
-                RETURN(0);
+                RETURN( 0 );
             s->pos = cursor;
             s->cline++;
             goto scan;
@@ -388,8 +411,8 @@ yy45:   yych = *++YYCURSOR;
 //yy46:
         {
             s->cur = cursor;
-            yylval.regexp = ranToRE( Scanner_token( s ) );
-            return RANGE;
+            yylval.regexp = RangeToRE( Scanner_token( s ) );
+            return( RANGE );
         }
 yy47:   ++YYCURSOR;
         if( YYLIMIT == YYCURSOR )
@@ -418,14 +441,14 @@ yy50:   yych = *++YYCURSOR;
 //yy51:
         {
             s->cur = cursor;
-            yylval.regexp = strToRE( Scanner_token( s ) );
-            return STRING;
+            yylval.regexp = StringToRE( Scanner_token( s ) );
+            return( STRING );
         }
 yy52:   yych = *++YYCURSOR;
 //yy53:
         {
             s->tok = cursor;
-            RETURN(0);
+            RETURN( 0 );
         }
 yy54:   yych = *++YYCURSOR;
 //yy55:
@@ -476,7 +499,7 @@ code:
             if( --depth == 0 ) {
                 s->cur = cursor;
                 yylval.token = token( s );
-                return CODE;
+                return( CODE );
             }
             goto code;
         }
@@ -592,7 +615,7 @@ yy80:   yych = *++YYCURSOR;
 //yy81:
         {
             if( cursor == s->eof )
-                RETURN(0);
+                RETURN( 0 );
             s->tok = s->pos = cursor;
             s->cline++;
             goto comment;
@@ -625,8 +648,18 @@ void Scanner_fatal( Scanner *s, const char *msg )
 
 Scanner *Scanner_new( FILE *i )
 {
-    Scanner *r = malloc( sizeof( Scanner ) );
+    Scanner *s = MemAlloc( sizeof( *s ) );
 
-    Scanner_init( r, i );
-    return( r );
+    Scanner_init( s, i );
+    return( s );
+}
+
+void Scanner_delete( Scanner *s )
+{
+    delete_fill_buf( s );
+    Symbol_delete();
+    Token_delete();
+    Range_delete();
+    RegExp_delete();
+    MemFree( s );
 }

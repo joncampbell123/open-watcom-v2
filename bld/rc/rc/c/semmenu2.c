@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2023-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2023-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -66,15 +66,15 @@ static bool ResOS2WriteMenuHeader( MenuHeaderOS2 *currhead, FILE *fp )
 {
     bool        error;
 
-    error = ResWriteUint32( currhead->Size, fp );
+    error = ResWriteUint32( fp, currhead->Size );
     if( !error ) {
-        error = ResWriteUint16( currhead->Codepage, fp );
+        error = ResWriteUint16( fp, currhead->Codepage );
     }
     if( !error ) {
-        error = ResWriteUint16( currhead->Class, fp );
+        error = ResWriteUint16( fp, currhead->Class );
     }
     if( !error ) {
-        error = ResWriteUint16( currhead->NumItems, fp );
+        error = ResWriteUint16( fp, currhead->NumItems );
     }
     return( error );
 }
@@ -84,15 +84,15 @@ static bool ResOS2WriteMenuItemNormal( const MenuItemOS2 *curritem, FILE *fp )
 {
     bool        error;
 
-    error = ResWriteUint16( curritem->ItemStyle, fp );
+    error = ResWriteUint16( fp, curritem->ItemStyle );
     if( !error ) {
-        error = ResWriteUint16( curritem->ItemAttrs, fp );
+        error = ResWriteUint16( fp, curritem->ItemAttrs );
     }
     if( !error ) {
-        error = ResWriteUint16( curritem->ItemCmd, fp );
+        error = ResWriteUint16( fp, curritem->ItemCmd );
     }
     if( !error ) {
-        if( !(curritem->ItemStyle & OS2_MIS_SEPARATOR)
+        if( (curritem->ItemStyle & OS2_MIS_SEPARATOR) == 0
           && curritem->ItemText != NULL ) {
             error = ResWriteString( curritem->ItemText, false, fp );
         }
@@ -102,12 +102,6 @@ static bool ResOS2WriteMenuItemNormal( const MenuItemOS2 *curritem, FILE *fp )
 }
 
 static void SemOS2FreeSubMenu( FullMenuOS2 *submenu );
-
-MenuFlags SemOS2AddFirstMenuOption( YYTOKENTYPE token )
-/*****************************************************/
-{
-    return( SemOS2AddMenuOption( 0, token ) );
-}
 
 MenuFlags SemOS2AddMenuOption( MenuFlags oldflags, YYTOKENTYPE token )
 /********************************************************************/
@@ -121,43 +115,18 @@ MenuFlags SemOS2AddMenuOption( MenuFlags oldflags, YYTOKENTYPE token )
     return( oldflags );
 }
 
-FullMenuOS2 *SemOS2NewMenu( FullMenuItemOS2 firstitem )
-/*****************************************************/
-{
-    FullMenuOS2       *newmenu;
-    FullMenuItemOS2   *newitem;
-
-    newmenu = RESALLOC( sizeof( FullMenuOS2 ) );
-    newitem = RESALLOC( sizeof( FullMenuItemOS2 ) );
-
-    if( newmenu == NULL
-      || newitem == NULL ) {
-        RcError( ERR_OUT_OF_MEMORY );
-        ErrorHasOccured = true;
-        return( NULL );
-    }
-
-    *newitem = firstitem;
-    newmenu->head = NULL;
-    newmenu->tail = NULL;
-
-    ResAddLLItemAtEnd( (void **)&(newmenu->head), (void **)&(newmenu->tail), newitem );
-
-    return( newmenu );
-}
-
 FullMenuOS2 *SemOS2AddMenuItem( FullMenuOS2 *currmenu, FullMenuItemOS2 curritem )
 /*******************************************************************************/
 {
     FullMenuItemOS2     *newitem;
 
-    newitem = RESALLOC( sizeof( FullMenuItemOS2 ) );
-
-    if( newitem == NULL ) {
-        RcError( ERR_OUT_OF_MEMORY );
-        ErrorHasOccured = true;
-        return( NULL );
+    if( currmenu == NULL ) {
+        currmenu = MemAllocSafe( sizeof( FullMenuOS2 ) );
+        currmenu->head = NULL;
+        currmenu->tail = NULL;
     }
+
+    newitem = MemAllocSafe( sizeof( FullMenuItemOS2 ) );
 
     *newitem = curritem;
 
@@ -192,7 +161,7 @@ static size_t SemOS2CalcSubMenuSize( FullMenuOS2 *submenu, unsigned *count )
     for( curritem = submenu->head; curritem != NULL; curritem = curritem->next ) {
         *count += 1;
         size += 3 * sizeof( uint_16 );
-        if( !(curritem->item.ItemStyle & OS2_MIS_SEPARATOR)
+        if( (curritem->item.ItemStyle & OS2_MIS_SEPARATOR) == 0
           && curritem->item.ItemText != NULL )
             size += strlen( curritem->item.ItemText ) + 1;
         if( curritem->item.ItemStyle & OS2_MIS_SUBMENU ) {
@@ -253,11 +222,11 @@ static void SemOS2FreeMenuItem( FullMenuItemOS2 *curritem )
     if( curritem->submenu != NULL ) {
         SemOS2FreeSubMenu( curritem->submenu );
         if( curritem->item.ItemText != NULL ) {
-            RESFREE( curritem->item.ItemText );
+            MemFree( curritem->item.ItemText );
         }
     } else {
         if( curritem->item.ItemText != NULL ) {
-            RESFREE( curritem->item.ItemText );
+            MemFree( curritem->item.ItemText );
         }
     }
 }
@@ -272,15 +241,15 @@ static void SemOS2FreeSubMenu( FullMenuOS2 *submenu )
         for( curritem = submenu->head; curritem != NULL; curritem = nextitem ) {
             nextitem = curritem->next;
             SemOS2FreeMenuItem( curritem );
-            RESFREE( curritem );
+            MemFree( curritem );
         }
-        RESFREE( submenu );
+        MemFree( submenu );
     }
 }
 
-void SemOS2WriteMenu( WResID *name, ResMemFlags flags, FullMenuOS2 *menu,
+void SemOS2WriteMenu( WResID *res_id, ResMemFlags res_flags, FullMenuOS2 *menu,
                    YYTOKENTYPE tokentype, uint_32 codepage )
-/***********************************************************************/
+/*****************************************************************************/
 {
     ResLocation     loc;
     bool            error;
@@ -293,14 +262,14 @@ void SemOS2WriteMenu( WResID *name, ResMemFlags flags, FullMenuOS2 *menu,
         error = SemOS2WriteSubMenu( menu, &err_code, codepage );
         if( error ) {
             err_code = LastWresErr();
-            RcError( ERR_WRITTING_RES_FILE, CurrResFile.filename, strerror( err_code ) );
+            RcError( ERR_WRITTING_RES, CurrResFile.filename, strerror( err_code ) );
             ErrorHasOccured = true;
         } else {
             loc.len = SemEndResource( loc.start );
-            SemAddResourceAndFree( name, WResIDFromNum( OS2_RT_MENU ), flags, loc );
+            SemAddResourceAndFree( res_id, WResIDFromNum( OS2_RT_MENU ), res_flags, loc );
         }
     } else {
-        RESFREE( name );
+        MemFree( res_id );
     }
     SemOS2FreeSubMenu( menu );
 }

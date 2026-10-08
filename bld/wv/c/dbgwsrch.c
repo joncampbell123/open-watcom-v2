@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -106,7 +106,7 @@ static walk_result AddSrcFile( cue_handle *cueh, void *d )
     int         len;
 
     len = DIPCueFile( cueh, NULL, 0 ) + 1;
-    file = WndMustAlloc( sizeof( a_cue ) + cue_SIZE + len );
+    file = MemAllocSafe( sizeof( *file ) + cue_SIZE + len );
     file->cueh = (cue_handle*)((char*)file + sizeof( a_cue ) + len  );
     DIPCueFile( cueh, file->name, len );
     HDLAssign( cue, file->cueh, cueh );
@@ -133,14 +133,14 @@ static walk_result SearchSrcFile( srch_window *srch, cue_handle *cueh )
         pos = TxtBuff;
         endpos = NULL;
         if( WndRXFind( srch->rx, &pos, &endpos ) ) {
-            found = WndRealloc( srch->found, ( srch->num_rows + 1 ) * sizeof( found_item ) );
+            found = MemRealloc( srch->found, ( srch->num_rows + 1 ) * sizeof( found_item ) );
             if( found == NULL )
                 break;
             srch->found = found;
             found[srch->num_rows].mod = DIPCueMod( cueh );
             found[srch->num_rows].file_id = DIPCueFileId( cueh );
             found[srch->num_rows].open = false;
-            found[srch->num_rows].source_line = DupStr( TxtBuff );
+            found[srch->num_rows].source_line = MemStrdupSafe( TxtBuff );
             srch->num_rows++;
             len = DIPModName( DIPCueMod( cueh ), NULL, 0 );
             if( srch->max_mod_name < len )
@@ -174,7 +174,7 @@ static void GlobalModWalker( srch_window *srch )
 
     DIPWalkModList( NO_MOD, BuildFileList, srch );
     srch->file_list = SortLinkedList( srch->file_list,
-                offsetof( a_cue, next ), CueCompare, DbgAlloc, DbgFree );
+                offsetof( a_cue, next ), CueCompare, MemAlloc, MemFree );
     for( file = srch->file_list; file != NULL; file = file->next ) {
         if( file->next != NULL && strcmp( file->name, file->next->name ) == 0 )
             continue;
@@ -182,7 +182,7 @@ static void GlobalModWalker( srch_window *srch )
     }
     for( file = srch->file_list; file != NULL; file = next ) {
         next = file->next;
-        WndFree( file );
+        MemFree( file );
     }
     srch->file_list = NULL;
 }
@@ -204,9 +204,9 @@ static  void    SrchFreeFound( srch_window *srch )
     int         i;
 
     for( i = 0; i < srch->num_rows; ++i ) {
-        WndFree( srch->found[i].source_line );
+        MemFree( srch->found[i].source_line );
     }
-    WndFree( srch->found );
+    MemFree( srch->found );
     srch->found = NULL;
     srch->num_rows = 0;
 }
@@ -323,7 +323,7 @@ static bool WNDCALLBACK SrchWndEventProc( a_window wnd, gui_event gui_ev, void *
         WndFreeRX( srch->expr );
         WndFreeRX( srch->rx );
         SrchFreeFound( srch );
-        WndFree( srch );
+        MemFree( srch );
         return( true );
     }
     return( false );
@@ -347,7 +347,7 @@ wnd_info SrchInfo = {
     NoNextRow,
     NoNotify,
     ChkUpdate,
-    PopUp( SrchMenu ),
+    GUI_MENU_ARRAY( SrchMenu ),
 };
 
 static a_window DoWndSrchOpen( const char *expr, SRCH_WALKER *walk, void *cookie )
@@ -355,18 +355,18 @@ static a_window DoWndSrchOpen( const char *expr, SRCH_WALKER *walk, void *cookie
     srch_window *srch;
     void        *rx;
 
-    srch = WndMustAlloc( sizeof( srch_window ) );
+    srch = MemAllocSafe( sizeof( *srch ) );
     srch->file_list = NULL;
-    srch->expr = DupStr( expr );
+    srch->expr = MemStrdupSafe( expr );
     srch->cookie = cookie;
     srch->found = NULL;
     srch->num_rows = 0;
     srch->walk = walk;
     rx = WndCompileRX( expr );
     if( srch->expr == NULL || rx == NULL ) {
-        WndFree( srch->expr );
-        WndFree( rx );
-        WndFree( srch );
+        MemFree( srch->expr );
+        MemFree( rx );
+        MemFree( srch );
         return( NULL );
     }
     srch->rx = rx;

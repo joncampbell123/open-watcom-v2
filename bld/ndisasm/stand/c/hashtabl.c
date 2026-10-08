@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -36,7 +37,6 @@
 #include "dis.h"
 #include "global.h"
 #include "hashtabl.h"
-#include "memfuncs.h"
 
 #include "clibext.h"
 
@@ -105,7 +105,7 @@ return_val HashTableInsert( hash_table hash_tbl, hash_entry_data *key_data )
             return( RC_OKAY );
         }
     }
-    new_hash_entry = (hash_entry_struct *)MemAlloc( sizeof( hash_entry_struct ) );
+    new_hash_entry = MemAlloc( sizeof( hash_entry_struct ) );
     if( new_hash_entry == NULL ) {
         return( RC_OUT_OF_MEMORY );
     }
@@ -135,7 +135,7 @@ hash_table HashTableCreate( hash_value size, hash_table_type type )
     hash_table          hash_tbl;
     hash_value          i;
 
-    hash_tbl = (hash_table)MemAlloc( sizeof( hash_table_struct ) );
+    hash_tbl = MemAlloc( sizeof( hash_table_struct ) );
     if( hash_tbl == NULL )
         return( NULL );
     hash_tbl->table = (hash_entry_struct **)MemAlloc( size * sizeof( hash_entry_struct * ) );

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -47,59 +47,33 @@ void SemWriteRawDataItem( RawDataItem item )
     bool        error;
 
     if( item.IsString ) {
-        error = ResWriteStringLen( item.Item.String, item.LongItem, CurrResFile.fp, item.StrLen );
+        error = ResWriteStringLen( item.Item.String, item.StrLen, item.LongItem, false, CurrResFile.fp );
         if( !error ) {
             if( item.WriteNull ) {
                 if( item.LongItem ) {
-                    error = ResWriteUint16( 0, CurrResFile.fp );
+                    error = ResWriteUint16( CurrResFile.fp, 0 );
                 } else {
-                    error = ResWriteUint8( '\0', CurrResFile.fp );
+                    error = ResWriteUint8( CurrResFile.fp, '\0' );
                 }
             }
         }
         if( item.TmpStr ) {
-            RESFREE( item.Item.String );
+            MemFree( item.Item.String );
         }
     } else {
         error = false;
         if( !ErrorHasOccured ) {
             if( item.LongItem ) {
-                error = ResWriteUint32( item.Item.Num, CurrResFile.fp );
+                error = ResWriteUint32( CurrResFile.fp, item.Item.Num );
             } else {
-                error = ResWriteUint16( item.Item.Num, CurrResFile.fp );
+                error = ResWriteUint16( CurrResFile.fp, item.Item.Num );
             }
         }
     }
     if( error ) {
-        RcError( ERR_WRITTING_RES_FILE, CurrResFile.filename, LastWresErrStr() );
+        RcError( ERR_WRITTING_RES, CurrResFile.filename, LastWresErrStr() );
         ErrorHasOccured = true;
     }
-}
-
-RcStatus SemCopyDataUntilEOF( long offset, FILE *fp,
-                         void *buff, unsigned buffsize, int *err_code )
-/*********************************************************************/
-{
-    size_t      numread;
-
-    if( RESSEEK( fp, offset, SEEK_SET ) ) {
-        *err_code = errno;
-        return( RS_READ_ERROR );
-    }
-
-    while( (numread = RESREAD( fp, buff, buffsize )) != 0 ) {
-        if( numread != buffsize
-          && RESIOERR( fp, numread ) ) {
-            *err_code = errno;
-            return( RS_READ_ERROR );
-        }
-        if( RESWRITE( CurrResFile.fp, buff, numread ) != numread ) {
-            *err_code = errno;
-            return( RS_WRITE_ERROR );
-        }
-    }
-
-    return( RS_OK );
 }
 
 #define BUFFER_SIZE   0x200
@@ -109,7 +83,6 @@ static ResLocation semCopyRawFile( const char *filename, bool onlyFile )
 {
     FILE            *fp;
     RcStatus        ret;
-    char            *buffer;
     char            full_filename[_MAX_PATH];
     ResLocation     loc;
     int             err_code;
@@ -118,7 +91,6 @@ static ResLocation semCopyRawFile( const char *filename, bool onlyFile )
 
     error = false;
     fp = NULL;
-    buffer = RESALLOC( BUFFER_SIZE );
     if( !onlyFile ) {
         if( RcFindSourceFile( filename, full_filename ) == -1 ) {
             RcError( ERR_CANT_FIND_FILE, filename );
@@ -149,7 +121,7 @@ static ResLocation semCopyRawFile( const char *filename, bool onlyFile )
             RcError( ERR_READING_DATA, filename, strerror( errno ) );
             error = true;
         } else {
-            ret = SemCopyDataUntilEOF( pos, fp, buffer, BUFFER_SIZE, &err_code );
+            ret = CopyDataUntilEOF( pos, fp, CurrResFile.fp, BUFFER_SIZE, &err_code );
             if( ret != RS_OK ) {
                 ReportCopyError( ret, ERR_READING_DATA, filename, err_code );
                 error = true;
@@ -164,7 +136,6 @@ static ResLocation semCopyRawFile( const char *filename, bool onlyFile )
         loc.len = SemEndResource( loc.start );
     }
     RcIoCloseInputBin( fp );
-    RESFREE( buffer );
     return( loc );
 }
 
@@ -185,7 +156,7 @@ DataElemList *SemNewDataElemList( RawDataItem node )
 {
     DataElemList    *head;
 
-    head = RESALLOC( sizeof( DataElemList ) );
+    head = MemAllocSafe( sizeof( DataElemList ) );
     head->data[0] = node;
     head->count = 1;
     head->next = NULL;
@@ -232,12 +203,12 @@ ResLocation SemFlushDataElemList( DataElemList *head, bool call_startend )
         for( i = 0; i < curnode->count; i++ ) {
             SemWriteRawDataItem( curnode->data[i] );
         }
-        RESFREE( curnode );
+        MemFree( curnode );
     }
     if( call_startend ) {
         resLoc.len = SemEndResource( resLoc.start );
         if( CmdLineParms.MSResFormat
-          && CmdLineParms.TargetOS == RC_TARGET_OS_WIN32 ) {
+          && CmdLineParms.iswin32 ) {
             ResWritePadDWord( CurrResFile.fp );
         }
     }
@@ -256,9 +227,9 @@ void SemFreeDataElemList( DataElemList *head )
         nextnode = curnode->next;
         for( i = 0; i < curnode->count; i++ ) {
             if( curnode->data[i].IsString ) {
-                RESFREE( curnode->data[i].Item.String );
+                MemFree( curnode->data[i].Item.String );
             }
         }
-        RESFREE( curnode );
+        MemFree( curnode );
     }
 }

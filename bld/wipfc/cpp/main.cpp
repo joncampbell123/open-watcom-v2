@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2009-2018 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2009-2026 The Open Watcom Contributors. All Rights Reserved.
 *
 *  ========================================================================
 *
@@ -33,11 +33,23 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
-#include "banner.h"
 #include "compiler.hpp"
 #include "env.hpp"
 #include "errors.hpp"
 #include "util.hpp"
+
+#ifndef HAVE_CONFIG_H
+    #include "banner.h"
+#else
+    #define _DOSTR( p )         #p
+    #define _DOMACROSTR( p )    _DOSTR( p )
+    #define _WIPFC_VERSION_     _DOMACROSTR( _BLDVER )
+    #define _OWURL              "https://github.com/open-watcom/open-watcom-v2#readme"
+    #define banner1w(p,v)       "Open Watcom " p " " "Version " v
+    #define banner2w(year)      "Copyright (c) " _DOMACROSTR( year ) "-" _DOMACROSTR( _CYEAR ) " The Open Watcom Contributors. All Rights Reserved."
+    #define banner3             "Source code is available under the Sybase Open Watcom Public License."
+    #define banner3a            "See " _OWURL " for details."
+#endif
 
 
 static void processCommandLine(int argc, char **argv, Compiler& c);
@@ -48,7 +60,7 @@ Env Environment;
 static void printBanner( void )
 {
     std::cout << banner1w( "OS/2 Help Compiler", _WIPFC_VERSION_ ) << std::endl;
-    std::cout << banner2 << std::endl;
+    std::cout << banner2w( 2009 ) << std::endl;
     std::cout << banner3 << std::endl;
     std::cout << banner3a << std::endl;
 }

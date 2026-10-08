@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -33,11 +33,11 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
-#include "helpmem.h"
 #include "search.h"
 #include "uivedit.h"
 #include "uiledit.h"
 #include "wibhelp.h"
+#include "memfuncs.h"
 
 #include "clibext.h"
 
@@ -55,7 +55,7 @@ static unsigned long    listData;
 static UIPICKGETTEXT    GetListBoxItem;
 
 static a_list listBox = {
-    0, &listData, GetListBoxItem, NULL
+    0, (const char **)&listData, GetListBoxItem, NULL
 };
 
 static an_edit_control      editCtl;
@@ -73,23 +73,23 @@ static VFIELD   *editVField = &helpSearchDialog[0];
 static a_dialog         *curHelpDialog;
 static HelpHdl          searchHdl;
 
-static bool GetLBItemLiteral( void *info, unsigned line, char *buf,
+static bool GetLBItemLiteral( const char **data, unsigned line, char *buf,
                               unsigned buflen )
 {
     char                *name;
-    unsigned long       *itemcnt;
+    unsigned long       itemcnt;
     unsigned            height;
 
-    itemcnt = info;
+    itemcnt = *(unsigned long *)data;
     if( listBox.box == NULL ) {
         height = 0;
     } else {
         height = listBox.box->area.height - 1;
     }
-    if( line >= *itemcnt + height )
+    if( line >= itemcnt + height )
         return( false );
     if( buf != NULL ) {
-        if( line >= *itemcnt ) {
+        if( line >= itemcnt ) {
             buf[0] = '\0';
         } else {
             name = HelpGetIndexedTopic( searchHdl, line );
@@ -102,25 +102,25 @@ static bool GetLBItemLiteral( void *info, unsigned line, char *buf,
     return( true );
 }
 
-static bool GetListBoxItem( const void *data_handle, unsigned item, char *buf, unsigned buflen )
+static bool GetListBoxItem( const char **data, unsigned item, char *buf, unsigned buflen )
 {
     const char          *name;
-    unsigned long       *itemcnt;
+    unsigned long       itemcnt;
     unsigned            height;
 
     //
     // NYI - this should call GetLBItemLiteral
     //
-    itemcnt = (unsigned long *)data_handle;
+    itemcnt = *(unsigned long *)data;
     if( listBox.box == NULL ) {
         height = 0;
     } else {
         height = listBox.box->area.height - 1;
     }
-    if( item >= *itemcnt + height )
+    if( item >= itemcnt + height )
         return( false );
     if( buf != NULL ) {
-        if( item >= *itemcnt ) {
+        if( item >= itemcnt ) {
             name = "";
         } else {
             name = HelpGetIndexedTopic( searchHdl, item );
@@ -165,10 +165,10 @@ static void copyLBLinetoEditCtl( unsigned index )
     char        *lb_item;
     size_t      len;
 
-    lb_item = uimalloc( MAX_EDIT_LINE_LEN );
-    GetListBoxItem( &listData, index, lb_item, MAX_EDIT_LINE_LEN );
+    lb_item = MemAllocSafe( MAX_EDIT_LINE_LEN );
+    GetListBoxItem( (const char **)&listData, index, lb_item, MAX_EDIT_LINE_LEN );
     len = strlen( lb_item );
-    uifree( editCtl.buffer );
+    MemFree( editCtl.buffer );
     editCtl.buffer = lb_item;
     editCtl.length = len;
     uiupdateedit( curHelpDialog, editVField );
@@ -203,7 +203,7 @@ void HelpDialogCallBack( a_dialog *info )
 void SearchDlgFini( void )
 {
     if( editCtl.buffer != NULL ) {
-        uifree( editCtl.buffer );
+        MemFree( editCtl.buffer );
     }
     editCtl.buffer = NULL;
 }
@@ -254,11 +254,10 @@ char *HelpSearch( HelpHdl hdl )
             break;
         case EV_ENTER:
         case EV_LIST_BOX_DCLICK:
-            ret = HelpMemAlloc( MAX_EDIT_LINE_LEN );
-            GetLBItemLiteral( &listData, listBox.box->row, ret,
-                              MAX_EDIT_LINE_LEN );
+            ret = MemAllocSafe( MAX_EDIT_LINE_LEN );
+            GetLBItemLiteral( (const char **)&listData, listBox.box->row, ret, MAX_EDIT_LINE_LEN );
             if( ret[0] == '\0' ) {
-                HelpMemFree( ret );
+                MemFree( ret );
                 ret = NULL;
             }
             done = 1;

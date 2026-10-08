@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -39,6 +40,7 @@
 #include "opr.h"
 #include "opn.h"
 #include "astype.h"
+#include "namecod.h"
 #include "recog.h"
 #include "ferror.h"
 #include "utility.h"
@@ -59,12 +61,12 @@ void    ScanExpr(void) {
 
     level = 0;
     for( ;; ) {
-        if( RecOpenParen() ) {
+        if( RecOpenParenOpr() ) {
             level++;
-        } else if( RecCloseParen() ) {
+        } else if( RecCloseParenOpr() ) {
             level--;
         }
-        if( ( RecComma() || RecColon() ) && ( level == 0 ) )
+        if( ( RecCommaOpr() || RecColonOpr() ) && ( level == 0 ) )
             break;
         if( level < 0  )
             break;

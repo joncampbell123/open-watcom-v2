@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -56,30 +56,6 @@ typedef struct {
 /* static variables                                                         */
 /****************************************************************************/
 static jmp_buf SymEnv;
-
-void PPENTRY PP_OutOfMemory( void )
-/*********************************/
-{
-    longjmp( SymEnv, 1 );
-}
-
-void * PPENTRY PP_Malloc( size_t size )
-/*************************************/
-{
-    void        *p;
-
-    p = WRMemAlloc( size );
-    if( p == NULL ) {
-        PP_OutOfMemory();
-    }
-    return( p );
-}
-
-void PPENTRY PP_Free( void *p )
-/*****************************/
-{
-    WRMemFree( p );
-}
 
 int PP_MBCharLen( const char *p )
 /*******************************/
@@ -142,7 +118,7 @@ char *WLoadSymbols( WRHashTable **table, char *file_name, HWND parent, bool prom
                 FreeRCString( gf.filter );
             }
         } else {
-            name = WStrDup( file_name );
+            name = WStrdup( file_name );
         }
         ok = (name != NULL);
     }
@@ -179,7 +155,7 @@ char *WLoadSymbols( WRHashTable **table, char *file_name, HWND parent, bool prom
 
     if( !ok ) {
         if( name != NULL ) {
-            WRMemFree( name );
+            MemFree( name );
             name = NULL;
         }
     }
@@ -195,21 +171,23 @@ bool WEditSymbols( HWND parent, WRHashTable **symbol_table,
                    HINSTANCE inst, HELPFUNC help_callback )
 {
     WRHashEntryFlags    flags;
-    HELPFUNC            hcb;
     bool                ret;
 
     /* unused parameters */ (void)inst;
 
     if( symbol_table == NULL || *symbol_table == NULL ) {
-        return( FALSE );
+        return( false );
     }
-
     flags = WR_HASHENTRY_ALL;
-
-    hcb = MakeProcInstance_HELP( help_callback, inst );
-    ret = WREditSym( parent, symbol_table, &flags, hcb );
-    FreeProcInstance_HELP( hcb );
-
+#ifdef __WINDOWS__
+    {
+        HELPFUNC hcb = MakeProcInstance_HELP( help_callback, inst );
+        ret = WREditSym( parent, symbol_table, &flags, hcb );
+        FreeProcInstance_HELP( hcb );
+    }
+#else
+    ret = WREditSym( parent, symbol_table, &flags, help_callback );
+#endif
     return( ret );
 }
 
@@ -225,5 +203,5 @@ char *WCreateSymFileName( const char *fname )
     _splitpath2( fname, pg.buffer, &pg.drive, &pg.dir, &pg.fname, NULL );
     _makepath( fn_path, pg.drive, pg.dir, pg.fname, "h" );
 
-    return( WStrDup( fn_path ) );
+    return( WStrdup( fn_path ) );
 }

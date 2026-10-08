@@ -31,14 +31,13 @@
 ****************************************************************************/
 
 #include "variety.h"
+#include "seterrno.h"
 #include <pthread.h>
 #include <process.h>
 #include <malloc.h>
 #include <sched.h>
 #include <string.h>
 #include "_ptint.h"
-#include "rterrno.h"
-#include "seterrno.h"
 #include "thread.h"
 
 
@@ -95,7 +94,7 @@ _WCRTLINK int pthread_create( pthread_t *thread, const pthread_attr_t *attr,
     struct __thread_pass    *passed;
 
     if( thread == NULL ) {
-        return( __set_EINVAL() );
+        return( lib_set_EINVAL() );
     }
 
     stack_size = STACK_SIZE;
@@ -112,7 +111,7 @@ _WCRTLINK int pthread_create( pthread_t *thread, const pthread_attr_t *attr,
 
     passed = (struct __thread_pass *)malloc( sizeof( struct __thread_pass ) );
     if( passed == NULL ) {
-        _RWD_errno = ENOMEM;
+        lib_set_errno( ENOMEM );
         return( -1 );
     }
     memset( passed, 0,  sizeof( struct __thread_pass ) );
@@ -124,7 +123,7 @@ _WCRTLINK int pthread_create( pthread_t *thread, const pthread_attr_t *attr,
         stack = (char *)malloc( stack_size * sizeof( char * ) );
         if( stack == NULL ) {
             free( passed );
-            _RWD_errno = ENOMEM;
+            lib_set_errno( ENOMEM );
             return( -1 );
         }
     }

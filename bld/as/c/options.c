@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -112,7 +112,7 @@ static char *ReadIndirectFile( char *name )
         fseek( fp, 0, SEEK_END );
         len = ftell( fp );
         fseek( fp, 0, SEEK_SET );
-        env = MemAlloc( len + 1 );
+        env = MemAllocSafe( len + 1 );
         len = fread( env, 1, len, fp );
         env[len] = '\0';
         fclose( fp );
@@ -122,12 +122,6 @@ static char *ReadIndirectFile( char *name )
             if( ch == '\r' || ch == '\n' ) {
                 *str = ' ';
             }
-#if !defined(__UNIX__)
-            if( ch == 0x1A ) {      // if end of file
-                *str = '\0';        // - mark end of str
-                break;
-            }
-#endif
         }
     }
     return( env );
@@ -299,12 +293,12 @@ bool OptionsInit( int argc, char **argv, OPT_STORAGE *data, OPT_STRING **files )
     }
     switch( data->format ) {
     case OPT_ENUM_format_oc:
-        _UnsetOption( OBJ_ELF );
-        _SetOption( OBJ_COFF );
+        _UnsetOption( TARGET_ELF );
+        _SetOption( TARGET_COFF );
         break;
     case OPT_ENUM_format_oe:
-        _SetOption( OBJ_ELF );
-        _UnsetOption( OBJ_COFF );
+        _SetOption( TARGET_ELF );
+        _UnsetOption( TARGET_COFF );
         break;
     case OPT_ENUM_format_default:
     default:
@@ -330,7 +324,7 @@ bool OptionsInit( int argc, char **argv, OPT_STORAGE *data, OPT_STRING **files )
          * if not -fr option is defined
          * then create default "*"
          */
-        data->fr_value = MemAlloc( sizeof( OPT_STRING ) + 1 );
+        data->fr_value = MemAllocSafe( sizeof( OPT_STRING ) + 1 );
         data->fr_value->data[0] = '*';
         data->fr_value->data[1] = '\0';
         data->fr_value->next = NULL;

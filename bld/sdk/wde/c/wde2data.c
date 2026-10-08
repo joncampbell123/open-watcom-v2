@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -298,7 +298,7 @@ bool WdeAllocDataFromDBI( WdeDialogBoxInfo *info, char **pdata, size_t *dsize )
     ok = (memsize != 0);
 
     if( ok ) {
-        start = data = WRMemAlloc( memsize );
+        start = data = MemAlloc( memsize );
         ok = (data != NULL);
     }
 
@@ -342,7 +342,7 @@ bool WdeAllocDataFromDBI( WdeDialogBoxInfo *info, char **pdata, size_t *dsize )
     }
     if( !ok ) {
         if( start != NULL ) {
-            WRMemFree( start );
+            MemFree( start );
         }
         *dsize = 0;
         *pdata = NULL;
@@ -368,7 +368,7 @@ WdeDialogBoxInfo *WdeAllocDBIFromData( const char *data, size_t size, bool is32b
     ok = (data != NULL && size != 0);
 
     if( ok ) {
-        dbi = (WdeDialogBoxInfo *)WRMemAlloc( sizeof( WdeDialogBoxInfo ) );
+        dbi = MemAlloc( sizeof( WdeDialogBoxInfo ) );
         ok = (dbi != NULL);
     }
 
@@ -380,7 +380,7 @@ WdeDialogBoxInfo *WdeAllocDBIFromData( const char *data, size_t size, bool is32b
         is32bitEx = (sign0 == 0x0001 && sign1 == 0xFFFF);
 
         dbi->control_list = NULL;
-        dbi->MemoryFlags = 0;
+        dbi->res_flags = DEFAULT_FLAGS_NONE;
         dbi->dialog_header = WdeDialogBoxHeaderFromData( &data, is32bit, is32bitEx );
         ok = (dbi->dialog_header != NULL);
     }
@@ -636,7 +636,7 @@ ControlClass *WdeControlClassFromData( const char **pdata, bool is32bit )
         return( (ControlClass *)WRStringFromData( pdata, is32bit ) );
     }
 
-    new = (ControlClass *)WRMemAlloc( sizeof( ControlClass ) );
+    new = MemAlloc( sizeof( ControlClass ) );
     if( new == NULL ) {
         return( NULL );
     }

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2019 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -31,123 +31,173 @@
 
 
 #include "wrglbl.h"
+#include "memfuncs.h"
 #include "wrmemi.h"
-#include "wresmem.h"
 
-#ifdef TRMEM
 
-#include "trmem.h"
-
-static _trmem_hdl   TRMemHandle;
-static FILE         *TRMemFile = NULL;
+static _trmem_hdl   TrHdl = _TRMEM_HDL_NONE;
+static FILE         *TrFile = NULL;
+static wr_nomem_cb  *nomem_cb = NULL;
 
 static void TRPrintLine( void *parm, const char *buff, size_t len )
 /*****************************************************************/
 {
     /* unused parameters */ (void)parm; (void)len;
 
-    if( TRMemFile != NULL ) {
-        fprintf( TRMemFile, "%s\n", buff );
+    if( TrFile != NULL ) {
+        fprintf( TrFile, "%s\n", buff );
     }
 }
 
-#endif
-
-void WRMemOpen( void )
+void WRMemOpen( bool trace, wr_nomem_cb *nomemcb )
 {
-#ifdef TRMEM
     char    *tmpdir;
 
-    TRMemHandle = _trmem_open( malloc, free, realloc, NULL,
-                               NULL, TRPrintLine,
-                               _TRMEM_ALLOC_SIZE_0 | _TRMEM_REALLOC_SIZE_0 |
-                               _TRMEM_OUT_OF_MEMORY | _TRMEM_CLOSE_CHECK_FREE );
-    tmpdir = getenv( "TRMEMFILE" );
-    if( tmpdir != NULL ) {
-        TRMemFile = fopen( tmpdir, "w" );
+    nomem_cb = nomemcb;
+    if( trace ) {
+        TrHdl = _trmem_open( malloc, free, realloc, _TRMEM_NO_STRDUP,
+                                   NULL, TRPrintLine, _TRMEM_DEF );
+        tmpdir = getenv( "TRMEMFILE" );
+        if( tmpdir != NULL ) {
+            TrFile = fopen( tmpdir, "w" );
+        }
+    } else {
+        TrHdl = _TRMEM_HDL_NONE;
     }
-#endif
 }
 
 void WRMemClose( void )
 {
-#ifdef TRMEM
-    _trmem_prt_list( TRMemHandle );
-    _trmem_close( TRMemHandle );
-    if( TRMemFile != NULL ) {
-        fclose( TRMemFile );
-        TRMemFile = NULL;
+    if( TrHdl != _TRMEM_HDL_NONE ) {
+        _trmem_prt_list( TrHdl );
+        _trmem_close( TrHdl );
+        if( TrFile != NULL ) {
+            fclose( TrFile );
+            TrFile = NULL;
+        }
+        TrHdl = _TRMEM_HDL_NONE;
     }
-#endif
 }
 
-void *WRAPI WRMemAlloc( size_t size )
+static void *check_nomem( void *ptr )
 {
-#ifdef TRMEM
-    return( _trmem_alloc( size, _trmem_guess_who(), TRMemHandle ) );
-#else
-    return( malloc( size ) );
-#endif
+    if( ptr == NULL ) {
+        if( nomem_cb != NULL ) {
+            nomem_cb();
+        }
+    }
+    return( ptr );
 }
 
-void WRAPI WRMemFree( void *ptr )
+void * WRAPI WRMemAlloc( size_t size, _trmem_who who )
 {
-#ifdef TRMEM
-    _trmem_free( ptr, _trmem_guess_who(), TRMemHandle );
-#else
-    free( ptr );
-#endif
+    if( TrHdl != _TRMEM_HDL_NONE ) {
+        return( _trmem_alloc( size, who, TrHdl ) );
+    } else {
+        return( malloc( size ) );
+    }
 }
 
-void *WRAPI WRMemRealloc( void *ptr, size_t size )
+void * WRAPI WRMemAllocSafe( size_t size, _trmem_who who )
 {
-#ifdef TRMEM
-    return( _trmem_realloc( ptr, size, _trmem_guess_who(), TRMemHandle ) );
-#else
-    return( realloc( ptr, size ) );
-#endif
+    if( TrHdl != _TRMEM_HDL_NONE ) {
+        return( check_nomem( _trmem_alloc( size, who, TrHdl ) ) );
+    } else {
+        return( check_nomem( malloc( size ) ) );
+    }
 }
 
-int WRAPI WRMemValidate( void *ptr )
+char * WRAPI WRMemStrdup( const char *str, _trmem_who who )
+/*********************************************************/
 {
-#ifdef TRMEM
-    return( _trmem_validate( ptr, _trmem_guess_who(), TRMemHandle ) );
-#else
-    /* unused parameters */ (void)ptr;
-
-    return( TRUE );
-#endif
+    if( TrHdl != _TRMEM_HDL_NONE ) {
+        return( _trmem_strdup( str, who, TrHdl ) );
+    } else {
+        return( strdup( str ) );
+    }
 }
 
-int WRAPI WRMemChkRange( void *start, size_t len )
+char * WRAPI WRMemStrdupSafe( const char *str, _trmem_who who )
+/*************************************************************/
 {
-#ifdef TRMEM
-    return( _trmem_chk_range( start, len, _trmem_guess_who(), TRMemHandle ) );
-#else
-    /* unused parameters */ (void)start; (void)len;
+    if( TrHdl != _TRMEM_HDL_NONE ) {
+        return( check_nomem( _trmem_strdup( str, who, TrHdl ) ) );
+    } else {
+        return( check_nomem( strdup( str ) ) );
+    }
+}
 
-    return( TRUE );
-#endif
+void WRAPI WRMemFree( void *ptr, _trmem_who who )
+{
+    if( TrHdl != _TRMEM_HDL_NONE ) {
+        _trmem_free( ptr, who, TrHdl );
+    } else {
+        free( ptr );
+    }
+}
+
+void * WRAPI WRMemRealloc( void *ptr, size_t size, _trmem_who who )
+{
+    if( TrHdl != _TRMEM_HDL_NONE ) {
+        return( _trmem_realloc( ptr, size, who, TrHdl ) );
+    } else {
+        return( realloc( ptr, size ) );
+    }
+}
+
+int WRAPI WRMemValidate( void *ptr, _trmem_who who )
+{
+    if( TrHdl != _TRMEM_HDL_NONE ) {
+        return( _trmem_validate( ptr, who, TrHdl ) );
+    } else {
+        return( 1 );
+    }
+}
+
+int WRAPI WRMemChkRange( void *start, size_t len, _trmem_who who )
+{
+    if( TrHdl != _TRMEM_HDL_NONE ) {
+        return( _trmem_chk_range( start, len, who, TrHdl ) );
+    } else {
+        return( 1 );
+    }
 }
 
 void WRAPI WRMemPrtUsage( void )
 {
-#ifdef TRMEM
-    _trmem_prt_usage( TRMemHandle );
-#endif
+    if( TrHdl != _TRMEM_HDL_NONE ) {
+        _trmem_prt_usage( TrHdl );
+    }
 }
 
 /* function to replace this in mem.c in commonui */
 
+TRMEMAPI( MemAlloc )
 void *MemAlloc( size_t size )
 {
     void *p;
 
-#ifdef TRMEM
-    p = _trmem_alloc( size, _trmem_guess_who(), TRMemHandle );
-#else
-    p = malloc( size );
-#endif
+    if( TrHdl != _TRMEM_HDL_NONE ) {
+        p = _trmem_alloc( size, _TRMEM_WHO( 1 ), TrHdl );
+    } else {
+        p = malloc( size );
+    }
+    if( p != NULL ) {
+        memset( p, 0, size );
+    }
+    return( p );
+}
+
+TRMEMAPI( MemAllocSafe )
+void *MemAllocSafe( size_t size )
+{
+    void *p;
+
+    if( TrHdl != _TRMEM_HDL_NONE ) {
+        p = check_nomem( _trmem_alloc( size, _TRMEM_WHO( 1 ), TrHdl ) );
+    } else {
+        p = check_nomem( malloc( size ) );
+    }
 
     if( p != NULL ) {
         memset( p, 0, size );
@@ -156,50 +206,56 @@ void *MemAlloc( size_t size )
     return( p );
 }
 
-/* function for wres.lib */
-
-void *wres_alloc( size_t size )
+TRMEMAPI( MemStrdup )
+char *MemStrdup( const char *str )
 {
-#ifdef TRMEM
-    return( _trmem_alloc( size, _trmem_guess_who(), TRMemHandle ) );
-#else
-    return( malloc( size ) );
-#endif
+    if( TrHdl != _TRMEM_HDL_NONE ) {
+        return( _trmem_strdup( str, _TRMEM_WHO( 1 ), TrHdl ) );
+    } else {
+        return( strdup( str ) );
+    }
+}
+
+TRMEMAPI( MemStrdupSafe )
+char *MemStrdupSafe( const char *str )
+{
+    if( TrHdl != _TRMEM_HDL_NONE ) {
+        return( check_nomem( _trmem_strdup( str, _TRMEM_WHO( 1 ), TrHdl ) ) );
+    } else {
+        return( check_nomem( strdup( str ) ) );
+    }
 }
 
 /* function to replace this in mem.c in commonui */
 
+TRMEMAPI( MemRealloc )
 void *MemRealloc( void *ptr, size_t size )
 {
-    void *p;
+    if( TrHdl != _TRMEM_HDL_NONE ) {
+        return( _trmem_realloc( ptr, size, _TRMEM_WHO( 3 ), TrHdl ) );
+    } else {
+        return( realloc( ptr, size ) );
+    }
+}
 
-#ifdef TRMEM
-    p = _trmem_realloc( ptr, size, _trmem_guess_who(), TRMemHandle );
-#else
-    p = realloc( ptr, size );
-#endif
-
-    return( p );
+TRMEMAPI( MemReallocSafe )
+void *MemReallocSafe( void *ptr, size_t size )
+{
+    if( TrHdl != _TRMEM_HDL_NONE ) {
+        return( check_nomem( _trmem_realloc( ptr, size, _TRMEM_WHO( 3 ), TrHdl ) ) );
+    } else {
+        return( check_nomem( realloc( ptr, size ) ) );
+    }
 }
 
 /* function to replace this in mem.c in commonui */
 
+TRMEMAPI( MemFree )
 void MemFree( void *ptr )
 {
-#ifdef TRMEM
-    _trmem_free( ptr, _trmem_guess_who(), TRMemHandle );
-#else
-    free( ptr );
-#endif
-}
-
-/* function for wres.lib */
-
-void wres_free( void *ptr )
-{
-#ifdef TRMEM
-    _trmem_free( ptr, _trmem_guess_who(), TRMemHandle );
-#else
-    free( ptr );
-#endif
+    if( TrHdl != _TRMEM_HDL_NONE ) {
+        _trmem_free( ptr, _TRMEM_WHO( 5 ), TrHdl );
+    } else {
+        free( ptr );
+    }
 }

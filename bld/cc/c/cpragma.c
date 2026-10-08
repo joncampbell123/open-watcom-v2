@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -32,11 +32,13 @@
 
 #include <ctype.h>
 #include "cvars.h"
+#include "i64.h"
 #include "cgswitch.h"
 #include "pdefn2.h"
 #include "caux.h"
 #include "cfeinfo.h"
 #include "asmstmt.h"
+#include "scan.h"
 #include "toggles.h"
 #ifdef DEVBUILD
     #include "togglesd.h"
@@ -503,7 +505,7 @@ static void CopyObjName( void )
         return;
     if( CurrInfo->objname != CurrAlias->objname )
         return;
-    CurrInfo->objname = CMemStrDup( CurrInfo->objname );
+    CurrInfo->objname = CMemStrdup( CurrInfo->objname );
 }
 
 #if _CPU == _AXP
@@ -514,7 +516,7 @@ static void CopyExceptRtn( void )
         return;
     if( CurrInfo->except_rtn != CurrAlias->except_rtn )
         return;
-    CurrInfo->except_rtn = CMemStrDup( CurrInfo->except_rtn );
+    CurrInfo->except_rtn = CMemStrdup( CurrInfo->except_rtn );
 }
 #endif
 
@@ -563,7 +565,7 @@ void PragObjNameInfo( char **objname )
 /************************************/
 {
     if( CurToken == T_STRING ) {
-        *objname = CMemStrDup( Buffer );
+        *objname = CMemStrdup( Buffer );
         PPNextToken();
     }
 }
@@ -873,7 +875,7 @@ static void getPackArgs( void )
         if( CurToken == T_COMMA ) {
             PPNextToken();
             if( ExpectingConstant() ) {
-                SetPackAmount( Constant );
+                SetPackAmount( U32FetchTrunc( Constant64 ) );
             }
             PPNextToken();
         }
@@ -904,7 +906,7 @@ static void pragPack( void )
     if( ExpectingToken( T_LEFT_PAREN ) ) {
         PPNextToken();
         if( CurToken == T_CONSTANT ) {
-            SetPackAmount( Constant );
+            SetPackAmount( U32FetchTrunc( Constant64 ) );
             PPNextToken();
         } else if( IS_ID_OR_KEYWORD( CurToken ) ) {
             getPackArgs();
@@ -1044,10 +1046,13 @@ static void changeStatus( bool enabled, int msg_index )
 bool GetMsgNum( const char *str, msg_codes *val )
 /***********************************************/
 {
+    char            c;
+
     /*
      * skip, C++ compiler messages, prefixed by 'P' character
      */
-    if( tolower( *(unsigned char *)str ) == 'p' ) {
+    c = *str;
+    if( c == 'P' || c == 'p' ) {
         *val = 0;
         return( true );
     }
@@ -1056,7 +1061,7 @@ bool GetMsgNum( const char *str, msg_codes *val )
      * or old messages without prefix which can be C or C++ message
      * it is for backward compatibility
      */
-    if( tolower( *(unsigned char *)str ) == 'c' )
+    if( c == 'C' || c == 'c' )
         str++;
     if( isdigit( *(unsigned char *)str ) ) {
         *val = atol( str );
@@ -1069,7 +1074,7 @@ static bool getMessageNum( msg_codes *val )
 /*****************************************/
 {
     if( CurToken == T_CONSTANT ) {
-        *val = Constant;
+        *val = U32FetchTrunc( Constant64 );
         return( true );
     } else if( CurToken == T_ID ) {
         return( GetMsgNum( Buffer, val ) );
@@ -1184,7 +1189,7 @@ static bool pragWarning( void )
     if( !ignore ) {
         NextToken();
         if( CurToken == T_CONSTANT ) {
-            level = Constant;
+            level = U32FetchTrunc( Constant64 );
             NextToken();
             if( change_all ) {
                 warnChangeLevels( level );
@@ -1363,15 +1368,15 @@ static void pragCodeSeg( void )
         tseg = NULL;
         PPNextToken();
         if( ( CurToken == T_STRING ) || ( CurToken == T_ID ) ) {
-            segname = CMemStrDup( Buffer );
-            classname = CMemStrDup( "" );
+            segname = CMemStrdup( Buffer );
+            classname = CMemStrdup( "" );
             PPNextToken();
             if( CurToken == T_COMMA ) {
                 PPNextToken();
                 if( ( CurToken == T_STRING ) || ( CurToken == T_ID ) ) {
                     CMemFree( classname );
-                    classname = CMemStrDup( Buffer );
-//                    CodeClassName = CMemStrDup( Buffer ); */
+                    classname = CMemStrdup( Buffer );
+//                    CodeClassName = CMemStrdup( Buffer ); */
                     PPNextToken();
                 }
             }
@@ -1404,7 +1409,7 @@ static void pragDataSeg( void )
         segid = SEG_NULL;
         PPNextToken();
         if( ( CurToken == T_STRING ) || ( CurToken == T_ID ) ) {
-            segname = CMemStrDup( Buffer );
+            segname = CMemStrdup( Buffer );
             PPNextToken();
             if( CurToken == T_COMMA ) {
                 PPNextToken();
@@ -1440,7 +1445,11 @@ static void pragUnroll( void )
         unroll_count = 0;
         PPNextToken();
         if( CurToken == T_CONSTANT ) {
-            unroll_count = ( Constant > 255 ) ? 255 : (unroll_type)Constant;
+            if( U64CmpU32( Constant64, 255 ) > 0 ) {
+                unroll_count = (unroll_type)255;
+            } else {
+                unroll_count = (unroll_type)U8FetchTrunc( Constant64 );
+            }
             PPNextToken();
         }
         UnrollCount = unroll_count;
@@ -1517,7 +1526,7 @@ static void pragIncludeAlias( void )
         if( CurToken == T_STRING ) {
             char    *alias_name;
 
-            alias_name = CMemStrDup( Buffer );
+            alias_name = CMemStrdup( Buffer );
             PPNextToken();
             MustRecog( T_COMMA );
             if( CurToken == T_STRING ) {
@@ -1703,7 +1712,7 @@ static void pragAlias( void )
                 CErr2p( ERR_UNDECLARED_SYM, Buffer );
             }
         } else if( CurToken == T_STRING ) {
-            alias_name = CMemStrDup( Buffer );
+            alias_name = CMemStrdup( Buffer );
         }
         PPNextToken();
         MustRecog( T_COMMA );
@@ -1713,7 +1722,7 @@ static void pragAlias( void )
                 CErr2p( ERR_UNDECLARED_SYM, Buffer );
             }
         } else if( CurToken == T_STRING ) {
-            subst_name = CMemStrDup( Buffer );
+            subst_name = CMemStrdup( Buffer );
         }
         PPNextToken();
         MustRecog( T_RIGHT_PAREN );

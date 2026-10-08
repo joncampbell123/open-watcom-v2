@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -50,7 +50,6 @@
 #include "iflookup.h"
 #include "rstutils.h"
 #include "types.h"
-#include "wf77defs.h"
 #include "wf77info.h"
 #include "symtab.h"
 #include "fctypes.h"
@@ -526,15 +525,15 @@ static void FreeAuxElements( aux_info *info )
         info->arg_info = DefaultInfo.arg_info;
     }
     if( info->parms != DefaultInfo.parms ) {
-        FMemFree( info->parms );
+        MemFree( info->parms );
         info->parms = DefaultInfo.parms;
     }
     if( info->code != DefaultInfo.code ) {
-        FMemFree( info->code );
+        MemFree( info->code );
         info->code = DefaultInfo.code;
     }
     if( info->objname != DefaultInfo.objname ) {
-        FMemFree( info->objname );
+        MemFree( info->objname );
         info->objname = DefaultInfo.objname;
     }
 }
@@ -544,7 +543,7 @@ static void FreeAuxEntry( aux_entry *ent )
 //========================================
 {
     FreeAuxElements( &ent->info );
-    FMemFree( ent );
+    MemFree( ent );
 }
 
 
@@ -575,7 +574,7 @@ static void DupParmInfo( aux_info *dst, aux_info *src )
         ++size;
     }
     ++size;
-    new_reg_set = FMemAlloc( size * sizeof( hw_reg_set ) );
+    new_reg_set = MemAllocSafe( size * sizeof( hw_reg_set ) );
     memcpy( new_reg_set, reg_set, size * sizeof( hw_reg_set ) );
     dst->parms = new_reg_set;
 }
@@ -594,7 +593,7 @@ static void DupCallBytes( aux_info *dst, aux_info *src )
 #endif
 
     seq_len = src->code->length;
-    new_seq = FMemAlloc( offsetof( byte_seq, data ) + seq_len );
+    new_seq = MemAllocSafe( offsetof( byte_seq, data ) + seq_len );
     memcpy( new_seq->data, src->code->data, seq_len );
     dst->code = new_seq;
     dst->code->length = src->code->length;
@@ -605,7 +604,7 @@ static void DupCallBytes( aux_info *dst, aux_info *src )
     head = NULL;
     lnk = &head;
     for( reloc = src->code->relocs; reloc; reloc = reloc->next ) {
-        new = FMemAlloc( sizeof( byte_seq_reloc ) );
+        new = MemAllocSafe( sizeof( byte_seq_reloc ) );
         new->off = reloc->off;
         new->type = reloc->type;
         new->sym = reloc->sym;
@@ -623,7 +622,7 @@ static void DupObjectName( aux_info *dst, aux_info *src )
 {
     char        *new_name;
 
-    new_name = FMemAlloc( strlen( src->objname ) + 1 );
+    new_name = MemAllocSafe( strlen( src->objname ) + 1 );
     strcpy( new_name, src->objname );
     dst->objname = new_name;
 }
@@ -635,7 +634,7 @@ static void DupArgInfo( pass_by **dst, pass_by *src )
     pass_by     *arg;
 
     for( ; src != NULL; src = src->link ) {
-        arg = FMemAlloc( sizeof( pass_by ) );
+        arg = MemAllocSafe( sizeof( pass_by ) );
         arg->info = src->info;
         *dst = arg;
         dst = &arg->link;
@@ -676,7 +675,7 @@ static aux_info *NewAuxEntry( const char *name, size_t name_len )
 {
     aux_entry   *ent;
 
-    ent = FMemAlloc( sizeof( aux_entry ) + name_len );
+    ent = MemAllocSafe( sizeof( aux_entry ) + name_len );
     ent->sym_len = name_len;
     memcpy( ent->sym_name, name, name_len );
     ent->sym_name[name_len] = NULLCHAR;
@@ -737,9 +736,9 @@ static void ObjectName( void )
     if( *(TokEnd - 1) != '"' )
         CSuicide();
     obj_len = TokEnd - TokStart - 2;
-    name = FMemAlloc( obj_len + 1 );
+    name = MemAllocSafe( obj_len + 1 );
     if( CurrAux->objname != DefaultInfo.objname ) {
-        FMemFree( CurrAux->objname );
+        MemFree( CurrAux->objname );
     }
     memcpy( name, TokStart + 1, obj_len );
     name[obj_len] = NULLCHAR;
@@ -796,11 +795,11 @@ enum sym_type AsmQueryType( void *handle )
 }
 
 
-static void AsmInsertFixups( unsigned char *buff, size_t len )
+static void AsmInsertFixups( byte *buff, size_t len )
 //============================================================
 {
                         // additional slop in buffer to simplify the code
-    unsigned char       temp[MAXIMUM_BYTESEQ + 2];
+    byte                temp[MAXIMUM_BYTESEQ + 2];
     struct asmfixup     *fix;
     struct asmfixup     *head;
     struct asmfixup     *chk;
@@ -884,9 +883,9 @@ static void AsmInsertFixups( unsigned char *buff, size_t len )
                 if( head->external ) {
                     *owner = fix;
                     if( head->name != NULL ) {
-                        FMemFree( head->name );
+                        MemFree( head->name );
                     }
-                    FMemFree( head );
+                    MemFree( head );
                 } else {
                     owner = &head->next;
                 }
@@ -905,12 +904,12 @@ static void AsmInsertFixups( unsigned char *buff, size_t len )
         len = dst - temp;
         perform_fixups = true;
     }
-    seq = FMemAlloc( offsetof( byte_seq, data ) + len );
+    seq = MemAllocSafe( offsetof( byte_seq, data ) + len );
     seq->relocs = perform_fixups;
     seq->length = len;
     memcpy( &seq->data, buff, len );
     if( CurrAux->code != DefaultInfo.code ) {
-        FMemFree( CurrAux->code );
+        MemFree( CurrAux->code );
     }
     CurrAux->code = seq;
 }
@@ -925,7 +924,7 @@ uint_32 AsmQuerySPOffsetOf( void *handle )
 }
 
 
-static void AsmInsertFixups( unsigned char *buff, size_t len )
+static void AsmInsertFixups( byte *buff, size_t len )
 //============================================================
 {
     byte_seq            *seq;
@@ -937,7 +936,7 @@ static void AsmInsertFixups( unsigned char *buff, size_t len )
     head = NULL;
     lnk = &head;
     for( reloc = AsmRelocs; reloc; reloc = reloc->next ) {
-        new = FMemAlloc( sizeof( byte_seq_reloc ) );
+        new = MemAllocSafe( sizeof( byte_seq_reloc ) );
         new->off = reloc->offset;
         new->type = reloc->type;
         new->sym = (void *)SymFind( reloc->name, strlen( reloc->name ) );
@@ -946,12 +945,12 @@ static void AsmInsertFixups( unsigned char *buff, size_t len )
         lnk = &new->next;
     }
 
-    seq = FMemAlloc( offsetof( byte_seq, data ) + len );
+    seq = MemAllocSafe( offsetof( byte_seq, data ) + len );
     seq->relocs = head;
     seq->length = len;
     memcpy( &seq->data, buff, len );
     if( CurrAux->code != DefaultInfo.code ) {
-        FMemFree( CurrAux->code );
+        MemFree( CurrAux->code );
     }
     CurrAux->code = seq;
 }
@@ -964,7 +963,7 @@ static void AddAFix( size_t i, char *name, unsigned type, unsigned off )
 {
     struct asmfixup     *fix;
 
-    fix = FMemAlloc( sizeof( *fix ) );
+    fix = MemAllocSafe( sizeof( *fix ) );
     fix->external = true;
     fix->fixup_loc = i;
     fix->name = name;
@@ -990,7 +989,7 @@ static void GetByteSeq( void )
 
     AsmInit();
     seq_len = 0;
-    for(;;) {
+    for( ;; ) {
         if( *TokStart == '"' ) {
             if( TokStart == TokEnd - 1 )
                 CSuicide();
@@ -1070,6 +1069,8 @@ static void ReqToken( const char *tok )
 
 #if _INTEL_CPU
 
+#define REGNAMES_COUNT  (sizeof( RegNames ) / sizeof( RegNames[0] ))
+
 static hw_reg_set RegSet( void )
 //==============================
 {
@@ -1079,14 +1080,14 @@ static hw_reg_set RegSet( void )
     int         i;
 
     HW_CAsgn( reg_set, HW_EMPTY );
-    for(;;) {
+    for( ;; ) {
         if( TokEnd - TokStart > REGNAME_MAX_LEN )
             break;
         for( i = 0; i < TokEnd - TokStart; i++ ) {
             regname_buf[i] = toupper( TokStart[i] );
         }
-        reg = KwLookUp( RegNames, sizeof( RegNames ) / sizeof( RegNames[0] ) - 1, regname_buf, TokEnd - TokStart, true );
-        if( reg == 0 )
+        reg = KwLookUp( RegNames, REGNAMES_COUNT, regname_buf, TokEnd - TokStart, true );
+        if( reg == REGNAMES_COUNT )
             break;
         HW_TurnOn( reg_set, RegValue[reg] );
         ScanToken();
@@ -1112,7 +1113,7 @@ static hw_reg_set *RegSets( void )
         }
     }
     HW_CAsgn( reg_sets[num_sets], HW_EMPTY );
-    regs = FMemAlloc( ( num_sets + 1 ) * sizeof( hw_reg_set ) );
+    regs = MemAllocSafe( ( num_sets + 1 ) * sizeof( hw_reg_set ) );
     memcpy( regs, reg_sets, ( num_sets + 1 ) * sizeof( hw_reg_set ) );
     return( regs );
 }
@@ -1128,7 +1129,7 @@ static void GetArgList( pass_by **curr_arg )
     FreeChain( curr_arg );
     if( RecToken( ")" ) )
         return;
-    for(;;) {
+    for( ;; ) {
         arg_pass_info = 0;
         if( RecToken( "VALUE" ) ) {
             arg_pass_info |= PASS_BY_VALUE;
@@ -1195,7 +1196,7 @@ static void GetArgList( pass_by **curr_arg )
             Error( PR_BAD_PARM_ATTR );
             CSuicide();
         }
-        arg = FMemAlloc( sizeof( pass_by ) );
+        arg = MemAllocSafe( sizeof( pass_by ) );
         arg->link = NULL;
         arg->info = arg_pass_info;
         *curr_arg = arg;
@@ -1223,7 +1224,7 @@ static void GetSTRetInfo( void )
     have.f_struct = false;
     have.f_allocs = false;
     have.f_list   = false;
-    for(;;) {
+    for( ;; ) {
         if( !have.f_float && RecToken( "FLOAT" ) ) {
             CurrAux->cclass_target |= FECALL_X86_NO_FLOAT_REG_RETURNS;
             have.f_float = true;
@@ -1262,7 +1263,7 @@ static void GetRetInfo( void )
     // "3s" default is FECALL_X86_NO_8087_RETURNS - turn off FECALL_X86_NO_8087_RETURNS
     // flag so that "3s" model programs can use 387 pragmas
     CurrAux->cclass_target &= ~FECALL_X86_NO_8087_RETURNS;
-    for(;;) {
+    for( ;; ) {
         if( !have.f_no8087 && RecToken( "NO8087" ) ) {
             CurrAux->cclass_target |= FECALL_X86_NO_8087_RETURNS;
             HW_CTurnOff( CurrAux->returns, HW_FLTS );
@@ -1284,7 +1285,7 @@ static void GetRetInfo( void )
 static void GetSaveInfo( void )
 //=============================
 {
-    hw_reg_set  modlist;
+    hw_reg_set  modlist = HW_D( HW_EMPTY );
     hw_reg_set  default_flt_n_seg;
     hw_reg_set  flt_n_seg;
 
@@ -1297,7 +1298,7 @@ static void GetSaveInfo( void )
     have.f_exact    = false;
     have.f_nomemory = false;
     have.f_list     = false;
-    for(;;) {
+    for( ;; ) {
         if( !have.f_exact && RecToken( "EXACT" ) ) {
             CurrAux->cclass_target |= FECALL_X86_MODIFY_EXACT;
             have.f_exact = true;
@@ -1350,7 +1351,7 @@ static void GetParmInfo( void )
     have.f_list          = false;
 #endif
     have.f_args          = false;
-    for(;;) {
+    for( ;; ) {
         if( !have.f_args && RecToken( "(" ) ) {
             GetArgList( &CurrAux->arg_info );
             have.f_args = true;
@@ -1373,7 +1374,7 @@ static void GetParmInfo( void )
             have.f_loadds = true;
         } else if( !have.f_list && CurrToken( "[" ) ) {
             if( CurrAux->parms != DefaultInfo.parms ) {
-                FMemFree( CurrAux->parms );
+                MemFree( CurrAux->parms );
             }
             CurrAux->parms = RegSets();
             have.f_list = true;

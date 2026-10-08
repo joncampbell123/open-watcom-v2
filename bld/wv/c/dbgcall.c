@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,7 +34,7 @@
 #include "dbgdata.h"
 #include "liteng.h"
 #include "dbgerr.h"
-#include "dbgmem.h"
+#include "memfuncs.h"
 #include "dbgstk.h"
 #include "wspawn.h"
 #include "madcli.h"
@@ -68,14 +68,14 @@ static void FreeParms( void )
     int         i;
 
     for( i = 0; i < MAX_PARMS; ++i ) {
-        _Free( DefParms[i] );
+        MemFree( DefParms[i] );
         DefParms[i] = NULL;
     }
 }
 
 void FiniCall( void )
 {
-    _Free( DefReturn );
+    MemFree( DefReturn );
     DefReturn = NULL;
     FreeParms();
 }
@@ -113,7 +113,7 @@ static void DoCallSet( void )
             const char  *arg;
             char        *start;
         } u;
-        unsigned        len;
+        size_t          len;
     }                   new_parms[MAX_PARMS];
     location_list       ll;
     dig_type_info       ti;
@@ -158,30 +158,24 @@ static void DoCallSet( void )
     }
     ReqEOC();
     if( start != NULL ) {
-        char *new_return;
-
-        i = ScanPos() - start;
-        new_return = DbgMustAlloc( i + 1 );
-        memcpy( new_return, start, i );
-        new_return[i] = NULLCHAR;
-        _Free( DefReturn );
-        DefReturn = new_return;
+        MemFree( DefReturn );
+        DefReturn = MemToStringSafe( start, ScanPos() - start );
     }
     if( parm >= 0 ) {
         for( i = 0; i < parm; ++i ) {
             char    *new_arg;
 
-            _Alloc( new_arg, new_parms[i].len + 1 );
+            new_arg = MemAlloc( new_parms[i].len + 1 );
             if( new_arg == NULL ) {
                 parm = i;
                 for( i = 0; i < parm; ++i ) {
-                    _Free( new_parms[i].u.start );
+                    MemFree( new_parms[i].u.start );
                 }
                 parm = 0;
                 Error( ERR_NONE, LIT_ENG( ERR_NO_MEMORY_FOR_EXPR ) );
                 break;
             } else {
-                memcpy( new_arg, new_parms[i].u.arg, new_parms[i].len );
+                strncpy( new_arg, new_parms[i].u.arg, new_parms[i].len );
                 new_arg[new_parms[i].len] = NULLCHAR;
                 new_parms[i].u.start = new_arg;
             }

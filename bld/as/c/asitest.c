@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -38,7 +38,7 @@
 #include "watcom.h"
 #include "trmemcvr.h"
 #include "asinline.h"
-#include "asalloc.h"
+#include "memfuncs.h"
 
 
 #define MAX_NUM_INS     256
@@ -104,17 +104,24 @@ void AsmWarning( const char *msg )
     printf( "AsmWarning (line %d): %s\n", curLine, msg );
 }
 
-void *AsmAlloc( size_t amount ) {
-//*******************************
+void *MemAllocSafe( size_t amount )
+//*****************************
 // CC provides this
-
-    return( TRMemAlloc( amount ) );
+{
+    return( TRMemAllocSafe( amount ) );
 }
 
-void AsmFree( void *ptr ) {
-//*************************
+char *MemStrdupSafe( const char *str )
+//********************************
 // CC provides this
+{
+    return( TRMemStrdupSafe( str ) );
+}
 
+void MemFree( void *ptr )
+//***********************
+// CC provides this
+{
     TRMemFree( ptr );
 }
 
@@ -159,8 +166,8 @@ void main( void ) {
                 "\toffset = %#010x\n"
                 "\ttype = %s\n",
                 reloc->name, reloc->offset, typeName[reloc->type] );
-        AsmFree( reloc->name );
-        AsmFree( reloc );
+        MemFree( reloc->name );
+        MemFree( reloc );
     }
 
 #ifdef TRMEM

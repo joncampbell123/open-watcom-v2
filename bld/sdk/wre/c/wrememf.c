@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2020 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -67,13 +67,11 @@ bool WREChangeMemFlags( void )
     HWND                parent;
     char                *type_name;
     uint_16             type_id;
-    uint_16             mflags;
-    HELPFUNC            hcb;
+    ResMemFlags         res_flags;
     bool                ok;
 
-    hcb = NULL;
     type_name = NULL;
-    mflags = 0;
+    res_flags = DEFAULT_FLAGS_NONE;
     type_id = 0;
 
     ok = WREGetCurrentResource( &curr );
@@ -87,25 +85,21 @@ bool WREChangeMemFlags( void )
     }
 
     if( ok ) {
-        hcb = MakeProcInstance_HELP( WREHelpRoutine, WREGetAppInstance() );
-        ok = (hcb != NULL);
-    }
-
-    if( ok ) {
-        mflags = curr.lang->Info.MemoryFlags;
-        ok = WRChangeMemFlags( parent, type_name, &mflags, hcb );
-    }
-
-    if( ok ) {
-        curr.lang->Info.MemoryFlags = mflags;
-    }
-
-    if( hcb != NULL ) {
-        FreeProcInstance_HELP( hcb );
+        res_flags = curr.lang->Info.res_flags;
+#ifdef __WINDOWS__
+        {
+            HELPFUNC hcb = MakeProcInstance_HELP( WREHelpRoutine, WREGetAppInstance() );
+            ok = WRChangeMemFlags( parent, type_name, &res_flags, hcb );
+            FreeProcInstance_HELP( hcb );
+        }
+#else
+        ok = WRChangeMemFlags( parent, type_name, &res_flags, WREHelpRoutine );
+#endif
+        curr.lang->Info.res_flags = res_flags;
     }
 
     if( type_name != NULL ) {
-        WRMemFree( type_name );
+        MemFree( type_name );
     }
 
     return( ok );

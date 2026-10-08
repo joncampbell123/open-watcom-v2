@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -71,16 +71,16 @@ void    SFPrologue( void ) {
     CITNode->flags = SFSymId->u.ns.flags;
     func_node = CITNode;
     AdvanceITPtr();
-    ReqOpenParen();
-    SFSymId->u.ns.si.sf.header = FMemAlloc( sizeof( sf_header ) );
+    ReqOpenParenOpr();
+    SFSymId->u.ns.si.sf.header = MemAllocSafe( sizeof( sf_header ) );
     SFSymId->u.ns.si.sf.header->ref_count = 1;
     parm = &SFSymId->u.ns.si.sf.header->parm_list;
     *parm = NULL;
-    if( RecNOpn() ) {
+    if( RecNoOpn() ) {
         AdvanceITPtr();
     } else {
         for( ;; ) {
-            if( ReqName( NAME_SF_DUMMY ) ) {
+            if( ReqNameOpn( NAME_SF_DUMMY ) ) {
                 sym = LkSym();
                 sym->u.ns.u1.s.xflags |= SY_DEFINED;
                 CkTypeDeclared();
@@ -92,7 +92,7 @@ void    SFPrologue( void ) {
                     if( sym->u.ns.flags & SY_SPECIAL_PARM ) {
                         Error( SF_DUPLICATE_DUMMY_PARM );
                     } else {
-                        *parm = FMemAlloc( sizeof( sf_parm ) );
+                        *parm = MemAllocSafe( sizeof( sf_parm ) );
                         (*parm)->link = NULL;
                         (*parm)->actual = sym;
                         (*parm)->shadow = STShadow( sym );
@@ -103,13 +103,13 @@ void    SFPrologue( void ) {
                 }
             }
             AdvanceITPtr();
-            if( !RecComma() ) {
+            if( !RecCommaOpr() ) {
                 break;
             }
         }
     }
-    ReqCloseParen();
-    ReqNOpn();
+    ReqCloseParenOpr();
+    ReqNoOpn();
     arg_list = func_node->link;
     func_node->link = CITNode->link;
     CITNode->link = NULL;

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2018-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2018-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -67,14 +67,14 @@ bool GUIAPI GUICreateStatusWindow( gui_window *wnd, gui_ord x, gui_ord height, g
     if( ( wnd->parent != NULL ) || ( wnd->status != NULL ) || ( colour == NULL ) ) {
         return( false );
     }
-    stat_info = (statusinfo *)GUIMemAlloc( sizeof( statusinfo ) );
+    stat_info = MemAlloc( sizeof( *stat_info ) );
     if( stat_info == NULL ) {
         return( false );
     }
     stat_info->text = NULL;
     stat_info->attr = GUIMakeColour( colour->fore, colour->back );
     if( !SetStatusArea( wnd, x, height, &stat_info->area ) ) {
-        GUIMemFree( stat_info );
+        MemFree( stat_info );
         return( false );
     }
     wnd->status = stat_info;
@@ -127,9 +127,16 @@ bool GUIAPI GUIDrawStatusText( gui_window *wnd, const char *text )
         return( false );
     }
     if( wnd->status->text != NULL ) {
-        GUIMemFree( wnd->status->text );
+        MemFree( wnd->status->text );
     }
-    wnd->status->text = GUIStrDupOK( text, &ok );
+    ok = true;
+    wnd->status->text = NULL;
+    if( text != NULL ) {
+        wnd->status->text = MemStrdup( text );
+        if( wnd->status->text == NULL ) {
+            ok = false;
+        }
+    }
     GUIDrawStatus( wnd );
     if( GUI_WND_VISIBLE( wnd ) ) {
         uirefresh();
@@ -146,9 +153,9 @@ void GUIFreeStatus( gui_window *wnd )
 {
     if( GUIHasStatus( wnd ) ) {
         if( wnd->status->text != NULL ) {
-            GUIMemFree( wnd->status->text );
+            MemFree( wnd->status->text );
         }
-        GUIMemFree( wnd->status );
+        MemFree( wnd->status );
         wnd->status = NULL;
     }
 }

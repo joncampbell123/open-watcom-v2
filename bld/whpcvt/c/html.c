@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -136,9 +136,9 @@ static char *translate_str_html( const char *str )
     }
     if( len > Trans_len ) {
         if( Trans_str != NULL ) {
-            _free( Trans_str );
+            MemFree( Trans_str );
         }
-        _new( Trans_str, len );
+        Trans_str = MemAllocSafe( len * sizeof( *Trans_str ) );
         Trans_len = len;
     }
     ptr = Trans_str;
@@ -206,6 +206,8 @@ void html_trans_line( char *line_buf, section_def *section )
     size_t              ch_len;
     size_t              len;
     char                *file_name;
+    char                *p;
+    int                 c;
 
     /* check for special column 0 pre-processing stuff first */
     ptr = line_buf;
@@ -442,7 +444,10 @@ void html_trans_line( char *line_buf, section_def *section )
             ptr = strchr( file_name, WHP_BMP );
             *ptr++ = '\0';
             // convert filenames to lower case
-            strlwr( file_name );
+            p = file_name;
+            while( (c = *(unsigned char *)p) != '\0' ) {
+                *p++ = (char)tolower( c );
+            }
             switch( ch ) {
             case 'i':
                 sprintf( buf, "<img src=\"%s\">", file_name );

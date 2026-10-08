@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -37,25 +37,23 @@
 #include "dbgdata.h"
 #include "liteng.h"
 #include "dbgerr.h"
-#include "dbgmem.h"
+#include "memfuncs.h"
 #include "dbgitem.h"
 #include "dbgio.h"
 #include "ldsupp.h"
 #include "dui.h"
 #include "strutil.h"
 #include "dbgscan.h"
-#include "madinter.h"
+#include "wvmadcli.h"
 #include "dbgmad.h"
 #include "dbgutil.h"
 #include "dbgovl.h"
 #include "dbgprog.h"
 #include "dipimp.h"
-#include "dipinter.h"
+#include "wvdipcli.h"
 #include "dbgset.h"
 #include "dbgdot.h"
 
-
-extern char             *Language;
 
 dig_type_size DefaultSize( default_kind dk )
 {
@@ -349,7 +347,7 @@ void RingBell( void )
  * Warn - output a warning message and ring the bell
  */
 
-void Warn( char *p )
+void Warn( const char *p )
 {
     DUIMsgBox( p );
     DUIFlushKeys(); /* clear any pending keystrokes */
@@ -384,7 +382,7 @@ cmd_list *AllocCmdList( const char *start, size_t len )
 {
     cmd_list *cmds;
 
-    cmds = DbgMustAlloc( sizeof( cmd_list ) + len );
+    cmds = MemAllocSafe( sizeof( *cmds ) + len );
     cmds->use = 1;
     cmds->buff[len] = NULLCHAR;
     memcpy( cmds->buff, start, len );
@@ -402,19 +400,9 @@ void FreeCmdList( cmd_list *cmds )
         return;
     cmds->use--;
     if( cmds->use == 0 ) {
-        _Free( cmds );
+        MemFree( cmds );
     }
 }
-
-/* Lock List -- increment use count */
-
-void LockCmdList( cmd_list *cmds )
-{
-    if( cmds == NULL )
-        return;
-    cmds->use++;
-}
-
 
 /*
  * TypeInpStack -- set new type on input stack
@@ -463,15 +451,15 @@ void PopInpStack( void )
     if( old == NULL )
         return;
     if( old->lang != NULL ) {
-        StrCopyDst( old->lang, buff );
-        _Free( old->lang );
+        strcpy( buff, old->lang );
+        MemFree( old->lang );
         old->lang = NULL; /* in case NewLang gets an error */
-        NewLang( buff );
+        NewLang( buff, 0 );
     }
     old->rtn( old->handle, INP_RTN_FINI );
     ReScan( old->scan );
     InpStack = old->link;
-    _Free( old );
+    MemFree( old );
 }
 
 
@@ -479,22 +467,14 @@ void PopInpStack( void )
  * PushInpStack -- add a new level to the input stack
  */
 
-void PushInpStack( inp_data_handle handle, inp_rtn_func *rtn, bool save_lang )
+bool PushInpStack( inp_data_handle handle, inp_rtn_func *rtn, bool save_lang )
 {
     input_stack *new;
-    char        *lang;
+    bool        rc;
 
-    _Alloc( new, sizeof( input_stack ) );
-    if( new == NULL ) {
-        rtn( handle, INP_RTN_FINI ); /* clean up handle */
-        Error( ERR_NONE, LIT_ENG( ERR_NO_MEMORY ) );
-    }
+    new = MemAllocSafe( sizeof( *new ) );
     if( save_lang ) {
-        lang = DupStr( Language );
-        if( lang == NULL ) {
-            Error( ERR_NONE, LIT_ENG( ERR_NO_MEMORY ) );
-        }
-        new->lang = lang;
+        new->lang = MemStrdupSafe( GetLanguage() );
     } else {
         new->lang = NULL;
     }
@@ -504,9 +484,11 @@ void PushInpStack( inp_data_handle handle, inp_rtn_func *rtn, bool save_lang )
     new->scan = ScanPos();
     new->link = InpStack;
     InpStack = new;
-    if( !new->rtn( handle, INP_RTN_INIT ) ) {
+    rc = new->rtn( handle, INP_RTN_INIT );
+    if( !rc ) {
         PopInpStack();
     }
+    return( rc );
 }
 
 void CopyInpFlags( void )
@@ -519,9 +501,9 @@ void CopyInpFlags( void )
 }
 
 
-static bool DoneCmdList( inp_data_handle _cmds, inp_rtn_action action )
+static bool DoneCmdList( inp_data_handle handle, inp_rtn_action action )
 {
-    cmd_list    *cmds = _cmds;
+    cmd_list    *cmds = (cmd_list *)handle;
 
     switch( action ) {
     case INP_RTN_INIT:
@@ -541,16 +523,18 @@ static bool DoneCmdList( inp_data_handle _cmds, inp_rtn_action action )
  * PushCmdList -- push a command list onto the input stack
  */
 
-void PushCmdList( cmd_list *cmds )
+bool PushCmdList( cmd_list *cmds )
 {
     cmds->use++;
-    PushInpStack( cmds, DoneCmdList, false );
+    return( PushInpStack( (inp_data_handle)cmds, DoneCmdList, false ) );
 }
 
 
 #ifdef DEADCODE
-static bool DoneCmdText( inp_data_handle cmds, inp_rtn_action action )
+static bool DoneCmdText( inp_data_handle handle, inp_rtn_action action )
 {
+    char    *cmds = (char *)handle;
+
     switch( action ) {
     case INP_RTN_INIT:
         ReScan( cmds );
@@ -562,17 +546,13 @@ static bool DoneCmdText( inp_data_handle cmds, inp_rtn_action action )
     }
     return( false ); // silence compiler
 }
-#endif
-
 
 /*
  * PushCmdText -- push a command string
  */
-
-#ifdef DEADCODE
-void PushCmdText( char *cmds )
+bool PushCmdText( char *cmds )
 {
-    PushInpStack( cmds, DoneCmdText, false );
+    return( PushInpStack( (inp_data_handle)cmds, DoneCmdText, false ) );
 }
 #endif
 
@@ -591,8 +571,10 @@ bool PurgeInpStack( void )
     return( true );
 }
 
-static bool DoneNull( inp_data_handle buff, inp_rtn_action action )
+static bool DoneNull( inp_data_handle handle, inp_rtn_action action )
 {
+    char    *buff = (char *)handle;
+
     switch( action ) {
     case INP_RTN_INIT:
         ReScan( buff );
@@ -607,8 +589,9 @@ static bool DoneNull( inp_data_handle buff, inp_rtn_action action )
 
 void FreezeInpStack( void )
 {
-    PushInpStack( LIT_ENG( Empty ), DoneNull, false );
-    TypeInpStack( INP_NEW_LANG | INP_HOLD | INP_STOP_PURGE );
+    if( PushInpStack( (inp_data_handle)"", DoneNull, false ) ) {
+        TypeInpStack( INP_NEW_LANG | INP_HOLD | INP_STOP_PURGE );
+    }
 }
 
 void UnAsm( address addr, char *buff, size_t buff_len )

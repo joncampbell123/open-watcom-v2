@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -36,8 +36,8 @@
 
 gbl_defn ftnoption      Options;        // compile options
 gbl_defn ftnoption      NewOptions;     // compile options for next statement
-gbl_defn unsigned_32    StmtNo;         // current statement number
-gbl_defn unsigned_32    NextStmtNo;     // next statement number
+gbl_defn stmt_num       StmtNo;         // current statement number
+gbl_defn stmt_num       NextStmtNo;     // next statement number
 gbl_defn int            BrCnt;          // bracket count
 gbl_defn itnode         *ITHead;        // head of stmt internal text
 gbl_defn itnode         *CITNode;       // current internal text node
@@ -46,7 +46,6 @@ gbl_defn itnode         *SPtr2;         // 2nd LZ right bracket
 gbl_defn STMT           StmtProc;       // statement processor code
 gbl_defn unsigned_16    CtrlFlgs;       // statement control flags
 gbl_defn int            SrcRecNum;      // record # of initial line of statement
-gbl_defn unsigned_16    BlockNum;       // for controlling unstructured branches
 gbl_defn csnode         *CSHead;        // head of control structure list
 gbl_defn unsigned_32    IOData;         // bit flags for i/o control lists
 gbl_defn itnode         *BkLink;        // ptr to previous itnode in list
@@ -61,7 +60,6 @@ gbl_defn entry_pt       *Entries;       // pointer to head of entry point lists
 gbl_defn act_eq_entry   *EquivSets;     // pointer to equivalent sets
 gbl_defn sym_id         SubProgId;      // SymId of subprogram being compiled
 gbl_defn impl_entry     ImplicitTab[IMPL_SIZE];
-gbl_defn byte           IFUsed[24];     // indicates intrinsic functions used
 gbl_defn SGMTSW         SgmtSw;         // program segment switches
 gbl_defn PSWT           ProgSw;         // program switches
 gbl_defn EXTNSW         ExtnSw;         // extension switches

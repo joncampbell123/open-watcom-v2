@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -60,22 +60,12 @@ static unsigned         Last_Element_Size;
 
 /* data initialization stuff */
 
-static void little_endian( char *string, unsigned no_of_bytes )
-/*************************************************************/
-/* convert a string into little endian format - ( LSB 1st, LSW 1st ... etc ) */
-{
-    if( no_of_bytes > 1 ) {
-        strrev( string );
-    }
-    return;
-}
-
 static void output_float( token_buffer *tokbuf, token_idx index, unsigned no_of_bytes, bool negative )
 /****************************************************************************************************/
 {
     double              double_value;
     float               float_value;
-    char                *char_ptr = NULL;
+    const char          *char_ptr = NULL;
     unsigned            count;
     TB_LD               tbyte;
 
@@ -103,11 +93,9 @@ static void output_float( token_buffer *tokbuf, token_idx index, unsigned no_of_
             break;
         }
     }
-
     for( count = 0; count < no_of_bytes; ++count ) {
         AsmDataByte( *char_ptr++ );
     }
-    return;
 }
 
 #if defined( _STANDALONE_ )
@@ -170,7 +158,6 @@ static token_idx array_element( asm_sym_handle sym, asm_sym_handle struct_sym, t
 {
     token_idx           cur_pos = start_pos;
     unsigned            count;
-    char                *char_ptr = NULL;
     bool                negative = false;
 
 #if defined( _STANDALONE_ )
@@ -247,6 +234,9 @@ static token_idx array_element( asm_sym_handle sym, asm_sym_handle struct_sym, t
             break; // go around again
         case TC_NUM:
         case TC_FLOAT:
+          {
+            const char  *char_ptr;
+
             if( tokbuf->tokens[cur_pos+1].class == TC_RES_ID
               && tokbuf->tokens[cur_pos+1].u.token == T_DUP ) {
                 cur_pos = dup_array( sym, struct_sym, tokbuf, cur_pos, no_of_bytes );
@@ -276,7 +266,6 @@ static token_idx array_element( asm_sym_handle sym, asm_sym_handle struct_sym, t
                 negative = false;
                 break;
             }
-            char_ptr = (char *)tokbuf->tokens[cur_pos].u.bytes;
 #if defined( _STANDALONE_ )
             if( sym != NULL
               && Parse_Pass == PASS_1 ) {
@@ -284,6 +273,7 @@ static token_idx array_element( asm_sym_handle sym, asm_sym_handle struct_sym, t
             }
             if( !struct_field ) {
 #endif
+                char_ptr = (char *)tokbuf->tokens[cur_pos].u.bytes;
                 for( count = 0; count < no_of_bytes; ++count ) {
                     AsmDataByte( *char_ptr++ );
                 }
@@ -296,6 +286,7 @@ static token_idx array_element( asm_sym_handle sym, asm_sym_handle struct_sym, t
             }
 #endif
             break;
+          }
         case TC_COMMA:
 #if defined( _STANDALONE_ )
             first_init = false;
@@ -320,6 +311,15 @@ static token_idx array_element( asm_sym_handle sym, asm_sym_handle struct_sym, t
             }
             break;
         case TC_STRING:
+        case TC_STRING_SQUOTE:
+        case TC_STRING_DQUOTE:
+        case TC_STRING_ANGLE:
+        case TC_STRING_BRACE:
+          {
+            const char  *char_ptr;
+            unsigned    i;
+            int         direction;
+
 #if defined( _STANDALONE_ )
             if( struct_sym != NULL ) {
                 InitializeStructure( sym, struct_sym, tokbuf, cur_pos );
@@ -332,11 +332,11 @@ static token_idx array_element( asm_sym_handle sym, asm_sym_handle struct_sym, t
                     return( INVALID_IDX );
                 }
             }
-            char_ptr = tokbuf->tokens[cur_pos].string_ptr;
-
-            /* anything bigger than a byte must be stored in little-endian
-            * format -- LSB first */
-            little_endian( char_ptr, no_of_bytes );
+            /*
+             * anything bigger than a byte must be stored in little-endian
+             * format -- LSB first
+             */
+            direction = ( no_of_bytes > 1 ) ? -1 : 1;
 #if defined( _STANDALONE_ )
             if( no_of_bytes == 1
               && struct_field ) {
@@ -348,12 +348,22 @@ static token_idx array_element( asm_sym_handle sym, asm_sym_handle struct_sym, t
             }
             if( !struct_field ) {
 #endif
-                for( count = tokbuf->tokens[cur_pos].u.value; count > 0 ; --count ) {
-                    AsmDataByte( *char_ptr++ );
+                count = tokbuf->tokens[cur_pos].u.value;
+                char_ptr = tokbuf->tokens[cur_pos].string_ptr;
+                if( direction == -1 )
+                    char_ptr += strlen( char_ptr ) - 1;
+                for( i = 0; i < count; ++i ) {
+                    AsmDataByte( *char_ptr );
+                    char_ptr += direction;
                 }
-                for( count = tokbuf->tokens[cur_pos].u.value; count < no_of_bytes; ++count ) {
+                /*
+                 * no_of_bytes is size of array element
+                 * if the number of initialization bytes is less
+                 * than this number, then it is extended by zeros
+                 * up to no_of_bytes
+                 */
+                for( ; i < no_of_bytes; ++i ) {
                     AsmDataByte( 0 );
-                    char_ptr++;
                 }
 #if defined( _STANDALONE_ )
             } else {
@@ -364,12 +374,13 @@ static token_idx array_element( asm_sym_handle sym, asm_sym_handle struct_sym, t
             }
 #endif
             break;
+          }
         case TC_ID:
           {
             token_idx           i;
             fixup_types         fixup_type = 0;
             asm_sym_handle      init_sym;
-            char                *ptr;
+            const char          *ptr;
             long                data = 0;
             asmfixup            *fixup;
 #if defined( _STANDALONE_ )
@@ -411,6 +422,12 @@ static token_idx array_element( asm_sym_handle sym, asm_sym_handle struct_sym, t
 #endif
                 switch( no_of_bytes ) {
                 case 1:
+#if defined( _STANDALONE_ )
+                    if( init_sym->mem_type == MT_ABS ) {
+                        fixup_type = FIX_LOBYTE;
+                        break;
+                    }
+#endif
                     AsmError( OFFSET_TOO_SMALL ); // fixme
                     return( INVALID_IDX );
                 case 2:
@@ -484,7 +501,9 @@ static token_idx array_element( asm_sym_handle sym, asm_sym_handle struct_sym, t
             }
             if( !struct_field ) {
 #endif
-                /* only output up to 4 bytes of offset (segment is on fixup) */
+                /*
+                 * only output up to 4 bytes of offset (segment is on fixup)
+                 */
                 for( i = 0; i < no_of_bytes; i++ ) {
                     if( i < 4 ) {
                         /* copy offset */
@@ -510,7 +529,7 @@ static token_idx array_element( asm_sym_handle sym, asm_sym_handle struct_sym, t
             fixup_types         fixup_type = 0;
             token_idx           seg_off_operator_loc = 0;
             asm_sym_handle      init_sym;
-            char                *ptr;
+            const char          *ptr;
             long                data = 0;
             asmfixup            *fixup;
 

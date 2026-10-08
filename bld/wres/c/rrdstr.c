@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,52 +36,55 @@
 #include "read.h"
 #include "wresrtns.h"
 
-char *ResReadString( FILE *fp, size_t *strlen )
-/*********************************************/
+
+char *ResReadString( FILE *fp, size_t *len )
+/******************************************/
 {
-    VarString *         newstring;
+    VarString           *varstr;
     bool                error;
     uint_8              nextchar;
-    char *              retstring;
+    char                *str;
 
-    newstring = VarStringStart();
-    error = ResReadUint8( &nextchar, fp );
+    varstr = VarStringStart();
+    error = false;
+    nextchar = ResReadUint8( &error, fp );
     while( !error && nextchar != '\0' ) {
-        VarStringAddChar( newstring, nextchar );
-        error = ResReadUint8( &nextchar, fp );
+        VarStringAddChar( varstr, nextchar );
+        nextchar = ResReadUint8( &error, fp );
     }
 
-    retstring = VarStringEnd( newstring, strlen );
+    str = VarStringEnd( varstr, len );
 
-    if( error && retstring != NULL ) {
-        WRESFREE(retstring);
-        retstring = NULL;
+    if( error && str != NULL ) {
+        WRESFREE( str );
+        str = NULL;
     }
 
-    return( retstring );
+    return( str );
 } /* ResReadString */
 
-char *ResRead32String( FILE *fp, size_t *strlen )
-/***********************************************/
+char *ResRead32String( FILE *fp, size_t *len )
+/********************************************/
 {
-    VarString           *newstring;
+    VarString           *varstr;
     bool                error;
     uint_16             nextchar;
-    char                *retstring;
+    char                *str;
 
-    newstring = VarStringStart();
-    error = ResReadUint16( &nextchar, fp );
+    varstr = VarStringStart();
+    error = false;
+    nextchar = ResReadUint16( &error, fp );
     while( !error && nextchar != 0x0000 ) {
-        VarStringAddChar( newstring, UNI2ASCII( nextchar ) );
-        error = ResReadUint16( &nextchar, fp );
+        VarStringAddChar( varstr, UNI2ASCII( nextchar ) );
+        nextchar = ResReadUint16( &error, fp );
     }
 
-    retstring = VarStringEnd( newstring, strlen );
+    str = VarStringEnd( varstr, len );
 
-    if( error && retstring != NULL ) {
-        WRESFREE(retstring);
-        retstring = NULL;
+    if( error && str != NULL ) {
+        WRESFREE( str );
+        str = NULL;
     }
 
-    return( retstring );
+    return( str );
 } /* ResRead32String */

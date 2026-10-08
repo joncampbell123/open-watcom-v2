@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2025-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,8 +35,6 @@
  * everything else is a valid return value.
  */
 
-#include "rterrno.h"
-
 typedef unsigned long       syscall_res;
 
 /* macros to access sys_call.. routines return/error value */
@@ -46,7 +45,7 @@ typedef unsigned long       syscall_res;
 
 #define __syscall_retcode( res, val )                   \
     if( __syscall_iserror( res ) ) {                    \
-        _RWD_errno = __syscall_errno( res );            \
+        lib_set_errno( __syscall_errno( res ) );        \
         res = (syscall_res)(val);                       \
     }
 
@@ -332,6 +331,7 @@ typedef unsigned long       syscall_res;
 #define SYS_statfs64            268
 #define SYS_fstatfs64           269
 #define SYS_tgkill              270
+#define SYS_prlimit64           340
 
 /*
  * internal sub-numbers for SYS_socketcall

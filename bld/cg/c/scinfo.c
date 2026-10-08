@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -53,7 +53,7 @@ static  bool    ScoreSame( score_info *x, score_info *y )
         return( false );
     if( x->base != y->base )
         return( false );
-    if( x->index_reg != y->index_reg )
+    if( x->reg_index != y->reg_index )
         return( false );
     if( x->class == SC_N_TEMP && x->symbol.u.t->v.id == y->symbol.u.t->v.id )
         return( true );
@@ -137,8 +137,8 @@ static  bool    ScoreStomp( score_info *x, score_info *y )
     return( false );
 }
 
-bool    ScoreLookup( score *scoreitem, score_info *info )
-/*******************************************************/
+bool    ScoreLookup( score_hdl scoreitem, score_info *info )
+/**********************************************************/
 {
     score_list  *curr;
 
@@ -153,8 +153,8 @@ bool    ScoreLookup( score *scoreitem, score_info *info )
 }
 
 
-bool    ScoreEqual( score *scoreboard, int index, score_info *info )
-/******************************************************************/
+bool    ScoreEqual( score_hdl scoreboard, int index, score_info *info )
+/*********************************************************************/
 {
     if( ScoreLookup( &scoreboard[index], info ) )
         return( true );
@@ -184,8 +184,8 @@ bool    ScoreEqual( score *scoreboard, int index, score_info *info )
 }
 
 
-static  void    ScoreInsert(  score *scoreboard,  int i,  score_info  *info )
-/***************************************************************************/
+static void     ScoreInsert( score_hdl scoreboard, int i, score_info *info )
+/**************************************************************************/
 {
     score_list  *new_sc;
     int         j;
@@ -207,18 +207,18 @@ static  void    ScoreInsert(  score *scoreboard,  int i,  score_info  *info )
 }
 
 
-static  void    ScoreAdd( score *scoreboard, int i, score_info *info )
-/********************************************************************/
+static  void    ScoreAdd( score_hdl scoreboard, int i, score_info *info )
+/***********************************************************************/
 {
     if( _IsModel( CGSW_GEN_SUPER_OPTIMAL ) ) {
-        score       *first;
-        score       *curr;
+        score_hdl   first;
+        score_hdl   curr;
 
-        if( (info->class == SC_N_INDEXED) && (info->index_reg != NO_INDEX) ) {
-            first = &scoreboard[info->index_reg];
+        if( (info->class == SC_N_INDEXED) && (info->reg_index != NO_INDEX) ) {
+            first = &scoreboard[info->reg_index];
             curr = first;
-            for(;;) {
-                info->index_reg = ScoreList[curr->index]->reg_name->r.reg_index;
+            for( ;; ) {
+                info->reg_index = ScoreList[curr->index]->reg_name->r.reg_index;
                 if( !ScoreLookup( &scoreboard[i], info ) ) {
                     ScoreInsert( scoreboard, i, info );
                 }
@@ -240,8 +240,8 @@ static  void    ScoreAdd( score *scoreboard, int i, score_info *info )
 }
 
 
-void    ScoreAssign( score *scoreboard, int index, score_info *info )
-/*******************************************************************/
+void    ScoreAssign( score_hdl scoreboard, int index, score_info *info )
+/**********************************************************************/
 {
     ScoreAdd( scoreboard, index, info );
     if( _IsModel( CGSW_GEN_SUPER_OPTIMAL ) ) {
@@ -276,13 +276,13 @@ void    ScoreInfo( score_info *info, name *op )
 /*********************************************/
 {
     if( op->n.class == N_INDEXED
-     && op->i.index_flags ==( X_FAKE_BASE | X_BASE_IS_INDEX) ) {
+      && op->i.index_flags == (X_FAKE_BASE | X_BASE_IS_INDEX) ) {
         op = op->i.base; /* track memory location */
     }
     info->class = (score_name_class_def)op->n.class;
-    info->scale = 0;
+    info->scale = SCALE_NONE;
     info->base  = NULL;
-    info->index_reg = NO_INDEX;
+    info->reg_index = NO_INDEX;
     switch( op->n.class ) {
     case N_CONSTANT:
         switch( op->c.const_type ) {
@@ -296,14 +296,14 @@ void    ScoreInfo( score_info *info, name *op )
             break;
         case CONS_OFFSET:
         case CONS_ADDRESS:
-            info->symbol.u.p = op->c.value;
+            info->symbol.u.p = op->c.u.op;
             info->offset = op->c.lo.u.int_value;
             break;
         case CONS_HIGH_ADDR:
             /* FIXME: not sure what to do here */
-            if( op->c.value != NULL ) {
+            if( op->c.u.op != NULL ) {
                 info->symbol.u.p = &HighAddrSymbol;
-                info->offset = (int_32)(pointer_uint)op->c.value;
+                info->offset = (int_32)(pointer_uint)op->c.u.op;
             } else {
                 info->symbol.u.p = &HighAddrConst;
                 info->offset = op->c.lo.u.int_value;
@@ -334,7 +334,7 @@ void    ScoreInfo( score_info *info, name *op )
         }
         info->symbol.u.p = NULL;
         info->offset = op->i.constant;
-        info->index_reg = op->i.index->r.reg_index;
+        info->reg_index = op->i.index->r.reg_index;
         info->base = op->i.base;
         info->scale = op->i.scale;
         break;
@@ -351,9 +351,9 @@ bool    ScoreLAInfo( score_info *info, name *op )
         info->class = SC_N_ADDRESS;
         info->symbol.u.p = op;
         info->offset = 0;
-        info->index_reg = NO_INDEX;
+        info->reg_index = NO_INDEX;
         info->base = NULL;
-        info->scale = 0;
+        info->scale = SCALE_NONE;
         return( true );
     default:
         return( false );
@@ -361,8 +361,8 @@ bool    ScoreLAInfo( score_info *info, name *op )
 }
 
 
-void    ScoreKillInfo( score *scoreboard, name *op, score_info *info, hw_reg_set except )
-/***************************************************************************************/
+void    ScoreKillInfo( score_hdl scoreboard, name *op, score_info *info, hw_reg_set except )
+/******************************************************************************************/
 {
     score_list  *curr;
     score_list  **owner;

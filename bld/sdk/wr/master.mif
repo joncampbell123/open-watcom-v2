@@ -8,7 +8,7 @@ wr_autodepends = .AUTODEPEND
 
 wr_ntverrc = ../res
 
-wr_trmem = 1
+trmem = 1
 
 wr_wreslib_cli = gui
 wr_wreslib_incl = 1
@@ -28,7 +28,6 @@ additional_clean = *.grh *.grc $(win_yacc_file).h $(win_yacc_file).c
 !include defrule.mif
 !include deftarg.mif
 !include dllbase.mif
-!include trmem.mif
 
 !include $(wr_dir)/client.mif
 !include $(commonui_dir)/client.mif
@@ -38,16 +37,11 @@ additional_clean = *.grh *.grc $(win_yacc_file).h $(win_yacc_file).c
 #
 .c:   ../c;$(trmem_dir);$(wrc_dir)/c;$(watcom_dir)/c
 
-inc_dirs = -I. $(cli_wr_inc_dirs) $(cli_wres_inc_dirs) -I"$(wrc_dir)/h" $(cli_commonui_inc_dirs)
+inc_dirs = -I. $(cli_wr_inc_dirs) $(cli_wres_inc_dirs) -I"$(wrc_dir)/h" $(cli_commonui_inc_dirs) -I"$(trmem_dir)"
 
 extra_cpp_flags   = -DINSIDE_WR
 
-extra_cpp_flags_f_wrmem = $(trmem_cpp_flags)
-
-extra_c_flags_win = -zu-zw-zc
-
-# wr objects
-extra_c_flags_f_wrmem = $(trmem_cover_cflags)
+extra_c_flags_win = -zu-zW-zc
 
 #
 # lflags
@@ -74,7 +68,8 @@ dlltarg_prebuild_objs = $(win_yacc_file).h rcmsg.grh wrmsg.grh
 dlltarg_objs_rc = &
     pass2.obj exeseg.obj exeresw.obj rcstr.obj &
     exeutil.obj exeobj.obj exerespe.obj rcio_2.obj &
-    global_2.obj rcerrors.obj sharedio.obj mergedir.obj rcspawn.obj
+    global_2.obj rcerrors.obj sharedio.obj mergedir.obj rcspawn.obj &
+    cpyfdata.obj
 dlltarg_objs = wrmain.obj wrmem.obj wrmsg.obj wrfindt.obj wrtmpfil.obj &
     wrrdw16.obj wrrdwnt.obj wrrdres.obj wrimg.obj &
     wrsvexe.obj wrsvres.obj wrdde.obj &

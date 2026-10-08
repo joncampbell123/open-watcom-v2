@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2023      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2023-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -62,7 +62,7 @@ static bool copyAResource( FILE *fp, WResDirWindow *wind,
     loc.start = SemStartResource();
     /* rc = */ CopyData( langinfo->Offset, langinfo->Length, fp, buffer, BUFFER_SIZE, &err_code );
     loc.len = SemEndResource( loc.start );
-    SemAddResource2( &resinfo->ResName, &typeinfo->TypeName, langinfo->MemoryFlags, loc, filename );
+    SemAddResource2( &resinfo->ResName, &typeinfo->TypeName, langinfo->res_flags, loc, filename );
     return( false );
 }
 
@@ -76,14 +76,12 @@ static bool copyResourcesFromRes( const char *full_filename )
     char                *buffer;
     bool                error;
 
-    buffer = NULL;
-    dir = WResInitDir();
     fp = RcIoOpenInputBin( full_filename );
     if( fp == NULL ) {
         RcError( ERR_CANT_OPEN_FILE, full_filename, strerror( errno ) );
         error = true;
     } else {
-        error = WResReadDir( fp, dir, &dup_discarded );
+        error = WResReadDir( fp, &dir, &dup_discarded );
         if( error ) {
             switch( LastWresStatus() ) {
             case WRS_BAD_SIG:
@@ -97,20 +95,20 @@ static bool copyResourcesFromRes( const char *full_filename )
                 break;
             }
         } else {
-            if( WResGetTargetOS( dir ) != WResGetTargetOS( CurrResFile.dir ) ) {
+            if( dir->TargetOS != CurrResFile.dir->TargetOS ) {
                 RcError( ERR_RES_OS_MISMATCH, full_filename );
                 error = true;
             } else {
-                buffer = RESALLOC( BUFFER_SIZE );
+                buffer = MemAllocSafe( BUFFER_SIZE );
                 for( wind = WResFirstResource( dir ); !WResIsEmptyWindow( wind ); wind = WResNextResource( wind, dir ) ) {
                     copyAResource( fp, &wind, buffer, full_filename );
                 }
-                RESFREE( buffer );
+                MemFree( buffer );
             }
+            WResFreeDir( dir );
         }
         RcIoCloseInputBin( fp );
     }
-    WResFreeDir( dir );
     if( error ) {
         ErrorHasOccured = true;
     }
@@ -130,5 +128,5 @@ void SemWINAddResFile( char *filename )
     } else if( copyResourcesFromRes( full_filename ) ) {
         ErrorHasOccured = true;
     }
-    RESFREE( filename );
+    MemFree( filename );
 }

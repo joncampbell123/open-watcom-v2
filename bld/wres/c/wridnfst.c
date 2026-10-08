@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -37,27 +38,28 @@
 #include "reserr.h"
 #include "wresrtns.h"
 
-WResIDName *WResIDNameFromStr( const char *string )
-/*************************************************/
-{
-    WResIDName  *newstring;
-    size_t      stringlen;
 
-    stringlen = strlen( string );
+WResIDName *WResStringIDNameFromStr( const char *str )
+/****************************************************/
+{
+    WResIDName      *name_id;
+    size_t          len;
+
+    len = strlen( str );
 #if !defined( _M_I86 )
-    if( stringlen > USHRT_MAX ) {
-        /* truncate the string if it is more that USHRT_MAX in length */
-        stringlen = USHRT_MAX;
+    if( len > USHRT_MAX ) {
+        /* truncate the str if it is more that USHRT_MAX in length */
+        len = USHRT_MAX;
     }
 #endif
-    newstring = WRESALLOC( sizeof( WResIDName ) + stringlen - 1 );
-    if( newstring == NULL ) {
+    name_id = AllocWResIDName( 0, len );
+    if( name_id == NULL ) {
         WRES_ERROR( WRS_MALLOC_FAILED );
     } else {
-        newstring->NumChars = stringlen;
+        name_id->NumChars = len;
         /* don't copy the '\0' */
-        memcpy( newstring->Name, string, stringlen );
+        memcpy( name_id->Name, str, len );
     }
 
-    return( newstring );
+    return( name_id );
 }

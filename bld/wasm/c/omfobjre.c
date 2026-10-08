@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -37,6 +37,7 @@
 #include "omfobjre.h"
 #include "myassert.h"
 #include "omfcarve.h"
+#include "omfgenio.h"
 #include "omffixup.h"
 
 
@@ -97,7 +98,7 @@ void ObjKillRec( obj_rec_handle objr )
 
             lines = objr->u.linnum.lines;
             if( lines != NULL ) {
-                AsmFree( lines );
+                MemFree( lines );
             }
         }
         break;
@@ -105,7 +106,7 @@ void ObjKillRec( obj_rec_handle objr )
     case CMD_STATIC_PUBDEF:
         if( objr->u.pubdef.free_pubs ) {
 /**/        myassert( objr->u.pubdef.pubs != NULL );
-            AsmFree( objr->u.pubdef.pubs );
+            MemFree( objr->u.pubdef.pubs );
         }
         break;
     }
@@ -116,7 +117,7 @@ void ObjAllocData( obj_rec_handle objr, uint_16 len )
 /***************************************************/
 {
 /**/myassert( objr->data == NULL );
-    objr->data = AsmAlloc( len );
+    objr->data = MemAllocSafe( len );
     objr->length = len;
     objr->free_data = 1;
 }
@@ -136,7 +137,7 @@ void ObjDetachData( obj_rec_handle objr )
 /**/myassert( objr != NULL );
 /**/myassert( objr->data != NULL );
     if( objr->free_data ) {
-        AsmFree( objr->data );
+        MemFree( objr->data );
     }
     objr->data = NULL;
     objr->length = 0;
@@ -152,22 +153,25 @@ uint_8 ObjGet8( obj_rec_handle objr )
 uint_16 ObjGet16( obj_rec_handle objr )
 /*************************************/
 {
-    uint_8  *p;
+    uint_16 u16;
 
 /**/myassert( objr != NULL && objr->data != NULL );
-    p = ObjGet( objr, 2 );
-    return( MGET_LE_16( p ) );
+    u16 = get16le( objr->data + objr->curoff );
+    objr->curoff += 2;
+/**/myassert( objr->curoff <= objr->length );
+    return( u16 );
 }
 
 uint_32 ObjGet32( obj_rec_handle objr )
 /*************************************/
 {
-    uint_8  *p;
+    uint_32 u32;
 
 /**/myassert( objr != NULL && objr->data != NULL );
-
-    p = ObjGet( objr, 4 );
-    return( MGET_LE_32( p ) );
+    u32 = get32le( objr->data + objr->curoff );
+    objr->curoff += 4;
+/**/myassert( objr->curoff <= objr->length );
+    return( u32 );
 }
 
 uint_32 ObjGetEither( obj_rec_handle objr )
@@ -220,7 +224,7 @@ void ObjPut16( obj_rec_handle objr, uint_16 word )
 {
 /**/myassert( objr != NULL && objr->data != NULL );
 
-    MPUT_LE_16( objr->data + objr->curoff, word );
+    put16le( objr->data + objr->curoff, word );
     objr->curoff += 2;
 }
 
@@ -229,7 +233,7 @@ void ObjPut32( obj_rec_handle objr, uint_32 dword )
 {
 /**/myassert( objr != NULL && objr->data != NULL );
 
-    MPUT_LE_32( objr->data + objr->curoff, dword );
+    put32le( objr->data + objr->curoff, dword );
     objr->curoff += 4;
 }
 

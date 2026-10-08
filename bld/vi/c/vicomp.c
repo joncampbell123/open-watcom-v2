@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -32,6 +32,7 @@
 
 #include "vi.h"
 #include <stdarg.h>
+#include <string.h>
 #include "posix.h"
 #include "specio.h"
 #include "pathgrp2.h"
@@ -56,11 +57,19 @@ vi_rc       LastRC      = ERR_NO_ERR;
 vi_rc       LastRetCode = ERR_NO_ERR;
 
 /*
- * MemAlloc - allocate some memory (always works, or editor aborts)
+ * MemAllocSafe - allocate some memory (always works, or editor aborts)
  */
-void *MemAlloc( size_t size )
+void *MemAllocSafe( size_t size )
 {
     return( malloc( size ) );
+}
+
+/*
+ * MemStrdup - allocate and duplicate string
+ */
+char *MemStrdupSafe( const char *str )
+{
+    return( strdup( str ) );
 }
 
 /*
@@ -73,13 +82,13 @@ void MemFree( void *ptr )
 } /* MemFree */
 
 /*
- * MemRealloc - reallocate a block, and it will succeed.
+ * MemReallocSafe - reallocate a block, and it will succeed.
  */
-void *MemRealloc( void *ptr, size_t size )
+void *MemReallocSafe( void *ptr, size_t size )
 {
     return( realloc( ptr, size ) );
 
-} /* MemRealloc */
+} /* MemReallocSafe */
 
 /*
  * StrMerge - merge a number of strings together
@@ -315,7 +324,7 @@ static vi_rc Compile( const char *fn, const char *data )
     vi_rc       rc;
     srcline     sline = 0;
 
-    WorkLine = MemAlloc( sizeof( line ) + MaxLineLen + 2 );
+    WorkLine = MemAllocSafe( sizeof( line ) + MaxLineLen + 2 );
     WorkLine->len = -1;
     LastRC = LastRetCode;
     vl.head = vl.tail = NULL;

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -74,7 +74,7 @@ WStringEditInfo *WAllocStringEditInfo( void )
 {
     WStringEditInfo *einfo;
 
-    einfo = (WStringEditInfo *)WRMemAlloc( sizeof( WStringEditInfo ) );
+    einfo = MemAlloc( sizeof( WStringEditInfo ) );
 
     if( einfo != NULL ) {
         memset( einfo, 0, sizeof( WStringEditInfo ) );
@@ -108,9 +108,9 @@ void WFreeStringEditInfo( WStringEditInfo *einfo )
             einfo->win = (HWND)NULL;
         }
         if( einfo->file_name != NULL ) {
-            WRMemFree( einfo->file_name );
+            MemFree( einfo->file_name );
         }
-        WRMemFree( einfo );
+        MemFree( einfo );
     }
 }
 
@@ -263,7 +263,7 @@ WStringBlock *WAllocStringBlock( void )
 {
     WStringBlock *block;
 
-    block = (WStringBlock *)WRMemAlloc( sizeof( WStringBlock ) );
+    block = MemAlloc( sizeof( WStringBlock ) );
     if( block != NULL ) {
         memset( block, 0, sizeof( WStringBlock ) );
     }
@@ -275,7 +275,7 @@ void WFreeStringTable( WStringTable *tbl )
 {
     if( tbl != NULL ) {
         WFreeStringTableBlocks( tbl->first_block );
-        WRMemFree( tbl );
+        MemFree( tbl );
     }
 }
 
@@ -296,11 +296,11 @@ void WFreeStringTableBlock( WStringBlock *block )
     if( block != NULL ) {
         for( i = 0; i < STRTABLE_STRS_PER_BLOCK; i++ ) {
             if( block->symbol[i] != NULL ) {
-                WRMemFree( block->symbol[i] );
+                MemFree( block->symbol[i] );
             }
         }
         ResFreeStringTableBlock( &block->block );
-        WRMemFree( block );
+        MemFree( block );
     }
 }
 
@@ -311,12 +311,12 @@ static void WFreeStringNode( WStringNode *node )
     for( ; node != NULL; node = next ) {
         next = node->next;
         if( node->block_name != NULL ) {
-            WRMemFree( node->block_name );
+            MemFree( node->block_name );
         }
         if( node->data != NULL ) {
-            WRMemFree( node->data );
+            MemFree( node->data );
         }
-        WRMemFree( node );
+        MemFree( node );
     }
 }
 
@@ -328,13 +328,13 @@ WStringNode *WMakeStringNodeFromStringBlock( WStringBlock *block )
         return( NULL );
     }
 
-    node = (WStringNode *)WRMemAlloc( sizeof( WStringNode ) );
+    node = MemAlloc( sizeof( WStringNode ) );
     if( node == NULL ) {
         return( NULL );
     }
     memset( node, 0, sizeof( WStringNode ) );
     node->block_name = WResIDFromNum( block->blocknum / 16 + 1 );
-    node->MemFlags = block->MemFlags;
+    node->res_flags = block->res_flags;
     WMakeDataFromStringBlock( block, &node->data, &node->data_size );
     if( node->data == NULL ) {
         WFreeStringNode( node );
@@ -378,7 +378,7 @@ WStringTable *WAllocStringTable( bool is32bit )
 {
     WStringTable        *tbl;
 
-    tbl = (WStringTable *)WRMemAlloc( sizeof( WStringTable ) );
+    tbl = MemAlloc( sizeof( WStringTable ) );
 
     if( tbl == NULL ) {
         return( NULL );
@@ -456,12 +456,12 @@ bool WGetFirstStringInBlock( WStringBlock *block, uint_16 *first )
         for( i = 0; i < STRTABLE_STRS_PER_BLOCK; i++ ) {
             if( block->block.String[i] != NULL ) {
                 *first = (block->blocknum & 0xfff0) + i;
-                return( TRUE );
+                return( true );
             }
         }
     }
 
-    return( FALSE );
+    return( false );
 }
 
 static WStringBlock *WFindLargestBlock( WStringTable *tbl )
@@ -504,14 +504,14 @@ bool WResolveStringTable( WStringEditInfo *einfo )
     WStringBlock *block;
 
     if( einfo == NULL || einfo->tbl == NULL ) {
-        return( FALSE );
+        return( false );
     }
 
     for( block = einfo->tbl->first_block; block != NULL; block = block->next ) {
         WResolveStringTableBlock( block, einfo->info->symbol_table );
     }
 
-    return( TRUE );
+    return( true );
 }
 
 bool WResolveStringTableBlock( WStringBlock *block, WRHashTable *symbol_table )
@@ -520,7 +520,7 @@ bool WResolveStringTableBlock( WStringBlock *block, WRHashTable *symbol_table )
     int                 i;
 
     if( block == NULL || symbol_table == NULL ) {
-        return( FALSE );
+        return( false );
     }
 
     for( i = 0; i < STRTABLE_STRS_PER_BLOCK; i++ ) {
@@ -533,14 +533,14 @@ bool WResolveStringTableBlock( WStringBlock *block, WRHashTable *symbol_table )
         }
         if( vlist->next == NULL ) {
             if( block->symbol[i] != NULL ) {
-                WRMemFree( block->symbol[i] );
+                MemFree( block->symbol[i] );
             }
-            block->symbol[i] = WStrDup( vlist->entry->name );
+            block->symbol[i] = WStrdup( vlist->entry->name );
         }
         WRValueListFree( vlist );
     }
 
-    return( TRUE );
+    return( true );
 }
 
 static bool WResolveStringTableBlockSymIDs( WStringEditInfo *einfo, WStringBlock *block,
@@ -552,7 +552,7 @@ static bool WResolveStringTableBlockSymIDs( WStringEditInfo *einfo, WStringBlock
     char        *text;
 
     if( symbol_table == NULL ) {
-        return( FALSE );
+        return( false );
     }
 
     for( i = 0; i < STRTABLE_STRS_PER_BLOCK; i++ ) {
@@ -572,10 +572,10 @@ static bool WResolveStringTableBlockSymIDs( WStringEditInfo *einfo, WStringBlock
                                text, block->symbol[i], &replace );
         }
 
-        WRMemFree( text );
+        MemFree( text );
     }
 
-    return( TRUE );
+    return( true );
 }
 
 bool WResolveStringTableSymIDs( WStringEditInfo *einfo )
@@ -587,12 +587,12 @@ bool WResolveStringTableSymIDs( WStringEditInfo *einfo )
     HWND                lbox;
 
     if( einfo == NULL || einfo->tbl == NULL ) {
-        return( FALSE );
+        return( false );
     }
 
     new_tbl = WAllocStringTable( einfo->tbl->is32bit );
     if( new_tbl == NULL ) {
-        return( FALSE );
+        return( false );
     }
 
     old_tbl = einfo->tbl;
@@ -605,7 +605,7 @@ bool WResolveStringTableSymIDs( WStringEditInfo *einfo )
     if( new_tbl->first_block == NULL ) {
         WFreeStringTable( new_tbl );
         einfo->tbl = old_tbl;
-        return( FALSE );
+        return( false );
     }
 
     WFreeStringTable( old_tbl );
@@ -630,5 +630,5 @@ bool WResolveStringTableSymIDs( WStringEditInfo *einfo )
 
     SendMessage( lbox, LB_SETCURSEL, (WPARAM)pos, 0 );
 
-    return( TRUE );
+    return( true );
 }

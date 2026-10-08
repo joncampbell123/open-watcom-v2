@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -205,7 +205,8 @@ extern  void    DGFEPtr( sym s, cg_type t, int_32 o ) {
     Action( "( %s, %s, %l )%n", Name( s ), Tipe( t ), o );
     bk = (b*)FEBack(s);
     VerBack(bk);
-    if( (FEAttr( s ) & FE_IMPORT) == 0 ) DRefLabel( bk->lp );
+    if( (FEAttr( s ) & FE_IMPORT) == 0 )
+        DRefLabel( bk->lp );
     Put( "        A(" );
     PutName(bk);
     Put( ") + %l %s%n",o,Tipe(t) );
@@ -701,15 +702,15 @@ extern  dbg_type        DBDereference( cg_type ptr_type, dbg_type base ) {
     return( TypeIdx );
 }
 extern  dbg_type        DBFtnArray( b *bk, cg_type lo_bound,
-                                    cg_type num_elts, int dim_off,dbg_type base ) {
+                                    cg_type num_elems, int dim_off,dbg_type base )
 //=======================================================================
-
+{
     Action( "DBFtnArray" );
     Action( "( %s, %s, %s, %d, %d )", Label( bk->lp ),
-            Tipe( lo_bound ), Tipe( num_elts ), dim_off, base );
-    TypDbg( "(%d) ADV==%s, lo_bound=%s, num_elts=%s, offset=%d, base==%d%n",
+            Tipe( lo_bound ), Tipe( num_elems ), dim_off, base );
+    TypDbg( "(%d) ADV==%s, lo_bound=%s, num_elems=%s, offset=%d, base==%d%n",
             ++TypeIdx, Label( bk->lp ),
-            Tipe( lo_bound ), Tipe( num_elts ),dim_off, base );
+            Tipe( lo_bound ), Tipe( num_elems ),dim_off, base );
     Action( " -> %d%n", TypeIdx );
     if( !bk->lp->ddef ) {
         CGError( "Label not defined in data segment" );
@@ -768,7 +769,7 @@ static  void    AddDim( array_list *ar, dim_any *dim )
     dim_any **owner;
 
     owner = &ar->list;
-    for(;;) {
+    for( ;; ) {
         curr = *owner;
         if( curr == NULL )
             break;
@@ -796,20 +797,20 @@ extern  void DBDimCon( array_list *ar, dbg_type idx, int_32 lo, int_32 hi )
 extern  void  DBDimVar( array_list *ar,
                         b      *dims, int off,
                         cg_type lo_bound_tipe,
-                        cg_type num_elts_tipe )
-/*********************************************/
+                        cg_type num_elems_tipe )
+/**********************************************/
 {
     dim_any *dim;
 
     Action( "DBDimVar" );
     Action( "( %p, %s, %s, %s, %d )%n", ar, Label( dims->lp ),
-            Tipe( lo_bound_tipe ), Tipe( num_elts_tipe ), off );
+            Tipe( lo_bound_tipe ), Tipe( num_elems_tipe ), off );
     dim = CGAlloc( sizeof( *dim ) );
     dim->kind = DIM_VAR;
     dim->u.var.dims = dims;
     dim->u.var.off = off;
     dim->u.var.lo_bound_tipe = lo_bound_tipe;
-    dim->u.var.num_elts_tipe = num_elts_tipe;
+    dim->u.var.num_elems_tipe = num_elems_tipe;
     AddDim( ar, dim );
 }
 
@@ -900,7 +901,7 @@ static  void    AddField( struct_list *st, field_any *field )
     field_entry **owner;
 
     owner = &st->list;
-    for(;;) {
+    for( ;; ) {
         curr = *owner;
         if( curr == NULL )
             break;
@@ -1151,7 +1152,7 @@ extern  dbg_type        DBEndEnum( enum_list *en )
     Action( "DBEndEnum( %p )", en );
     TypDbg( "(%d) Enumerated base==%s, &consts==%d%n", ++TypeIdx,
             Tipe( en->tipe ), en->num );
-    for(;;) {
+    for( ;; ) {
         cons = en->list;
         if( cons == NULL )
             break;
@@ -1216,7 +1217,7 @@ extern  dbg_type        DBEndProc( proc_list *pr )
     Action( "DBEndProc( %p )", pr );
     TypDbg( "(%d) Procedure %s, return==%d, &parms==%d%n", ++TypeIdx,
             Tipe(pr->call), pr->ret, pr->num );
-    for(;;) {
+    for( ;; ) {
         parm = pr->list;
         if( parm == NULL )
             break;

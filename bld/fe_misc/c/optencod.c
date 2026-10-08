@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -137,32 +137,34 @@ TAG( USAGENOCHAIN )
 
 #define BLANKARG( s )       (s[0] == '.' && s[1] == '\0')
 
-// functions that are supplied by the host environment
-#define FN_UNGET            "OPT_UNGET"                 // void ( void )
-#define FN_GET_LOWER        "OPT_GET_LOWER"             // int ( void )
-#define FN_RECOG            "OPT_RECOG"                 // bool ( int )
-#define FN_RECOG_LOWER      "OPT_RECOG_LOWER"           // bool ( int )
-#define FN_RERECOG          "OPT_RERECOG"               // bool ( int )
-#define FN_END              "OPT_END"                   // bool ( void )
+/*
+ * functions that are supplied by the host environment
+ */
+#define FN_UNGET            "OPT_UNGET"                 /* void ( void ) */
+#define FN_GET_LOWER        "OPT_GET_LOWER"             /* int ( void ) */
+#define FN_RECOG            "OPT_RECOG"                 /* bool ( int ) */
+#define FN_RECOG_LOWER      "OPT_RECOG_LOWER"           /* bool ( int ) */
+#define FN_RERECOG          "OPT_RERECOG"               /* bool ( int ) */
+#define FN_END              "OPT_END"                   /* bool ( void ) */
 
-#define FN_NUMBER           "OPT_GET_NUMBER"            // bool ( unsigned * )
-#define FN_NUMBER_DEFAULT   "OPT_GET_NUMBER_DEFAULT"    // bool ( unsigned *, unsigned )
-#define FN_NUMBER_MULTIPLE  "OPT_GET_NUMBER_MULTIPLE"   // bool ( OPT_NUMBER ** )
-#define FN_CHAR             "OPT_GET_CHAR"              // bool ( int * )
-#define FN_CHAR_OPT         "OPT_GET_CHAR_OPT"          // bool ( int * )
-#define FN_ID               "OPT_GET_ID"                // bool ( OPT_STRING ** )
-#define FN_ID_OPT           "OPT_GET_ID_OPT"            // bool ( OPT_STRING ** )
-#define FN_FILE             "OPT_GET_FILE"              // bool ( OPT_STRING ** )
-#define FN_FILE_OPT         "OPT_GET_FILE_OPT"          // bool ( OPT_STRING ** )
-#define FN_PATH             "OPT_GET_PATH"              // bool ( OPT_STRING ** )
-#define FN_PATH_OPT         "OPT_GET_PATH_OPT"          // bool ( OPT_STRING ** )
+#define FN_NUMBER           "OPT_GET_NUMBER"            /* bool ( unsigned * ) */
+#define FN_NUMBER_DEFAULT   "OPT_GET_NUMBER_DEFAULT"    /* bool ( unsigned *, unsigned ) */
+#define FN_NUMBER_MULTIPLE  "OPT_GET_NUMBER_MULTIPLE"   /* bool ( OPT_NUMBER ** ) */
+#define FN_CHAR             "OPT_GET_CHAR"              /* bool ( int * ) */
+#define FN_CHAR_OPT         "OPT_GET_CHAR_OPT"          /* bool ( int * ) */
+#define FN_ID               "OPT_GET_ID"                /* bool ( OPT_STRING ** ) */
+#define FN_ID_OPT           "OPT_GET_ID_OPT"            /* bool ( OPT_STRING ** ) */
+#define FN_FILE             "OPT_GET_FILE"              /* bool ( OPT_STRING ** ) */
+#define FN_FILE_OPT         "OPT_GET_FILE_OPT"          /* bool ( OPT_STRING ** ) */
+#define FN_PATH             "OPT_GET_PATH"              /* bool ( OPT_STRING ** ) */
+#define FN_PATH_OPT         "OPT_GET_PATH_OPT"          /* bool ( OPT_STRING ** ) */
 
-#define FN_CLEAN_STRING     "OPT_CLEAN_STRING"          // void ( OPT_STRING ** )
-#define FN_CLEAN_NUMBER     "OPT_CLEAN_NUMBER"          // void ( OPT_NUMBER ** )
+#define FN_CLEAN_STRING     "OPT_CLEAN_STRING"          /* void ( OPT_STRING ** ) */
+#define FN_CLEAN_NUMBER     "OPT_CLEAN_NUMBER"          /* void ( OPT_NUMBER ** ) */
 
-#define FN_PROCESS          "OPT_PROCESS"               // bool ( OPT_STORAGE * )
-#define FN_INIT             "OPT_INIT"                  // void ( OPT_STORAGE * )
-#define FN_FINI             "OPT_FINI"                  // void ( OPT_STORAGE * )
+#define FN_PROCESS          "OPT_PROCESS"               /* bool ( OPT_STORAGE * ) */
+#define FN_INIT             "OPT_INIT"                  /* void ( OPT_STORAGE * ) */
+#define FN_FINI             "OPT_FINI"                  /* void ( OPT_STORAGE * ) */
 
 #define USE_SWITCH_THRESHOLD    (4)
 #define CONSOLE_WIDTH           (79)
@@ -246,6 +248,11 @@ typedef struct text {
     lang_data       lang_usageu;
 } TEXT;
 
+typedef struct text_list {
+    TEXT            *head;
+    TEXT            *tail;
+} TEXT_LIST;
+
 typedef struct chain {
     struct chain    *next;
     size_t          len;
@@ -268,6 +275,10 @@ typedef struct usagegroup {
     char            id[1];
 } USAGEGROUP;
 
+typedef struct usagegroup_list {
+    USAGEGROUP      *head;
+    USAGEGROUP      *tail;
+} USAGEGROUP_LIST;
 
 typedef struct option {
     struct option   *next;
@@ -310,7 +321,7 @@ typedef struct option {
     USAGECHAIN      *usageChain;
     USAGEGROUP      *usageGroup;
     size_t          name_len;
-    char            *name;
+    const char      *name;
     char            pattern[1];
 } OPTION;
 
@@ -475,21 +486,20 @@ static struct {
     char        *list_sep;
     char        *sid;
     wres_lang_id lang;
-} optFlag;
+} paramFlags;
 
-static TARGET       *targetList;
-static ENAME        *enumList;
-static OPTION       *optionList;
-static OPTION       *uselessOptionList;
-static TEXT         *titleList;
-static TEXT         *footerList;
-static CHAIN        *chainList;
-static USAGEGROUP   blankUsageGroup;
-static USAGEGROUP   *usageGroupList;
-static USAGEGROUP   *lastUsageGroup;
-static USAGECHAIN   *lastUsageChain = NULL;
-static TEXT         *targetTitle;
-static TEXT         *targetFooter;
+static TARGET           *targetList;
+static ENAME            *enumList;
+static OPTION           *optionList;
+static OPTION           *uselessOptionList;
+static TEXT_LIST        titleList;
+static TEXT_LIST        footerList;
+static CHAIN            *chainList;
+static USAGEGROUP       blankUsageGroup;
+static USAGEGROUP_LIST  usageGroupList;
+static USAGECHAIN       *lastUsageChain;
+static TEXT             *targetTitle;
+static TEXT             *targetFooter;
 
 static void emitCode( CODESEQ *head, unsigned depth, flow_control control );
 
@@ -577,6 +587,47 @@ static const char *getLangData( lang_data langdata, wres_lang_id lang )
     return( p );
 }
 
+static void freeLangUsage( lang_data langdata )
+{
+    int     lang;
+
+    for( lang = 0; lang < LANG_RLE_MAX; lang++ ) {
+        if( langdata[lang] != NULL ) {
+            free( (void *)langdata[lang] );
+        }
+    }
+}
+
+static void *freeText( TEXT *t )
+{
+    TEXT    *next;
+
+    while( t != NULL ) {
+        next = t->next;
+        freeLangUsage( t->lang_usage );
+        freeLangUsage( t->lang_usageu );
+        free( t );
+        t = next;
+    }
+    return( NULL );
+}
+
+static void initLists( void )
+{
+    titleList.head = titleList.tail = NULL;
+    footerList.head = footerList.tail = NULL;
+}
+
+static void finiLists( void )
+{
+    if( titleList.head != NULL ) {
+        freeText( titleList.head );
+    }
+    if( footerList.head != NULL ) {
+        freeText( footerList.head );
+    }
+}
+
 static void outputInit( void )
 {
     wres_lang_id lang;
@@ -625,8 +676,8 @@ static void fail( const char *msg, ... )
 
 static void dumpUsage( void )
 {
-    const char **p;
-    int        i;
+    const char  **p;
+    unsigned    i;
 
     for( p = usageMsg; *p != NULL; ++p ) {
         fprintf( stderr, "%s\n", *p );
@@ -756,7 +807,7 @@ static targmask findTarget( char const *t )
 
 static void initTargets( void )
 {
-    int         i;
+    unsigned    i;
     targmask    next_mask = 1;
 
     targetList = calloc( TARGETS_COUNT, sizeof( TARGET ) );
@@ -820,7 +871,7 @@ static USAGEGROUP *findUsageGroup( const char *id )
 {
     USAGEGROUP  *ugr;
 
-    for( ugr = usageGroupList; ugr != NULL; ugr = ugr->next ) {
+    for( ugr = usageGroupList.head; ugr != NULL; ugr = ugr->next ) {
         if( strcmp( ugr->id, id ) == 0 ) {
             break;
         }
@@ -831,8 +882,9 @@ static USAGEGROUP *findUsageGroup( const char *id )
 static void initUsageGroup( void )
 {
     memset( &blankUsageGroup, 0, sizeof( blankUsageGroup ) );
-    usageGroupList = &blankUsageGroup;
-    lastUsageGroup = NULL;
+    usageGroupList.head = &blankUsageGroup;
+    usageGroupList.tail = NULL;
+    lastUsageChain = NULL;
 }
 
 static void addUsageGroup( const char *id )
@@ -843,12 +895,31 @@ static void addUsageGroup( const char *id )
     id_len = strlen( id );
     ugr = calloc( 1, sizeof( *ugr ) + id_len );
     memcpy( ugr->id, id, id_len + 1 );
-    if( lastUsageGroup == NULL ) {
-        usageGroupList->next = ugr;
+    if( usageGroupList.tail == NULL ) {
+        usageGroupList.head->next = ugr;
     } else {
-        lastUsageGroup->next = ugr;
+        usageGroupList.tail->next = ugr;
     }
-    lastUsageGroup = ugr;
+    usageGroupList.tail = ugr;
+}
+
+static void finiUsageGroups( void )
+{
+    USAGEGROUP  *ugr;
+    USAGEGROUP  *nextgr;
+    USAGECHAIN  *ucn;
+    USAGECHAIN  *nextcn;
+
+    for( ugr = usageGroupList.head->next; ugr != NULL; ugr = nextgr ) {
+        nextgr = ugr->next;
+        for( ucn = ugr->usageChainList; ucn != NULL; ucn = nextcn ) {
+            nextcn = ucn->next;
+            freeLangUsage( ucn->lang_usage );
+            free( ucn );
+        }
+        freeLangUsage( ugr->lang_usage );
+        free( ugr );
+    }
 }
 
 static CHAIN *findChain( const char *pattern )
@@ -992,21 +1063,21 @@ static OPTION *pushNewOption( char *pattern, OPTION *o )
 {
     size_t  len;
     OPTION  *newo;
+    char    *p;
 
     len = strlen( pattern );
-    newo = calloc( 1, sizeof( *newo ) + len );
-    memcpy( newo->pattern, pattern, len + 1 );
+    newo = calloc( 1, sizeof( *newo ) + len + len + 1 );
+    p = strncpy( newo->pattern, pattern, len + 1 ) + len + 1;
     len = cvtOptionSpec( pattern, pattern, CVT_NAME ) - pattern;
     newo->name_len = len;
-    newo->name = calloc( 1, len + 1 );
-    memcpy( newo->name, pattern, len + 1 );
+    newo->name = strncpy( p, pattern, len + 1 );
     newo->synonym = o;
     newo->is_simple = true;
     newo->next = optionList;
     newo->equal_char = '\0';
     newo->target_mask = targetAnyMask;
     newo->any_target = true;
-    newo->usageGroup = usageGroupList;
+    newo->usageGroup = usageGroupList.head;
     optionList = newo;
     return( newo );
 }
@@ -1017,10 +1088,12 @@ static char *pickUpRest( const char *p )
     char    *dst;
     char    *out;
 
-    // replace leading '.' character by space
-    // it is used to specify spaces on the beginning of text
-    // if only '.' character than it is as blank text
-    // if only two '.' character than it is single space text
+    /*
+     * replace leading '.' character by space
+     * it is used to specify spaces on the beginning of text
+     * if only '.' character than it is as blank text
+     * if only two '.' character than it is single space text
+     */
     len = strlen( p );
     out = dst = malloc( len + 1 );
     if( BLANKARG( p ) ) {
@@ -1044,8 +1117,10 @@ static char *pickUpRest( const char *p )
     return( out );
 }
 
-// :argequal. <char>
 static void doARGEQUAL( const char *p )
+/**************************************
+ * :argequal. <char>
+ */
 {
     char    c;
 
@@ -1066,7 +1141,7 @@ static void doARGEQUAL( const char *p )
             }
         } else {
             alternateEqual = c;
-            optFlag.alternate_equal = true;
+            paramFlags.alternate_equal = true;
         }
     }
     if( getsUsage != TAG_OPTION ) {
@@ -1074,14 +1149,18 @@ static void doARGEQUAL( const char *p )
     }
 }
 
-// :cmt comment text
 static void doCMT( const char *p )
+/*********************************
+ * :cmt comment text
+ */
 {
     /* unused parameters */ (void)p;
 }
 
-// :internal.
 static void doINTERNAL( const char *p )
+/**************************************
+ * :internal.
+ */
 {
     OPTION *o;
 
@@ -1092,8 +1171,10 @@ static void doINTERNAL( const char *p )
     }
 }
 
-// :option. <option> <synonym> ...
 static void doOPTION( const char *p )
+/**************************************
+ * :option. <option> <synonym> ...
+ */
 {
     OPTION *synonym;
 
@@ -1107,8 +1188,10 @@ static void doOPTION( const char *p )
     getsUsage = TAG_OPTION;
 }
 
-// :target. <targ> <targ> ...
 static void doTARGET( const char *p )
+/**************************************
+ * :target. <targ> <targ> ...
+ */
 {
     targmask    mask;
     OPTION      *o;
@@ -1144,8 +1227,10 @@ static void doTARGET( const char *p )
     }
 }
 
-// :ntarget. <targ> <targ> ...
 static void doNTARGET( const char *p )
+/**************************************
+ * :ntarget. <targ> <targ> ...
+ */
 {
     targmask    mask;
     OPTION      *o;
@@ -1166,8 +1251,10 @@ static void doNTARGET( const char *p )
     }
 }
 
-// :number. [<fn>] [<default>] [<usage argid>]
 static void doNUMBER( const char *p )
+/**************************************
+ * :number. [<fn>] [<default>] [<usage argid>]
+ */
 {
     OPTION *o;
 
@@ -1201,8 +1288,10 @@ static void doNUMBER( const char *p )
     }
 }
 
-// :multiple.
 static void doMULTIPLE( const char *p )
+/**************************************
+ * :multiple.
+ */
 {
     OPTION *o;
 
@@ -1213,8 +1302,10 @@ static void doMULTIPLE( const char *p )
     }
 }
 
-// :nochain.
 static void doNOCHAIN( const char *p )
+/**************************************
+ * :nochain.
+ */
 {
     OPTION *o;
 
@@ -1225,8 +1316,10 @@ static void doNOCHAIN( const char *p )
     }
 }
 
-// :id. [<fn>] [<usage argid>]
 static void doID( const char *p )
+/**************************************
+ * :id. [<fn>] [<usage argid>]
+ */
 {
     OPTION *o;
 
@@ -1250,8 +1343,10 @@ static void doID( const char *p )
     }
 }
 
-// :char. [<fn>] [<usage argid>]
 static void doCHAR( const char *p )
+/**************************************
+ * :char. [<fn>] [<usage argid>]
+ */
 {
     OPTION *o;
 
@@ -1275,8 +1370,10 @@ static void doCHAR( const char *p )
     }
 }
 
-// :immediate. <fn> [<usage argid>]
 static void doIMMEDIATE( const char *p )
+/**************************************
+ * :immediate. <fn> [<usage argid>]
+ */
 {
     OPTION *o;
 
@@ -1300,8 +1397,10 @@ static void doIMMEDIATE( const char *p )
     }
 }
 
-// :code. <source-code>
 static void doCODE( const char *p )
+/**************************************
+ * :code. <source-code>
+ */
 {
     OPTION *o;
 
@@ -1320,8 +1419,10 @@ static void doCODE( const char *p )
     }
 }
 
-// :file. [<usage argid>]
 static void doFILE( const char *p )
+/**************************************
+ * :file. [<usage argid>]
+ */
 {
     OPTION *o;
 
@@ -1339,8 +1440,10 @@ static void doFILE( const char *p )
     }
 }
 
-// :optional.
 static void doOPTIONAL( const char *p )
+/**************************************
+ * :optional.
+ */
 {
     OPTION *o;
 
@@ -1350,8 +1453,11 @@ static void doOPTIONAL( const char *p )
         o->is_optional = true;
     }
 }
-// :negate.
+
 static void doNEGATE( const char *p )
+/**************************************
+ * :negate.
+ */
 {
     OPTION *o;
 
@@ -1366,17 +1472,21 @@ static void doNEGATE( const char *p )
 }
 
 
-// :noequal.
 static void doNOEQUAL( const char *p )
+/**************************************
+ * :noequal.
+ */
 {
     /* unused parameters */ (void)p;
 
-    optFlag.no_equal = true;
+    paramFlags.no_equal = true;
     getsUsage = TAG_NOEQUAL;
 }
 
-// :path. [<usage argid>]
 static void doPATH( const char *p )
+/**************************************
+ * :path. [<usage argid>]
+ */
 {
     OPTION *o;
 
@@ -1394,11 +1504,13 @@ static void doPATH( const char *p )
     }
 }
 
-// :chain. <option> <option> ...
-//
-// mark options that start with <option> as chainable
-// i.e., -oa -ox == -oax
 static void doCHAIN( const char *p )
+/**************************************
+ * :chain. <option> <option> ...
+ *
+ * mark options that start with <option> as chainable
+ * i.e., -oa -ox == -oax
+ */
 {
     getsUsage = TAG_CHAIN;
     if( *p == '\0' ) {
@@ -1415,8 +1527,10 @@ static void doCHAIN( const char *p )
     }
 }
 
-// :enumerate. <name> [<option>]
 static void doENUMERATE( const char *p )
+/**************************************
+ * :enumerate. <name> [<option>]
+ */
 {
     ENAME *en;
     OPTION *o;
@@ -1443,8 +1557,10 @@ static void doENUMERATE( const char *p )
     }
 }
 
-// :special. <fn> [<usage argid>]
 static void doSPECIAL( const char *p )
+/**************************************
+ * :special. <fn> [<usage argid>]
+ */
 {
     OPTION *o;
 
@@ -1469,8 +1585,10 @@ static void doSPECIAL( const char *p )
     }
 }
 
-// :prefix.
 static void doPREFIX( const char *p )
+/**************************************
+ * :prefix.
+ */
 {
     OPTION *o;
 
@@ -1482,20 +1600,31 @@ static void doPREFIX( const char *p )
     }
 }
 
-// :usage. <usage-text>
 static void doUSAGE( const char *p )
+/**************************************
+ * :usage. <usage-text>
+ */
 {
     OPTION *o;
 
     switch( getsUsage ) {
     case TAG_USAGECHAIN:
+        if( lastUsageChain->lang_usage[LANG_RLE_ENGLISH] != NULL ) {
+            free( (void *)lastUsageChain->lang_usage[LANG_RLE_ENGLISH] );
+        }
         lastUsageChain->lang_usage[LANG_RLE_ENGLISH] = pickUpRest( p );
         break;
     case TAG_USAGEGROUP:
-        lastUsageGroup->lang_usage[LANG_RLE_ENGLISH] = pickUpRest( p );
+        if( usageGroupList.tail->lang_usage[LANG_RLE_ENGLISH] != NULL ) {
+            free( (void *)usageGroupList.tail->lang_usage[LANG_RLE_ENGLISH] );
+        }
+        usageGroupList.tail->lang_usage[LANG_RLE_ENGLISH] = pickUpRest( p );
         break;
     case TAG_OPTION:
         for( o = optionList; o != NULL; o = o->synonym ) {
+            if( o->lang_usage[LANG_RLE_ENGLISH] != NULL ) {
+                free( (void *)o->lang_usage[LANG_RLE_ENGLISH] );
+            }
             o->lang_usage[LANG_RLE_ENGLISH] = pickUpRest( p );
         }
         break;
@@ -1504,8 +1633,10 @@ static void doUSAGE( const char *p )
     }
 }
 
-// :jusage. <kanji-usage-text>
 static void doJUSAGE( const char *p )
+/**************************************
+ * :jusage. <kanji-usage-text>
+ */
 {
     char *usage;
     OPTION *o;
@@ -1514,14 +1645,18 @@ static void doJUSAGE( const char *p )
     case TAG_USAGECHAIN:
         if( lastUsageChain->lang_usage[LANG_RLE_ENGLISH] == NULL ) {
             error( ":jusage. tag last :usagechain. hasn't define English text.\n" );
+        } else {
+            free( (void *)lastUsageChain->lang_usage[LANG_RLE_JAPANESE] );
         }
         lastUsageChain->lang_usage[LANG_RLE_JAPANESE] = pickUpRest( p );
         break;
     case TAG_USAGEGROUP:
-        if( lastUsageGroup->lang_usage[LANG_RLE_ENGLISH] == NULL ) {
+        if( usageGroupList.tail->lang_usage[LANG_RLE_ENGLISH] == NULL ) {
             error( ":jusage. tag last :usagegroup. hasn't define English text.\n" );
+        } else {
+            free( (void *)usageGroupList.tail->lang_usage[LANG_RLE_JAPANESE] );
         }
-        lastUsageGroup->lang_usage[LANG_RLE_JAPANESE] = pickUpRest( p );
+        usageGroupList.tail->lang_usage[LANG_RLE_JAPANESE] = pickUpRest( p );
         break;
     case TAG_OPTION:
         for( o = optionList; o != NULL; o = o->synonym ) {
@@ -1529,6 +1664,9 @@ static void doJUSAGE( const char *p )
             if( *usage == '\0' ) {
                 free( usage );
                 usage = strdup( o->lang_usage[LANG_RLE_ENGLISH] );
+            }
+            if( o->lang_usage[LANG_RLE_JAPANESE] != NULL ) {
+                free( (void *)o->lang_usage[LANG_RLE_JAPANESE] );
             }
             o->lang_usage[LANG_RLE_JAPANESE] = usage;
         }
@@ -1538,29 +1676,32 @@ static void doJUSAGE( const char *p )
     }
 }
 
-// :title. <text>
 static void doTITLE( const char *p )
+/**************************************
+ * :title. <text>
+ */
 {
-    TEXT    **i;
-    TEXT    *t;
+    TEXT    *title;
 
-    i = &titleList;
-    for( t = *i; t != NULL; t = *i ) {
-        i = &(t->next);
+    title = calloc( 1, sizeof( *title ) );
+    title->lang_usage[LANG_RLE_ENGLISH] = pickUpRest( p );
+    title->target_mask = targetAnyMask;
+    title->any_target = true;
+    if( titleList.head == NULL ) {
+        titleList.head = title;
+    } else {
+        titleList.tail->next = title;
     }
-    t = calloc( 1, sizeof( *t ) );
-    t->next = *i;
-    *i = t;
-    t->lang_usage[LANG_RLE_ENGLISH] = pickUpRest( p );
-    t->target_mask = targetAnyMask;
-    t->any_target = true;
-    targetTitle = t;
+    titleList.tail = title;
+    targetTitle = title;
     targetFooter = NULL;
     getsUsage = TAG_TITLE;
 }
 
-// :titleu. <text>
 static void doTITLEU( const char *p )
+/**************************************
+ * :titleu. <text>
+ */
 {
     if( getsUsage != TAG_TITLE || targetTitle == NULL ) {
         error( ":titleu. tag must follow a :title. tag\n" );
@@ -1570,8 +1711,10 @@ static void doTITLEU( const char *p )
     targetTitle->is_u = true;
 }
 
-// :jtitle. <text>
 static void doJTITLE( const char *p )
+/**************************************
+ * :jtitle. <text>
+ */
 {
     if( getsUsage != TAG_TITLE || targetTitle == NULL ) {
         error( ":jtitle. tag must follow a :title. tag\n" );
@@ -1580,8 +1723,10 @@ static void doJTITLE( const char *p )
     targetTitle->lang_usage[LANG_RLE_JAPANESE] = pickUpRest( p );
 }
 
-// :jtitleu. <text>
 static void doJTITLEU( const char *p )
+/**************************************
+ * :jtitleu. <text>
+ */
 {
     if( getsUsage != TAG_TITLE || targetTitle == NULL ) {
         error( ":jtitleu. tag must follow a :title. tag\n" );
@@ -1591,29 +1736,32 @@ static void doJTITLEU( const char *p )
     targetTitle->is_u = true;
 }
 
-// :footer. <text>
 static void doFOOTER( const char *p )
+/**************************************
+ * :footer. <text>
+ */
 {
-    TEXT    **i;
-    TEXT    *t;
+    TEXT    *footer;
 
-    i = &footerList;
-    for( t = *i; t != NULL; t = *i ) {
-        i = &(t->next);
+    footer = calloc( 1, sizeof( *footer ) );
+    footer->lang_usage[LANG_RLE_ENGLISH] = pickUpRest( p );
+    footer->target_mask = targetAnyMask;
+    footer->any_target = true;
+    if( footerList.head == NULL ) {
+        footerList.head = footer;
+    } else {
+        footerList.tail->next = footer;
     }
-    t = calloc( 1, sizeof( *t ) );
-    t->next = *i;
-    *i = t;
-    t->lang_usage[LANG_RLE_ENGLISH] = pickUpRest( p );
-    t->target_mask = targetAnyMask;
-    t->any_target = true;
-    targetFooter = t;
+    footerList.tail = footer;
+    targetFooter = footer;
     targetTitle = NULL;
     getsUsage = TAG_FOOTER;
 }
 
-// :footeru. <text>
 static void doFOOTERU( const char *p )
+/**************************************
+ * :footeru. <text>
+ */
 {
     if( getsUsage != TAG_FOOTER || targetFooter == NULL ) {
         error( ":footeru. tag must follow a :footer. tag\n" );
@@ -1623,8 +1771,10 @@ static void doFOOTERU( const char *p )
     targetFooter->is_u = true;
 }
 
-// :jfooter. <text>
 static void doJFOOTER( const char *p )
+/**************************************
+ * :jfooter. <text>
+ */
 {
     if( getsUsage != TAG_FOOTER || targetFooter == NULL ) {
         error( ":jfooter. tag must follow a :footer. tag\n" );
@@ -1633,8 +1783,10 @@ static void doJFOOTER( const char *p )
     targetFooter->lang_usage[LANG_RLE_JAPANESE] = pickUpRest( p );
 }
 
-// :jfooteru. <text>
 static void doJFOOTERU( const char *p )
+/**************************************
+ * :jfooteru. <text>
+ */
 {
     if( getsUsage != TAG_FOOTER || targetFooter == NULL ) {
         error( ":jfooteru. tag must follow a :footer. tag\n" );
@@ -1644,8 +1796,10 @@ static void doJFOOTERU( const char *p )
     targetFooter->is_u = true;
 }
 
-// :group. <group_id>
 static void doGROUP( const char *p )
+/**************************************
+ * :group. <group_id>
+ */
 {
     OPTION      *o;
     USAGEGROUP  *ugr;
@@ -1666,8 +1820,10 @@ static void doGROUP( const char *p )
 }
 
 
-// :timestamp.
 static void doTIMESTAMP( const char *p )
+/**************************************
+ * :timestamp.
+ */
 {
     OPTION *o;
 
@@ -1682,11 +1838,13 @@ static void doTIMESTAMP( const char *p )
     }
 }
 
-// :usagechain. <group_id> <option>
-//
-// mark options that start with <option> as group in usage text
-// i.e., -fp0 -fp1 ==> -fp{0,1}
 static void doUSAGECHAIN( const char *p )
+/**************************************
+ * :usagechain. <group_id> <option>
+ *
+ * mark options that start with <option> as group in usage text
+ * i.e., -fp0 -fp1 ==> -fp{0,1}
+ */
 {
     USAGEGROUP  *ugr;
 
@@ -1713,11 +1871,13 @@ static void doUSAGECHAIN( const char *p )
     getsUsage = TAG_USAGECHAIN;
 }
 
-// :usagegroup. <group_id>
-//
-// define group <group_id> for block of options
-//
 static void doUSAGEGROUP( const char *p )
+/**************************************
+ * :usagegroup. <group_id>
+ *
+ * define group <group_id> for block of options
+ *
+ */
 {
     if( *p == '\0' ) {
         error( ":usagegroup. tag requires <group_id> parameter\n" );
@@ -1732,8 +1892,10 @@ static void doUSAGEGROUP( const char *p )
     getsUsage = TAG_USAGEGROUP;
 }
 
-// :usagenochain.
 static void doUSAGENOCHAIN( const char *p )
+/**************************************
+ * :usagenochain.
+ */
 {
     OPTION *o;
 
@@ -1751,17 +1913,17 @@ static void checkForGMLEscape( const char *p )
 
     c1 = *p++;
     if( c1 == '\0'
-      || ! isalpha( c1 ) ) {
+      || ! isalpha( (unsigned char)c1 ) ) {
         return;
     }
     c2 = *p++;
     if( c2 == '\0'
-      || ! isalpha( c2 ) ) {
+      || ! isalpha( (unsigned char)c2 ) ) {
         return;
     }
     is_escape = false;
     if( *p == '\0'
-      || ! isalpha( *p ) ) {
+      || ! isalpha( (unsigned char)*p ) ) {
         is_escape = true;
     }
     if( is_escape ) {
@@ -1781,26 +1943,13 @@ static void checkForGMLEscapeSequences( void )
     }
 }
 
-static char *my_fgets( char *buff, int buff_len, FILE *fp )
-{
-    char    *p;
-    size_t  len;
-
-    p = fgets( buff, buff_len, fp );
-    if( p != NULL ) {
-        for( len = strlen( p ); len > 0 && ( p[len - 1] == '\n' || p[len - 1] == '\r' ); len-- )
-            ;
-        p[len] = '\0';
-    }
-    return( p );
-}
-
 static void readInputFile( void )
 {
     const char  *eot;
     tag_id      tag;
 
-    for( ; my_fgets( ibuff, sizeof( ibuff ), gfp ) != NULL; ) {
+    while( fgets( ibuff, sizeof( ibuff ), gfp ) != NULL ) {
+        ibuff[strcspn( ibuff, "\r\n" )] = '\0';
         ++line;
         checkForGMLEscapeSequences();
         tag = isTag( &eot );
@@ -1821,7 +1970,7 @@ static void checkForMissingUsages( void )
     wres_lang_id lang;
     int         j;
 
-    if( optFlag.international ) {
+    if( paramFlags.international ) {
         start_lang = 0;
         end_lang = LANG_RLE_MAX;
     } else {
@@ -1832,39 +1981,39 @@ static void checkForMissingUsages( void )
         if( o->usageChain == NULL
           || cmpOptPattern( o->pattern, o->usageChain->pattern ) ) {
             for( lang = start_lang; lang < end_lang; ++lang ) {
-                if( ( lang == LANG_RLE_ENGLISH || optFlag.report_missing_data ) && o->lang_usage[lang] == NULL ) {
+                if( ( lang == LANG_RLE_ENGLISH || paramFlags.report_missing_data ) && o->lang_usage[lang] == NULL ) {
                     error( "option '%s' has no %s usage text\n", o->pattern, langName[lang] );
                 }
             }
         }
     }
     j = 1;
-    for( t = titleList; t != NULL; t = t->next ) {
+    for( t = titleList.head; t != NULL; t = t->next ) {
         for( lang = start_lang; lang < end_lang; ++lang ) {
-            if( ( lang == LANG_RLE_ENGLISH || optFlag.report_missing_data ) && t->lang_usage[lang] == NULL ) {
+            if( ( lang == LANG_RLE_ENGLISH || paramFlags.report_missing_data ) && t->lang_usage[lang] == NULL ) {
                 error( "title(%d) has no %s usage text\n", j, langName[lang] );
             }
         }
         j++;
     }
     j = 1;
-    for( t = footerList; t != NULL; t = t->next ) {
+    for( t = footerList.head; t != NULL; t = t->next ) {
         for( lang = start_lang; lang < end_lang; ++lang ) {
-            if( ( lang == LANG_RLE_ENGLISH || optFlag.report_missing_data ) && t->lang_usage[lang] == NULL ) {
+            if( ( lang == LANG_RLE_ENGLISH || paramFlags.report_missing_data ) && t->lang_usage[lang] == NULL ) {
                 error( "footer(%d) has no %s usage text\n", j, langName[lang] );
             }
         }
         j++;
     }
-    for( ugr = usageGroupList->next; ugr != NULL; ugr = ugr->next ) {
+    for( ugr = usageGroupList.head->next; ugr != NULL; ugr = ugr->next ) {
         for( lang = start_lang; lang < end_lang; ++lang ) {
-            if( optFlag.report_missing_data && ugr->lang_usage[lang] == NULL ) {
+            if( paramFlags.report_missing_data && ugr->lang_usage[lang] == NULL ) {
                 error( "group '%s' has no %s usage text\n", ugr->id, langName[lang] );
             }
         }
         for( ucn = ugr->usageChainList; ucn != NULL; ucn = ucn->next ) {
             for( lang = start_lang; lang < end_lang; ++lang ) {
-                if( optFlag.report_missing_data && ucn->lang_usage[lang] == NULL ) {
+                if( paramFlags.report_missing_data && ucn->lang_usage[lang] == NULL ) {
                     error( "chain '%s' has no %s usage text\n", ucn->pattern, langName[lang] );
                 }
             }
@@ -1980,8 +2129,8 @@ static void makeFieldName( const char *pattern, char *f )
     }
     if( c != '\0' ) {
         is_special = false;
-        if( isalnum( c ) ) {
-            if( isdigit( c ) )
+        if( isalnum( (unsigned char)c ) ) {
+            if( isdigit( (unsigned char)c ) )
                 *f++ = '_';
             *f++ = c;
         } else {
@@ -1994,7 +2143,7 @@ static void makeFieldName( const char *pattern, char *f )
                 sensitive = true;
                 continue;
             }
-            if( isalnum( c ) ) {
+            if( isalnum( (unsigned char)c ) ) {
                 if( is_special
                   && *( f - 1 ) != '_' )
                     *f++ = '_';
@@ -2037,8 +2186,8 @@ static void startParserH( void )
     ENAME *en;
     FILE *fp;
 
-    if( !optFlag.parser_only ) {
-        if( optFlag.sid != NULL && *optFlag.sid != '\0' ) {
+    if( !paramFlags.parser_only ) {
+        if( paramFlags.sid != NULL && *paramFlags.sid != '\0' ) {
             fp = ofpg;
         } else {
             fp = ofp;
@@ -2060,8 +2209,8 @@ static void startParserH( void )
             fprintf( fp, "#endif\n" );
         }
         if( ofp != NULL ) {
-            fprintf( ofp, "typedef struct opt_storage%s OPT_STORAGE%s;\n", optFlag.sid, optFlag.sid );
-            fprintf( ofp, "struct opt_storage%s {\n", optFlag.sid );
+            fprintf( ofp, "typedef struct opt_storage%s OPT_STORAGE%s;\n", paramFlags.sid, paramFlags.sid );
+            fprintf( ofp, "struct opt_storage%s {\n", paramFlags.sid );
             fprintf( ofp, "    unsigned     timestamp;\n" );
             for( o = optionList; o != NULL; o = o->next ) {
                 if( o->synonym == NULL ) {
@@ -2108,12 +2257,12 @@ static void startParserH( void )
                 }
             }
             fprintf( ofp, "};\n" );
-            fprintf( ofp, "extern void " FN_INIT "%s( OPT_STORAGE%s *data );\n", optFlag.sid, optFlag.sid );
-            fprintf( ofp, "extern void " FN_FINI "%s( OPT_STORAGE%s *data );\n", optFlag.sid, optFlag.sid );
+            fprintf( ofp, "extern void " FN_INIT "%s( OPT_STORAGE%s *data );\n", paramFlags.sid, paramFlags.sid );
+            fprintf( ofp, "extern void " FN_FINI "%s( OPT_STORAGE%s *data );\n", paramFlags.sid, paramFlags.sid );
         }
     }
     if( ofp != NULL ) {
-        fprintf( ofp, "extern bool " FN_PROCESS "%s( OPT_STORAGE%s *data );\n", optFlag.sid, optFlag.sid );
+        fprintf( ofp, "extern bool " FN_PROCESS "%s( OPT_STORAGE%s *data );\n", paramFlags.sid, paramFlags.sid );
     }
 }
 
@@ -2130,7 +2279,7 @@ static void finishParserH( void )
                 continue;
             for( ei = en->items; ei != NULL; ei = ei->next ) {
                 ++value;
-                fprintf( ofp, "#define OPT_ENUM%s_%s %u\n", optFlag.sid, ei->name, value );
+                fprintf( ofp, "#define OPT_ENUM%s_%s %u\n", paramFlags.sid, ei->name, value );
             }
         }
     }
@@ -2203,7 +2352,9 @@ static CODESEQ *reorderCode( CODESEQ *head )
     if( c->sibling != NULL ) {
         a = NULL;
         s = &head;
-        // accepting states move to the end
+        /*
+         * accepting states move to the end
+         */
         for( c = head; c != NULL; c = n ) {
             n = c->sibling;
             if( c->accept ) {
@@ -2216,7 +2367,9 @@ static CODESEQ *reorderCode( CODESEQ *head )
         }
         *s = a;
         s = &(head->sibling);
-        // sensitive states move to the front
+        /*
+         * sensitive states move to the front
+         */
         for( c = head; c != NULL; c = n ) {
             n = c->sibling;
             if( IS_SENSITIVE( c ) ) {
@@ -2282,7 +2435,7 @@ static CODESEQ *genCode( OPTION *o )
     return( head );
 }
 
-static void emitSuccessCode( unsigned depth, flow_control control )
+static void emitCodeSuccess( unsigned depth, flow_control control )
 {
     if( control & EC_CONTINUE ) {
         emitPrintf( depth, "continue;\n" );
@@ -2291,7 +2444,7 @@ static void emitSuccessCode( unsigned depth, flow_control control )
     }
 }
 
-static void emitAcceptCode( CODESEQ *c, unsigned depth, flow_control control )
+static void emitCodeAccept( CODESEQ *c, unsigned depth, flow_control control )
 {
     INAME *ei;
     OPTION *o;
@@ -2363,7 +2516,7 @@ static void emitAcceptCode( CODESEQ *c, unsigned depth, flow_control control )
         if( o->is_timestamp ) {
             emitPrintf( depth, "data->%s_timestamp = ++(data->timestamp);\n", o->enumerate->name );
         }
-        emitPrintf( depth, "data->%s = OPT_ENUM%s_%s;\n", o->enumerate->name, optFlag.sid, ei->name );
+        emitPrintf( depth, "data->%s = OPT_ENUM%s_%s;\n", o->enumerate->name, paramFlags.sid, ei->name );
         if( o->is_immediate ) {
             emitPrintf( depth, "%s( data, true );\n", o->immediate_func );
         }
@@ -2397,7 +2550,7 @@ static void emitAcceptCode( CODESEQ *c, unsigned depth, flow_control control )
         --depth;
         emitPrintf( depth, "}\n" );
     }
-    emitSuccessCode( depth, control );
+    emitCodeSuccess( depth, control );
     if( o->is_prefix ) {
         --depth;
         emitPrintf( depth, "}\n" );
@@ -2411,35 +2564,35 @@ static void emitCodeTree( CODESEQ *c, unsigned depth, flow_control control )
         if( c->is_chain ) {
             emitCode( c->children, depth, (control & ~EC_CHAIN) | EC_CONTINUE );
             if( c->accept ) {
-                emitAcceptCode( c, depth, control );
+                emitCodeAccept( c, depth, control );
             } else {
                 emitPrintf( depth, "return( true );\n" );
             }
         } else if( c->is_chain_root ) {
             emitCode( c->children, depth, control | EC_CHAIN | EC_CONTINUE );
             if( c->accept ) {
-                emitAcceptCode( c, depth, control & ~EC_CONTINUE );
+                emitCodeAccept( c, depth, control & ~EC_CONTINUE );
             } else {
-                emitSuccessCode( depth, control );
+                emitCodeSuccess( depth, control );
             }
         } else {
             emitCode( c->children, depth, control & ~EC_CHAIN );
             if( c->accept ) {
-                emitAcceptCode( c, depth, control );
+                emitCodeAccept( c, depth, control );
             } else {
                 emitPrintf( depth, "return( true );\n" );
             }
         }
     } else {
         if( c->option->chain != NULL ) {
-            emitAcceptCode( c, depth, control );
+            emitCodeAccept( c, depth, control );
         } else {
-            emitAcceptCode( c, depth, control & ~EC_CONTINUE );
+            emitCodeAccept( c, depth, control & ~EC_CONTINUE );
         }
     }
 }
 
-static void emitIfCode( CODESEQ *c, unsigned depth, flow_control control )
+static void emitCodeIf( CODESEQ *c, unsigned depth, flow_control control )
 {
     if( IS_SENSITIVE( c ) ) {
         emitPrintf( depth, "if( %s( '%c' ) ) {\n", FN_RECOG, c->s );
@@ -2477,7 +2630,7 @@ static void emitCodeBlk( CODESEQ *head, unsigned depth, flow_control control )
     } else {
         for( c = head; c != NULL; c = c->sibling ) {
             if( c->sel ) {
-                emitIfCode( c, depth, control );
+                emitCodeIf( c, depth, control );
             }
         }
     }
@@ -2499,7 +2652,7 @@ static void emitCode( CODESEQ *head, unsigned depth, flow_control control )
           && ( IS_SENSITIVE( c )
           || (control & EC_CHAIN)
           && !c->is_chain ) ) {
-            emitIfCode( c, depth, control );
+            emitCodeIf( c, depth, control );
             c->sel = false;
         } else {
             ++count;
@@ -2513,12 +2666,28 @@ static void emitCode( CODESEQ *head, unsigned depth, flow_control control )
     }
 }
 
+static void FreeCode( CODESEQ *codeseq )
+/***************************************
+ * free code tree recursively
+ */
+{
+    CODESEQ     *cur;
+
+    while( (cur = codeseq) != NULL ) {
+        codeseq = codeseq->sibling;
+        if( cur->children != NULL ) {
+            FreeCode( cur->children );
+        }
+        free( cur );
+    }
+}
+
 static void outputFN_PROCESS( void )
 {
-    unsigned depth = 0;
-    CODESEQ *codeseq;
+    unsigned    depth = 0;
+    CODESEQ     *codeseq;
 
-    emitPrintf( depth, "bool " FN_PROCESS "%s( OPT_STORAGE%s *data )\n", optFlag.sid, optFlag.sid );
+    emitPrintf( depth, "bool " FN_PROCESS "%s( OPT_STORAGE%s *data )\n", paramFlags.sid, paramFlags.sid );
     emitPrintf( depth, "{\n" );
     ++depth;
     codeseq = genCode( optionList );
@@ -2526,6 +2695,10 @@ static void outputFN_PROCESS( void )
     emitPrintf( depth, "return( true );\n" );
     --depth;
     emitPrintf( depth, "}\n" );
+    /*
+     * free code tree
+     */
+    FreeCode( codeseq );
 }
 
 static void outputFN_INIT( void )
@@ -2535,7 +2708,7 @@ static void outputFN_INIT( void )
     INAME *ei;
     unsigned depth = 0;
 
-    emitPrintf( depth, "void " FN_INIT "%s( OPT_STORAGE%s *data )\n", optFlag.sid, optFlag.sid );
+    emitPrintf( depth, "void " FN_INIT "%s( OPT_STORAGE%s *data )\n", paramFlags.sid, paramFlags.sid );
     emitPrintf( depth, "{\n" );
     ++depth;
     emitPrintf( depth, "memset( data, 0, sizeof( *data ) );\n" );
@@ -2550,7 +2723,7 @@ static void outputFN_INIT( void )
         if( !en->used )
             continue;
         ei = addEnumerator( en, "default" );
-        emitPrintf( depth, "data->%s = OPT_ENUM%s_%s;\n", en->name, optFlag.sid, ei->name );
+        emitPrintf( depth, "data->%s = OPT_ENUM%s_%s;\n", en->name, paramFlags.sid, ei->name );
     }
     --depth;
     emitPrintf( depth, "}\n" );
@@ -2563,7 +2736,7 @@ static void outputFN_FINI( void )
     bool no_data;
 
     depth = 0;
-    emitPrintf( depth, "void " FN_FINI "%s( OPT_STORAGE%s *data )\n", optFlag.sid, optFlag.sid );
+    emitPrintf( depth, "void " FN_FINI "%s( OPT_STORAGE%s *data )\n", paramFlags.sid, paramFlags.sid );
     emitPrintf( depth, "{\n" );
     no_data = true;
     ++depth;
@@ -2587,12 +2760,12 @@ static void outputFN_FINI( void )
 
 static int usageCmp( const void *v1, const void *v2 )
 {
-    int     res;
-    size_t  chain_len;
-    OPTION  *o1 = *(OPTION **)v1;
-    OPTION  *o2 = *(OPTION **)v2;
-    char    *n1 = o1->name;
-    char    *n2 = o2->name;
+    int         res;
+    size_t      chain_len;
+    OPTION      *o1 = *(OPTION **)v1;
+    OPTION      *o2 = *(OPTION **)v2;
+    const char  *n1 = o1->name;
+    const char  *n2 = o2->name;
 
     res = 0;
     if( o1->usageChain != o2->usageChain ) {
@@ -2642,11 +2815,11 @@ static char *catArg( char *arg, char *buf, char equal_char )
             } else {
                 *buf++ = equal_char;
             }
-        } else if( optFlag.no_equal ) {
+        } else if( paramFlags.no_equal ) {
             if( *arg != '=' ) {
                 *buf++ = *arg;
             }
-        } else if( optFlag.alternate_equal ) {
+        } else if( paramFlags.alternate_equal ) {
             if( *arg != '=' ) {
                 *buf++ = *arg;
             } else {
@@ -2747,7 +2920,9 @@ static void emitQuotedString( FILE *fp, const char *str, const char *line_term, 
 
     fprintf( fp, "\"" );
     for( s = str; (q = strchr( s, '"' )) != NULL; s = q + 1 ) {
-        // replace " with \"
+        /*
+         * replace " with \"
+         */
         len = q - s;
         memcpy( tmpbuff, s, len );
         tmpbuff[len] = '\0';
@@ -2762,14 +2937,14 @@ static void emitUsageH( void )
     size_t      len;
     const char  *str;
 
-    if( optFlag.rc ) {
+    if( paramFlags.rc ) {
         if( ufp != NULL ) {
-            fprintf( ufp, "pick((%s+%d), ", optFlag.rc_macro, line_offs++ );
+            fprintf( ufp, "pick((%s+%d), ", paramFlags.rc_macro, line_offs++ );
             str = getLangData( outputdata, LANG_RLE_ENGLISH );
             emitQuotedString( ufp, str, "", "" );
             fprintf( ufp, ", " );
             str = getLangData( outputdata, LANG_RLE_JAPANESE );
-            if( !optFlag.out_utf8 ) {
+            if( !paramFlags.out_utf8 ) {
                 utf8_to_cp932( str, tmpbuff );
                 str = tmpbuff;
             }
@@ -2777,14 +2952,14 @@ static void emitUsageH( void )
             fprintf( ufp, ")\n" );
         }
     } else {
-        str = getLangData( outputdata, optFlag.lang );
+        str = getLangData( outputdata, paramFlags.lang );
         len = strlen( str );
         if( maxUsageLen < len ) {
             maxUsageLen = len;
             strcpy( maxusgbuff, str );
         }
         if( ufp != NULL ) {
-            emitQuotedString( ufp, str, optFlag.line_term, optFlag.list_sep );
+            emitQuotedString( ufp, str, paramFlags.line_term, paramFlags.list_sep );
             fprintf( ufp, "\n" );
         }
     }
@@ -2796,7 +2971,7 @@ static void emitUsageHQNX( void )
     const char *str;
 
     if( mfp != NULL ) {
-        str = getLangData( outputdata, optFlag.lang );
+        str = getLangData( outputdata, paramFlags.lang );
         fprintf( mfp, "%s\n", str );
     }
 
@@ -2999,7 +3174,7 @@ static void outputUsageChain( OPTION **oo, size_t i, size_t count, process_line_
 
 static bool checkUsageLength( size_t len )
 {
-    return( ( len / langMaxChar[optFlag.lang] ) > CONSOLE_WIDTH );
+    return( ( len / langMaxChar[paramFlags.lang] ) > CONSOLE_WIDTH );
 }
 
 static void processUsage( process_line_fn *process_line, USAGEGROUP *ugr )
@@ -3044,7 +3219,7 @@ static void processUsage( process_line_fn *process_line, USAGEGROUP *ugr )
             oo[i]->usage_used = false;
         }
 
-        if( ugr != usageGroupList ) {
+        if( ugr != usageGroupList.head ) {
             outputUsageGroupHeader( ugr->lang_usage, process_line );
         }
         for( i = 0; i < count; ++i ) {
@@ -3067,13 +3242,13 @@ static void outputUsage( process_line_fn *process_line )
 {
     USAGEGROUP  *ugr;
 
-    outputUsageCommon( titleList, process_line );
+    outputUsageCommon( titleList.head, process_line );
 
-    for( ugr = usageGroupList; ugr != NULL; ugr = ugr->next ) {
+    for( ugr = usageGroupList.head; ugr != NULL; ugr = ugr->next ) {
         processUsage( process_line, ugr );
     }
 
-    outputUsageCommon( footerList, process_line );
+    outputUsageCommon( footerList.head, process_line );
 }
 
 static void outputUsageH( void )
@@ -3086,9 +3261,9 @@ static void emitUsageB( void )
     size_t len;
     const char *str;
 
-    str = getLangData( outputdata, optFlag.lang );
-    if( optFlag.lang == LANG_RLE_JAPANESE ) {
-        if( !optFlag.out_utf8 ) {
+    str = getLangData( outputdata, paramFlags.lang );
+    if( paramFlags.lang == LANG_RLE_JAPANESE ) {
+        if( !paramFlags.out_utf8 ) {
             utf8_to_cp932( str, tmpbuff );
             str = tmpbuff;
         }
@@ -3106,9 +3281,9 @@ static void dumpInternational( void )
     char        fname[16];
     LocaleUsage usage_header;
 
-    if( optFlag.international ) {
-        for( optFlag.lang = LANG_RLE_FIRST_INTERNATIONAL; optFlag.lang < LANG_RLE_MAX; optFlag.lang++ ) {
-            sprintf( fname, "usage%02u." LOCALE_DATA_EXT, optFlag.lang );
+    if( paramFlags.international ) {
+        for( paramFlags.lang = LANG_RLE_FIRST_INTERNATIONAL; paramFlags.lang < LANG_RLE_MAX; paramFlags.lang++ ) {
+            sprintf( fname, "usage%02u." LOCALE_DATA_EXT, paramFlags.lang );
             bfp = fopen( fname, "wb" );
             if( bfp == NULL ) {
                 fail( "cannot open international file for write\n" );
@@ -3144,9 +3319,41 @@ static void closeFiles( void )
     }
 }
 
+static void finiDataOptions( void )
+{
+    OPTION      *o;
+
+    while( (o = optionList) != NULL ) {
+        optionList = optionList->next;
+        freeLangUsage( o->lang_usage );
+        if( o->check_func != NULL ) {
+            free( o->check_func );
+        }
+        if( o->special_func != NULL ) {
+            free( o->special_func );
+        }
+        if( o->immediate_func != NULL ) {
+            free( o->immediate_func );
+        }
+        if( o->usage_argid != NULL ) {
+            free( o->usage_argid );
+        }
+        if( o->field_name != NULL ) {
+            free( o->field_name );
+        }
+        if( o->value_field_name != NULL ) {
+            free( o->value_field_name );
+        }
+        if( o->code != NULL ) {
+            free( o->code );
+        }
+        free( o );
+    }
+}
+
 static void initUTF8( void )
 {
-    if( !optFlag.out_utf8 ) {
+    if( !paramFlags.out_utf8 ) {
         qsort( cvt_table_932, sizeof( cvt_table_932 ) / sizeof( cvt_table_932[0] ), sizeof( cvt_table_932[0] ), (comp_fn)compare_utf8 );
     }
 }
@@ -3169,12 +3376,10 @@ static char *ReadIndirectFile( char *name )
         fread( str, 1, len, fp );
         str[len] = '\0';
         fclose( fp );
-        // go through characters changing \r, \n etc into ' '
+        /*
+         * go through characters changing \r, \n etc into ' '
+         */
         for( ; (ch = *str) != '\0'; str++ ) {
-            if( ch == 0x1A ) {      // if end of file
-                *str = '\0';        // - mark end of str
-                break;
-            }
             if( ch != ' '
               && myisspace( ch ) ) {
                 *str = ' ';
@@ -3213,42 +3418,42 @@ static char *getFileName( char *str, char *name )
     return( str );
 }
 
-static char *ProcessOption( char *s, char *option_start )
-/*******************************************************/
+static char *ProcessParam( char *s, char *option_start )
+/******************************************************/
 {
     switch( *s++ ) {
     case 'c':
-        optFlag.list_sep = ",";
+        paramFlags.list_sep = ",";
         return( s );
     case 'i':
-        optFlag.international = true;
+        paramFlags.international = true;
         return( s );
     case 'l':
         if( *s++ == '=' ) {
-            optFlag.lang = strtol( s, &s, 10 );
+            paramFlags.lang = strtol( s, &s, 10 );
             return( s );
         }
         break;
     case 'n':
         if( *s == 'n' ) {
             s++;
-            optFlag.line_term = "\\n";
+            paramFlags.line_term = "\\n";
         } else {
-            optFlag.line_term = "\\0";
+            paramFlags.line_term = "\\0";
         }
         return( s );
     case 'p':
-        optFlag.parser_only = true;
+        paramFlags.parser_only = true;
         return( s );
     case 'q':
-        optFlag.quiet = true;
+        paramFlags.quiet = true;
         return( s );
     case 'r':
         if( *s++ == 'c'
           && *s++ == '=' ) {
-            optFlag.rc = true;
+            paramFlags.rc = true;
             SKIP_SPACES( s );
-            optFlag.rc_macro = option_start;
+            paramFlags.rc_macro = option_start;
             while( *s != '\0' ) {
                 if( myisspace( *s ) ) {
                     s++;
@@ -3261,7 +3466,7 @@ static char *ProcessOption( char *s, char *option_start )
         }
         break;
     case 't':
-        optFlag.report_missing_data = true;
+        paramFlags.report_missing_data = true;
         return( s );
     case 'u':
         if( *s == '=' ) {
@@ -3274,7 +3479,7 @@ static char *ProcessOption( char *s, char *option_start )
         } else if( *s++ == 't'
           && *s++ == 'f'
           && *s++ == '8' ) {
-            optFlag.out_utf8 = true;
+            paramFlags.out_utf8 = true;
             return( s );
         }
         break;
@@ -3282,7 +3487,7 @@ static char *ProcessOption( char *s, char *option_start )
         if( *s == '=' ) {
             s++;
             SKIP_SPACES( s );
-            optFlag.sid = option_start;
+            paramFlags.sid = option_start;
             while( *s != '\0' ) {
                 if( myisspace( *s ) ) {
                     s++;
@@ -3299,15 +3504,16 @@ static char *ProcessOption( char *s, char *option_start )
     return( NULL );
 }
 
-static void initOptions( void )
+static void initParams( void )
 /*****************************/
 {
-     optFlag.line_term = "";
-     optFlag.list_sep = "";
-     optFlag.sid = "";
+    paramFlags.rc_macro = NULL;
+    paramFlags.line_term = "";
+    paramFlags.list_sep = "";
+    paramFlags.sid = "";
 }
 
-static bool ProcessOptions( char *str )
+static bool ProcessParams( char *str )
 /*************************************/
 {
     char        name[PATH_MAX];
@@ -3332,7 +3538,7 @@ static bool ProcessOptions( char *str )
             continue;
         }
         if( *str == '-' ) {
-            str = ProcessOption( str + 1, str );
+            str = ProcessParam( str + 1, str );
             if( str == NULL ) {
                 rc = true;
                 break;
@@ -3394,6 +3600,12 @@ static bool ProcessOptions( char *str )
     return( rc );
 }
 
+static void finiParams( void )
+/****************************/
+{
+}
+
+
 #define NUM_FILES   5
 
 int main( int argc, char **argv )
@@ -3404,9 +3616,10 @@ int main( int argc, char **argv )
     setlocale( LC_ALL, "C" );
     ok = true;
     initTargets();
-    initOptions();
+    initLists();
+    initParams();
     for( i = 1; i < argc; i++ ) {
-        if( ProcessOptions( argv[i] ) ) {
+        if( ProcessParams( argv[i] ) ) {
             ok = false;
             break;
         }
@@ -3431,7 +3644,7 @@ int main( int argc, char **argv )
             outputInit();
             startParserH();
             outputFN_PROCESS();
-            if( !optFlag.parser_only ) {
+            if( !paramFlags.parser_only ) {
                 outputFN_INIT();
                 outputFN_FINI();
             }
@@ -3440,8 +3653,12 @@ int main( int argc, char **argv )
             dumpInternational();
             outputFini();
         }
+        finiDataOptions();
+        finiUsageGroups();
     }
     closeFiles();
+    finiParams();
+    finiLists();
     finiTargets();
     if( ok )
         return( EXIT_SUCCESS );

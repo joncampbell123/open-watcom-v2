@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -36,19 +37,15 @@
 #include "resfmt.h"
 
 typedef struct MResResourceHeader {
-    ResNameOrOrdinal       *Type;
-    ResNameOrOrdinal       *Name;
-    uint_16                 MemoryFlags;
-    uint_32                 Size;
-    uint_16                 LanguageId;
-    uint_32                 Version;
-    uint_32                 DataVersion;
-    uint_32                 Characteristics;
+    ResNameOrOrdinal    *Type;
+    ResNameOrOrdinal    *Name;
+    uint_32             Size;
+    ResMemFlags         res_flags;
+    uint_16             LanguageId;
+    uint_32             Version;
+    uint_32             DataVersion;
+    uint_32             Characteristics;
+    uint_32             HdrSize;
 } MResResourceHeader;
-
-typedef struct M32ResResourceHeader {
-    MResResourceHeader      *head16;
-    uint_32                 Size;
-} M32ResResourceHeader;
 
 #endif

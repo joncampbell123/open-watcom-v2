@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -125,6 +125,7 @@ static char             Name2[MAX_DRIVE + MAX_PATH + MAX_NAME + MAX_EXT + 2];
 static char             Name3[MAX_DRIVE + MAX_PATH + MAX_NAME + MAX_EXT + 2];
 static int              FilesCopied;
 static int              DirectoriesMade;
+NO_RETURN( static void NoMemory( void ) );
 
 static const char * const HelpText[] = {
     "",
@@ -218,6 +219,29 @@ static const char * const Day[] = {
 /* UTILITIES                                                              */
 /**************************************************************************/
 
+static void MemInit( void )
+{
+}
+
+static void MemFini( void )
+{
+}
+
+void *MemAlloc( size_t size )
+{
+    return( malloc( size ) );
+}
+
+char *MemStrdup( const char *str )
+{
+    return( strdup( str ) );
+}
+
+void MemFree( void *ptr )
+{
+    free( ptr );
+}
+
 static void Help( void )
 {
     const char  * const *txts;
@@ -295,7 +319,13 @@ void StartupErr( const char *err )
 {
     Error( err );
     exit( 2 );
-    // never return
+    /* never return */
+}
+
+static void NoMemory( void )
+{
+    StartupErr( "Insufficient memory" );
+    /* never return */
 }
 
 void RestoreHandlers( void )
@@ -306,20 +336,12 @@ void GrabHandlers( void )
 {
 }
 
-static void *DbgAlloc( size_t size )
-{
-    return( malloc( size ) );
-}
-
-static void DbgFree( void *chunk )
-{
-    free( chunk );
-}
 #if 0
 static void FreeRing( void )
 {
 }
 #endif
+
 static error_handle TransSetErr( error_handle errh )
 {
     ErrorStatus = errh;
@@ -331,15 +353,6 @@ static error_handle SysSetLclErr( sys_error err )
     return( TransSetErr( StashErrCode( err, OP_LOCAL ) ) );
 }
 
-static char *MyStrDup( const char *str ) {
-
-    char *new;
-
-    new = DbgAlloc( strlen( str ) + 1 );
-    strcpy( new, str );
-    return( new );
-}
-
 static char *Copy( const void *s, void *d, unsigned len ) {
 
     char        *dst = d;
@@ -347,15 +360,6 @@ static char *Copy( const void *s, void *d, unsigned len ) {
 
     while( len-- > 0 ) {
         *dst++ = *src++;
-    }
-    return( dst );
-}
-
-static char *Fill( void *d, int len, char filler ) {
-
-    char *dst = d;
-    while( len-- > 0 ) {
-        *dst++ = filler;
     }
     return( dst );
 }
@@ -638,7 +642,7 @@ static const char    *_FileParse( const char *name, file_parse *file )
     char        ch;
     int         extlen;
 
-    Fill( file, sizeof( file_parse ), 0 );
+    memset( file, 0, sizeof( file_parse ) );
     dosname = name;
     if( dosname[1] == ':' ) {
         file->drive[0] = DRIVECHAR( *dosname );
@@ -692,10 +696,22 @@ static const char    *_FileParse( const char *name, file_parse *file )
         }
     }
     *p1 = NULLCHAR;
-//    strupr( file->drive );
-//    strupr( file->path );
-//    strupr( file->name );
-//    strupr( file->ext );
+//    p1 = file->drive;
+//    while( (c = *(unsigned char *)p1) != '\0' ) {
+//        *p1++ = toupper( c );
+//    }
+//    p1 = file->path;
+//    while( (c = *(unsigned char *)p1) != '\0' ) {
+//        *p1++ = toupper( c );
+//    }
+//    p1 = file->name;
+//    while( (c = *(unsigned char *)p1) != '\0' ) {
+//        *p1++ = toupper( c );
+//    }
+//    p1 = file->ext;
+//    while( (c = *(unsigned char *)p1) != '\0' ) {
+//        *p1++ = toupper( c );
+//    }
     return( dosname );
 }
 
@@ -896,12 +912,16 @@ static void AddCopySpec( const char *src, const char *dst, object_loc src_loc, o
 {
     COPYPTR     new;
 
-    new = DbgAlloc( sizeof( COPYSPEC ) );
+    new = MemAlloc( sizeof( COPYSPEC ) );
+    if( new == NULL ) {
+        NoMemory();
+        /* never return */
+    }
     new->next = CopySpecs;
     CopySpecs = new;
-    new->src = MyStrDup( src );
+    new->src = MemStrdup( src );
     new->src_loc = src_loc;
-    new->dst = MyStrDup( dst );
+    new->dst = MemStrdup( dst );
     new->dst_loc = dst_loc;
 }
 
@@ -914,9 +934,9 @@ static void FreeCopySpec( COPYPTR junk )
         owner = &((*owner)->next);
     }
     *owner = junk->next;
-    DbgFree( junk->src );
-    DbgFree( junk->dst );
-    DbgFree( junk );
+    MemFree( junk->src );
+    MemFree( junk->dst );
+    MemFree( junk );
 }
 
 static bool HasWildCards( const char *src )
@@ -1010,8 +1030,6 @@ static error_handle DoCopy( const char *src_name, const char *dst_name, object_l
             return( errh );
         }
         if( write_len != read_len ) {
-            if( ( write_len == ( read_len - 1 ) ) && ( Buff[write_len] == 0x1A ) )
-                break;
             FiniCopy( fh_src, src_name, src_loc, fh_dst, dst_name, dst_loc );
             return( StashErrCode( IO_DISK_FULL, OP_LOCAL ) );
         }
@@ -1274,7 +1292,7 @@ static void ProcType( int argc, char **argv )
 static  void    DirClosef( dir_handle *dh )
 {
     _FindClose( dh->location, &dh->info, sizeof( dh->info ) );
-    DbgFree( dh );
+    MemFree( dh );
 }
 
 static dir_handle      *DirOpenf( const char *fspec, object_loc fnloc )
@@ -1283,48 +1301,48 @@ static dir_handle      *DirOpenf( const char *fspec, object_loc fnloc )
     error_handle    errh;
     file_parse      parse;
 
-    dh = (dir_handle *)DbgAlloc( sizeof( dir_handle ) );
+    dh = MemAlloc( sizeof( *dh ) );
     if( dh == NULL ) {
+        NoMemory();
+        /* never return */
+    }
+    dh->status = RFX_OK;
+    dh->location = fnloc;
+    fspec = _FileParse( fspec, &parse );
+    if( parse.name[0] == NULLCHAR ) {
+        parse.name[0] = '*';
+        parse.name[1] = NULLCHAR;
+        if( parse.ext[0] == NULLCHAR ) {
+            parse.ext[0] = '.';
+            parse.ext[1] = '*';
+            parse.ext[2] = NULLCHAR;
+            if( !parse.slash && parse.path[0] != NULLCHAR ) {
+                CopyStr( "\\", parse.path + strlen( parse.path ) );
+            }
+        }
+    } else if( IsDir( fspec, fnloc ) ) {
+        CopyStr( "\\", CopyStr( parse.ext, CopyStr( parse.name, parse.path + strlen( parse.path ) ) ) );
+        parse.name[0] = '*';
+        parse.name[1] = NULLCHAR;
+        parse.ext[0] = '.';
+        parse.ext[1] = '*';
+        parse.ext[2] = NULLCHAR;
+    } else if( parse.ext[0] == NULLCHAR ) {
+        parse.ext[0] = '.';
+        parse.ext[1] = '*';
+        parse.ext[2] = NULLCHAR;
+    }
+    Squish( &parse, dh->path );
+    if( GetFreeSpace( dh, fnloc ) ) {
+        errh = _FindFirst( dh->path, dh->location, IO_SUBDIRECTORY, &dh->info, sizeof( dh->info ) );
+        if( errh == 0 ) {
+            return( dh );
+        }
         SysSetLclErr( IO_FIND_ERROR );
     } else {
-        dh->status = RFX_OK;
-        dh->location = fnloc;
-        fspec = _FileParse( fspec, &parse );
-        if( parse.name[0] == NULLCHAR ) {
-            parse.name[0] = '*';
-            parse.name[1] = NULLCHAR;
-            if( parse.ext[0] == NULLCHAR ) {
-                parse.ext[0] = '.';
-                parse.ext[1] = '*';
-                parse.ext[2] = NULLCHAR;
-                if( !parse.slash && parse.path[0] != NULLCHAR ) {
-                    CopyStr( "\\", parse.path + strlen( parse.path ) );
-                }
-            }
-        } else if( IsDir( fspec, fnloc ) ) {
-            CopyStr( "\\", CopyStr( parse.ext, CopyStr( parse.name, parse.path + strlen( parse.path ) ) ) );
-            parse.name[0] = '*';
-            parse.name[1] = NULLCHAR;
-            parse.ext[0] = '.';
-            parse.ext[1] = '*';
-            parse.ext[2] = NULLCHAR;
-        } else if( parse.ext[0] == NULLCHAR ) {
-            parse.ext[0] = '.';
-            parse.ext[1] = '*';
-            parse.ext[2] = NULLCHAR;
-        }
-        Squish( &parse, dh->path );
-        if( GetFreeSpace( dh, fnloc ) ) {
-            errh = _FindFirst( dh->path, dh->location, IO_SUBDIRECTORY, &dh->info, sizeof( dh->info ) );
-            if( errh == 0 ) {
-                return( dh );
-            }
-            SysSetLclErr( IO_FIND_ERROR );
-        } else {
-            SysSetLclErr( IO_BAD_DRIVE );
-        }
-        DirClosef( dh );
+        SysSetLclErr( IO_BAD_DRIVE );
     }
+    DirClosef( dh );
     return( NULL );
 }
 
@@ -1336,7 +1354,7 @@ static void     FormatDTA( char *buff, const rfx_find *info, bool wide )
     unsigned int        time;
     unsigned int        hour;
 
-    Fill( buff, 39, ' ' );
+    memset( buff, ' ', 39 );
     buff[39] = NULLCHAR;
     if( info->attr & IO_SUBDIRECTORY ) {
         *CopyStr( info->name, buff ) = ' ';
@@ -1745,10 +1763,15 @@ static void CheckError( void )
     }
 }
 
-static int ProcessArgv( int argc, char **argv, const char *cmd ) {
+static int ProcessArgv( int argc, char **argv, const char *cmd )
+{
+    char            *p;
+    int             c;
 
     ErrorStatus = 0;
-    strlwr( argv[0] );
+    p = argv[0];
+    while( (c = *(unsigned char *)p) != '\0' )
+        *p++ = tolower( c );
     if( strcmp( argv[0], "copy" ) == 0 ) {
         ProcCopy( argc - 1, argv + 1 );
     } else if( strcmp( argv[0], "dir" ) == 0 ) {
@@ -1947,31 +1970,43 @@ static void Interactive( void )
 
 int main( int argc, char **argv )
 {
+    int     rc;
+
+    rc = 0;
+    MemInit();
     InitDbgSwitches();
-    TxtBuff = DbgAlloc( 512 );
+    TxtBuff = MemAlloc( 512 );
+    if( TxtBuff == NULL ) {
+        NoMemory();
+        /* never return */
+    }
     SysFileInit();
     if( argc < 2 || argv[1][0] == '?' ) {
         Usage();
-        return( 1 );
-    }
-    PathInit();
-    InitTrap( argv[1] );
-    if( !InitFileSupp() || !InitRFXSupp() ) {
-        FiniTrap();
-        StartupErr( "no remote file system support" );
-    }
-    InitInt();
-    CopySpecs = NULL;
-    MaxOnLine = 0;
-    DefaultLocation = LOC_LOCAL;
-    if( argc == 2 ) {
-        Interactive();
+        rc = 1;
     } else {
-        ErrorStatus = 0;
-        ProcessArgv( argc - 2, argv + 2, NULL );
-        CheckError();
+        PathInit();
+        InitTrap( argv[1] );
+        if( !InitFileSupp() || !InitRFXSupp() ) {
+            Error( "no remote file system support" );
+            rc = 2;
+        } else {
+            InitInt();
+            CopySpecs = NULL;
+            MaxOnLine = 0;
+            DefaultLocation = LOC_LOCAL;
+            if( argc == 2 ) {
+                Interactive();
+            } else {
+                ErrorStatus = 0;
+                ProcessArgv( argc - 2, argv + 2, NULL );
+                CheckError();
+            }
+            FiniInt();
+        }
+        FiniTrap();
+        PathFini();
     }
-    FiniTrap();
-    FiniInt();
-    return( 0 );
+    MemFini();
+    return( rc );
 }

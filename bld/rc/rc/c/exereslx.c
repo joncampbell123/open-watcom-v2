@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -49,7 +49,7 @@ static int CompareLXResIdName( const void *e1, const void *e2 )
 {
 #define LXE(x) ((const LXResEntry *)(x))
     if( LXE( e1 )->resource.type_id == LXE( e2 )->resource.type_id ) {
-        return( LXE( e1 )->resource.name_id - LXE( e2 )->resource.name_id );
+        return( LXE( e1 )->resource.res_id - LXE( e2 )->resource.res_id );
     } else {
         return( LXE( e1 )->resource.type_id - LXE( e2 )->resource.type_id );
     }
@@ -77,14 +77,7 @@ static bool addRes( LXResTable *res, WResDirWindow wind )
      */
     res->res_count++;
     if( sizeof( LXResEntry ) * res->res_count > res->table_size ) {
-        LXResEntry      *curr_table;
-
-        curr_table = res->resources;
-        res->resources = RCREALLOC( res->resources, ( res->res_count + 32 ) * sizeof( LXResEntry ) );
-        if( res->resources == NULL ) {
-            res->resources = curr_table;
-            return( true );
-        }
+        res->resources = MemReallocSafe( res->resources, ( res->res_count + 32 ) * sizeof( LXResEntry ) );
     }
 
     resinfo  = WResGetResInfo( wind );
@@ -95,7 +88,7 @@ static bool addRes( LXResTable *res, WResDirWindow wind )
     new_entry = &res->resources[res->res_count - 1];
 
     new_entry->wind = wind;
-    new_entry->mem_flags = langinfo->MemoryFlags;
+    new_entry->mem_flags = langinfo->res_flags;
     new_entry->assigned = false;
     new_entry->resource.res_size = langinfo->Length;
 
@@ -103,7 +96,7 @@ static bool addRes( LXResTable *res, WResDirWindow wind )
     assert( !typeinfo->TypeName.IsName );
 
     new_entry->resource.type_id = typeinfo->TypeName.ID.Num;
-    new_entry->resource.name_id = resinfo->ResName.ID.Num;
+    new_entry->resource.res_id = resinfo->ResName.ID.Num;
     new_entry->resource.object = 0;
     new_entry->resource.offset = langinfo->Offset;
 
@@ -198,8 +191,8 @@ RcStatus WriteLXResourceObjects( ExeFileInfo *dst, ResFileInfo *res )
             object = &dst->u.LXInfo.Objects[dst->u.LXInfo.FirstResObj + obj_index];
             object->size     = 0;
             object->addr     = 0;
-            object->flags    = OBJ_READABLE | OBJ_RESOURCE | OBJ_DISCARDABLE
-                             | OBJ_BIG | OBJ_SHARABLE;
+            object->flags    = OSF_OBJ_READABLE | OSF_OBJ_RESOURCE | OSF_OBJ_DISCARDABLE
+                             | OSF_OBJ_BIG | OSF_OBJ_SHARABLE;
             object->mapidx   = page_index + 1;
             object->mapsize  = 1;
             object->reserved = 0;
@@ -308,7 +301,7 @@ bool BuildLXResourceObjects( ExeFileInfo *dst, ResFileInfo *resfiles,
         }
 
 #ifdef DEVBUILD
-        printf( "    %d.%d (%d bytes)\n", entry->resource.name_id,
+        printf( "    %d.%d (%d bytes)\n", entry->resource.res_id,
             entry->resource.type_id, entry->resource.res_size );
 #endif
         /*

@@ -4,10 +4,6 @@ gui_nofpu = 1
 
 gui_nodoslfn = 1
 
-!ifndef bootstrap
-gui_trmem = 1
-!endif
-
 !ifndef gui_autodepends
 gui_autodepends = .AUTODEPEND
 !endif
@@ -23,12 +19,10 @@ additional_clean = *.grh
 !include $(gui_dir)/client.mif
 !include $(wpi_dir)/client.mif
 
-!include trmem.mif
-
 #
 # cflags
 #
-.c: ../c;../../c;$(hlpview_dir)/c;$(trmem_dir);$(commonui_dir)/c
+.c: ../c;../../c;$(hlpview_dir)/c;$(commonui_dir)/c
 
 inc_dirs = $(cli_gui_inc_dirs) $(cli_gui_inc_dirs_internal) $(cli_hlpview_inc_dirs) &
     $(cli_wpi_inc_dirs) $(cli_wres_inc_dirs) -I"$(commonui_dir)/h"
@@ -46,11 +40,6 @@ extra_c_flags_i86 = -zu
 extra_c_flags_nov = -4s
 extra_c_flags_win386 = -zw
 extra_c_flags_wini86 = -zW
-
-!ifndef bootstrap
-# memory tracker cover routines
-extra_c_flags_f_guimem = $(trmem_cover_cflags)
-!endif
 
 # explicit rules
 #################
@@ -97,9 +86,7 @@ common_objs = &
     guiclass.obj   &
     guimenub.obj   &
     guitoolb.obj
-mem_objs = &
-    guimem.obj     &
-    $(trmem_objs)
+mem_objs = guimemd.obj
 libtarg_objs = $(common_objs) $(mem_objs) $(sysobjs)
 libtarg_libs = $(cli_wpi_libs)
 !include libtarg.mif

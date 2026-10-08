@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -67,7 +67,7 @@ bool WInsertNew( WMenuEditInfo *einfo )
 {
     bool        ret;
 
-    ret = FALSE;
+    ret = false;
 
     if( einfo != NULL && einfo->edit_dlg != (HWND)NULL ) {
         if( IsDlgButtonChecked( einfo->edit_dlg, IDM_MENUEDPOPUP ) ) {
@@ -123,7 +123,7 @@ bool WInsertMenuEntry( WMenuEditInfo *einfo, WMenuEntry *new, bool reset_lbox )
 
     entry = NULL;
     parent = NULL;
-    is_popup = FALSE;
+    is_popup = false;
 
     ok = (einfo != NULL && einfo->edit_dlg != NULL && new != NULL);
 
@@ -132,7 +132,7 @@ bool WInsertMenuEntry( WMenuEditInfo *einfo, WMenuEntry *new, bool reset_lbox )
         insert_subitems = insert_before || einfo->insert_subitems;
         new_kids = WCountMenuChildren( new->child );
         if( new_kids == 0 ) {
-            reset_lbox = FALSE;
+            reset_lbox = false;
         }
         lbox = GetDlgItem( einfo->edit_dlg, IDM_MENUEDLIST );
         ok = (lbox != NULL);
@@ -156,7 +156,7 @@ bool WInsertMenuEntry( WMenuEditInfo *einfo, WMenuEntry *new, bool reset_lbox )
         if( entry != NULL ) {
             pos += 1;
             if( entry->item->IsPopup ) {
-                insert_subitems = TRUE;
+                insert_subitems = true;
             }
             if( !insert_subitems ) {
                 pos += WCountMenuChildren( entry->child );
@@ -242,7 +242,7 @@ bool WAddEditWinLBoxEntry( HWND lbox, WMenuEntry *entry, LRESULT pos )
             }
             tlen = strlen( text ) + 1;
         }
-        lbtext = (char *)WRMemAlloc( depth * DEPTH_MULT + tlen + 14 );
+        lbtext = MemAlloc( depth * DEPTH_MULT + tlen + 14 );
         ok = (lbtext != NULL);
     }
 
@@ -265,11 +265,11 @@ bool WAddEditWinLBoxEntry( HWND lbox, WMenuEntry *entry, LRESULT pos )
     }
 
     if( lbtext1 != NULL ) {
-        WRMemFree( lbtext1 );
+        MemFree( lbtext1 );
     }
 
     if( lbtext != NULL ) {
-        WRMemFree( lbtext );
+        MemFree( lbtext );
     }
 
     return( ok );
@@ -295,7 +295,7 @@ WMenuEntry *WCreateNewMenuEntry( WMenuEditInfo *einfo, bool popup, bool sep )
     WGetEditWindowFlags( einfo->edit_dlg, &flags );
     flags &= ~(MENU_POPUP | MENU_SEPARATOR);
 
-    new = (WMenuEntry *)WRMemAlloc( sizeof( WMenuEntry ) );
+    new = MemAlloc( sizeof( WMenuEntry ) );
 
     if( new != NULL ) {
         memset( new, 0, sizeof( WMenuEntry ) );
@@ -305,7 +305,7 @@ WMenuEntry *WCreateNewMenuEntry( WMenuEditInfo *einfo, bool popup, bool sep )
             new->item->IsPopup = TRUE;
             new->item->Item.Popup.ItemFlags = flags | MENU_POPUP;
             if( text != NULL ) {
-                new->item->Item.Popup.ItemText = WStrDup( text );
+                new->item->Item.Popup.ItemText = WStrdup( text );
             } else {
                 new->item->Item.Popup.ItemText = AllocRCString( W_MENUPOPUP );
             }
@@ -316,7 +316,7 @@ WMenuEntry *WCreateNewMenuEntry( WMenuEditInfo *einfo, bool popup, bool sep )
                 new->item->Item.Normal.ItemID = id;
                 new->item->Item.Normal.ItemFlags = flags;
                 if( text != NULL ) {
-                    new->item->Item.Normal.ItemText = WStrDup( text );
+                    new->item->Item.Normal.ItemText = WStrdup( text );
                 } else {
                     new->item->Item.Normal.ItemText = AllocRCString( W_MENUITEM );
                 }
@@ -328,12 +328,12 @@ WMenuEntry *WCreateNewMenuEntry( WMenuEditInfo *einfo, bool popup, bool sep )
         new->symbol = symbol;
     } else {
         if( symbol != NULL ) {
-            WRMemFree( symbol );
+            MemFree( symbol );
         }
     }
 
     if( text != NULL ) {
-        WRMemFree( text );
+        MemFree( text );
     }
 
     return( new );

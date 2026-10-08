@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -69,8 +69,8 @@ void InitWINResTable( ExeFileInfo *dst, ResFileInfo *res )
         str->StringList = NULL;
 
     } else {
-        resdir->NumTypes = WResGetNumTypes( dir );
-        resdir->NumResources = WResGetNumResources( dir );
+        resdir->NumTypes = dir->NumTypes;
+        resdir->NumResources = dir->NumResources;
         /*
          * the 2 uint_16 are the resource shift count and the type 0 record
          */
@@ -80,7 +80,7 @@ void InitWINResTable( ExeFileInfo *dst, ResFileInfo *res )
         resdir->Head = NULL;
         resdir->Tail = NULL;
 
-        StringBlockBuild( str, dir, false );
+        StringIDNamesBlockBuild( str, dir, false );
     }
 } /* InitWINResTable */
 
@@ -101,24 +101,24 @@ uint_32 ComputeWINResourceSize( WResDir dir )
 } /* ComputeWINResourceSize */
 
 
-static uint_16 findResOrTypeName( ResTable *restab, WResID *name )
-/****************************************************************/
+static uint_16 findResIdName( ResTable *restab, WResID *id )
+/**********************************************************/
 {
-    uint_16     name_id;
+    uint_16     nameid;
     int_32      str_offset;
 
-    name_id = 0;
-    if( name->IsName ) {
-        str_offset = StringBlockFind( &restab->Str, &name->ID.Name );
+    nameid = 0;
+    if( id->IsName ) {
+        str_offset = StringBlockFind( &restab->Str, &id->ID.Name );
         if( str_offset != -1 ) {
-            name_id = str_offset + restab->Dir.TableSize;
+            nameid = str_offset + restab->Dir.TableSize;
         }
     } else {
-        name_id = name->ID.Num | 0x8000;
+        nameid = id->ID.Num | 0x8000;
     }
 
-    return( name_id );
-} /* findResOrTypeName */
+    return( nameid );
+} /* findResIdName */
 
 static FullTypeRecord *addExeTypeRecord( ResTable *restab,
                             WResTypeInfo *typeinfo )
@@ -126,11 +126,11 @@ static FullTypeRecord *addExeTypeRecord( ResTable *restab,
 {
     FullTypeRecord      *exe_type;
 
-    exe_type = RESALLOC( sizeof( FullTypeRecord ) );
+    exe_type = MemAllocSafe( sizeof( FullTypeRecord ) );
 
     exe_type->Info.reserved = 0;
     exe_type->Info.num_resources = typeinfo->NumResources;
-    exe_type->Info.type = findResOrTypeName( restab, &(typeinfo->TypeName) );
+    exe_type->Info.type_id = findResIdName( restab, &(typeinfo->TypeName) );
     exe_type->Head = NULL;
     exe_type->Tail = NULL;
     exe_type->Next = NULL;
@@ -152,22 +152,22 @@ static FullTypeRecord *findExeTypeRecord( ResTable *restab,
 
     for( exe_type = restab->Dir.Head; exe_type != NULL; exe_type = exe_type->Next ) {
         if( typeinfo->TypeName.IsName
-          && (exe_type->Info.type & 0x8000) == 0 ) {
+          && (exe_type->Info.type_id & 0x8000) == 0 ) {
             /*
              * if they are both names
              */
-            exe_type_name = (StringItem16 *)((char *)restab->Str.StringBlock
-                               + (exe_type->Info.type - restab->Dir.TableSize));
+            exe_type_name = (StringItem16 *)(restab->Str.StringBlock
+                               + (exe_type->Info.type_id - restab->Dir.TableSize));
             if( exe_type_name->NumChars == typeinfo->TypeName.ID.Name.NumChars
               && strnicmp( exe_type_name->Name, typeinfo->TypeName.ID.Name.Name, exe_type_name->NumChars ) == 0 ) {
                 break;
             }
         } else if( !(typeinfo->TypeName.IsName)
-          && (exe_type->Info.type & 0x8000) ) {
+          && (exe_type->Info.type_id & 0x8000) ) {
             /*
              * if they are both numbers
              */
-            if( typeinfo->TypeName.ID.Num == (exe_type->Info.type & ~0x8000) ) {
+            if( typeinfo->TypeName.ID.Num == (exe_type->Info.type_id & ~0x8000) ) {
                 break;
             }
         }
@@ -184,19 +184,19 @@ static FullTypeRecord *findExeTypeRecord( ResTable *restab,
 } /* findExeTypeRecord */
 
 static void addExeResRecord( ResTable *restab, FullTypeRecord *type,
-                            WResID *name, uint_16 mem_flags,
+                            WResID *res_id, uint_16 mem_flags,
                             uint_16 exe_offset, uint_16 exe_length )
 /******************************************************************/
 {
     FullResourceRecord          *exe_res;
 
-    exe_res = RESALLOC( sizeof( FullResourceRecord ) );
+    exe_res = MemAllocSafe( sizeof( FullResourceRecord ) );
 
     exe_res->Info.offset = exe_offset;
     exe_res->Info.length = exe_length;
     exe_res->Info.flags = mem_flags;
     exe_res->Info.reserved = 0;
-    exe_res->Info.name = findResOrTypeName( restab, name );
+    exe_res->Info.res_id = findResIdName( restab, res_id );
     exe_res->Next = NULL;
     exe_res->Prev = NULL;
     /*
@@ -250,18 +250,18 @@ static RcStatus copyOneResource( ResTable *restab, FullTypeRecord *type,
     }
 
     if( ret == RS_OK ) {
-        addExeResRecord( restab, type, &(resinfo->ResName), langinfo->MemoryFlags,
+        addExeResRecord( restab, type, &(resinfo->ResName), langinfo->res_flags,
                 dst_offset >> shift_count, (langinfo->Length + align_amount) >> shift_count );
     }
 
     return( ret );
 } /* copyOneResource */
 
-RcStatus CopyWINResources( ExeFileInfo *dst, ResFileInfo *res, uint_16 sect2mask, uint_16 sect2bits, bool sect2 )
-/****************************************************************************************************************
+RcStatus CopyWINResources( ExeFileInfo *dst, ResFileInfo *res, ResMemFlags res2mask, ResMemFlags res2bits, bool sect2 )
+/**********************************************************************************************************************
  * Note: sect2 must be either 1 (do section 2) or 0 (do section 1)
  * CopyWINResources should be called twice, once with sect2 false, and once with
- * it true. The values of sect2mask and sect2bits should be the same for both
+ * it true. The values of res2mask and res2bits should be the same for both
  * calls. The resource table for the temporary file will not be properly
  * filled in until after the second call
  */
@@ -295,7 +295,7 @@ RcStatus CopyWINResources( ExeFileInfo *dst, ResFileInfo *res, uint_16 sect2mask
          * if the bits are equal and this is section 2   --> copy segment
          * otherwise                                     --> do nothing
          */
-        if( ARE_BITS_EQUAL( sect2mask, sect2bits, langinfo->MemoryFlags ) == sect2 ) {
+        if( ARE_BITS_EQUAL( res2mask, res2bits, langinfo->res_flags ) == sect2 ) {
             ret = copyOneResource( restab, exe_type, langinfo, resinfo, res->fp,
                                     dst->fp, restab->Dir.ResShiftCount, &err_code );
         }
@@ -305,20 +305,9 @@ RcStatus CopyWINResources( ExeFileInfo *dst, ResFileInfo *res, uint_16 sect2mask
 
         CheckDebugOffset( dst );
     }
-
-    switch( ret ) {
-    case RS_WRITE_ERROR:
-        RcError( ERR_WRITTING_FILE, dst->name, strerror( err_code ) );
-        break;
-    case RS_READ_ERROR:
-        RcError( ERR_READING_RES, CmdLineParms.OutResFileName, strerror( err_code ) );
-        break;
-    case RS_READ_INCMPLT:
-        RcError( ERR_UNEXPECTED_EOF, CmdLineParms.OutResFileName );
-        break;
-    default:
-        break;
-    }
+    if( ret == RS_READ_ERROR )
+        ret = ERR_READING_RES;
+    RcIOError( ret, CmdLineParms.OutResFileName, dst->name, err_code );
     return( ret );
 } /* CopyWINResources */
 
@@ -361,9 +350,9 @@ static void freeResTable( ResTable *restab )
         next_type = exe_type->Next;
         for( exe_res = exe_type->Head; exe_res != NULL; exe_res = next_res ) {
             next_res = exe_res->Next;
-            RESFREE( exe_res );
+            MemFree( exe_res );
         }
-        RESFREE( exe_type );
+        MemFree( exe_type );
     }
 
     restab->Dir.Head = NULL;

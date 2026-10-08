@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2025      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2025-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -47,20 +47,22 @@
 bool GUICreateHot( gui_control_info *ctl_info, VFIELD *field )
 {
     a_hot_spot  *hot_spot;
-    bool        ok;
 
     if( field == NULL ) {
         return( false );
     }
-    hot_spot = (a_hot_spot *)GUIMemAlloc( sizeof( a_hot_spot ) );
+    hot_spot = MemAlloc( sizeof( *hot_spot ) );
     field->u.hs = hot_spot;
     if( hot_spot == NULL ) {
         return( false );
     }
     field->typ = FLD_HOT;
-    hot_spot->str = GUIStrDupOK( ctl_info->text, &ok );
-    if( !ok ) {
-        return( false );
+    hot_spot->str = NULL;
+    if( ctl_info->text != NULL ) {
+        hot_spot->str = MemStrdup( ctl_info->text );
+        if( hot_spot->str == NULL ) {
+            return( false );
+        }
     }
     hot_spot->event = ID2EV( ctl_info->id );
     hot_spot->row = field->area.row;
@@ -81,22 +83,21 @@ bool GUICreateHot( gui_control_info *ctl_info, VFIELD *field )
 void GUIFreeHotSpot( a_hot_spot *hot_spot )
 {
     if( hot_spot != NULL ) {
-        GUIMemFree( hot_spot->str );
+        MemFree( hot_spot->str );
     }
-    GUIMemFree( hot_spot );
+    MemFree( hot_spot );
 }
 
 bool GUISetHotSpotText( a_hot_spot *hot_spot, const char *text )
 {
     char        *new_str;
-    bool        ok;
 
     if( text == NULL )
         text = "";
-    new_str = GUIStrDupOK( text, &ok );
-    if( ok ) {
-        GUIMemFree( hot_spot->str );
-        hot_spot->str = new_str;
-    }
-    return( ok );
+    new_str = MemStrdup( text );
+    if( new_str == NULL )
+        return( false );
+    MemFree( hot_spot->str );
+    hot_spot->str = new_str;
+    return( true );
 }

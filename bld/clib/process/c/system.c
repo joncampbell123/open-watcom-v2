@@ -33,6 +33,7 @@
 
 #include "variety.h"
 #include "widechar.h"
+#include "seterrno.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -46,7 +47,6 @@
 #endif
 #include "_process.h"
 #include "rtdata.h"
-#include "rterrno.h"
 #include "thread.h"
 
 
@@ -56,7 +56,7 @@ _WCRTLINK int __F_NAME(system,_wsystem)( const CHAR_TYPE *cmd )
     if( cmd == NULL ) {
         return( 0 );
     }
-    _RWD_errno = ENOENT;
+    lib_set_errno( ENOENT );
     return( -1 );
 #else
     register CHAR_TYPE  *name;
@@ -81,7 +81,7 @@ _WCRTLINK int __F_NAME(system,_wsystem)( const CHAR_TYPE *cmd )
                 return( 1 );    /* COMMAND.COM is available */
             }
         }
-        _RWD_errno = ENOENT;
+        lib_set_errno( ENOENT );
         return( 0 );    /* indicate no COMMAND.COM available */
   #endif
     }

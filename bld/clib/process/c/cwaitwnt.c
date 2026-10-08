@@ -32,11 +32,10 @@
 
 
 #include "variety.h"
+#include "seterrno.h"
 #include <stddef.h>
 #include <process.h>
 #include <windows.h>
-#include "rterrno.h"
-#include "seterrno.h"
 #include "thread.h"
 
 
@@ -47,14 +46,14 @@ _WCRTLINK int cwait(int *status, int process_id, int action)
     HANDLE p = (HANDLE)process_id;
 
     if (action != WAIT_CHILD) {
-        return( __set_EINVAL() );
+        return( lib_set_EINVAL() );
     }
 
     rc = WaitForSingleObject(p, INFINITE);
 
     if (rc == WAIT_FAILED) {
         rc = GetLastError();
-        return( __set_EINVAL() );
+        return( lib_set_EINVAL() );
     }
     if (rc == WAIT_OBJECT_0) {
         GetExitCodeProcess(p, &rc);
@@ -63,5 +62,5 @@ _WCRTLINK int cwait(int *status, int process_id, int action)
         return( process_id );
     }
     CloseHandle(p);
-    return( __set_EINVAL() );
+    return( lib_set_EINVAL() );
 }

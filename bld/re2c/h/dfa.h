@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -104,16 +104,17 @@ typedef struct DFA {
 } DFA;
 
 extern DFA      *DFA_new( Ins *, uint, Char, Char, Char *, uint );
-extern void     DFA_delete( DFA * );
-extern void     DFA_addState( DFA *, State **, State * );
-extern void     DFA_emit( DFA *, FILE * );
+extern void     DFA_delete( DFA *d );
+extern void     DFA_addState( DFA *d, State **st_before, State *st );
+extern void     DFA_emit( DFA *d, FILE *o );
 extern State    *State_new( void );
 
-extern Action   *Action_new_Match( State *s );
-extern Action   *Action_new_Enter( State *s );
-extern Action   *Action_new_Save( State *s, uint i );
-extern Action   *Action_new_Move( State *s );
-extern Action   *Action_new_Rule( State *s, RegExp *r );
-extern Action   *Action_new_Accept( State *s, uint n, uint *sv, State **r );
+extern Action   *Action_new_Match( State *st );
+extern Action   *Action_new_Enter( State *st );
+extern Action   *Action_new_Save( State *st, uint i );
+extern Action   *Action_new_Move( State *st );
+extern Action   *Action_new_Rule( State *st, RegExp *rule );
+extern Action   *Action_new_Accept( State *st, uint n, uint *sv, State **rules );
+extern void     Action_delete( State *st );
 
 #endif

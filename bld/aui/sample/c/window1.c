@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -37,14 +37,14 @@
 static bool W1Init( a_window wnd );
 
 static gui_menu_struct W1Sub[] = {
-    { "&Align",    MENU_W1_ALIGN,   GUI_STYLE_MENU_ENABLED },
-    { "&UnAlign",  MENU_W1_UNALIGN, GUI_STYLE_MENU_ENABLED },
+    { "&Align",    MENU_W1_ALIGN,   GUI_STYLE_MENU_ENABLED, NULL, GUI_NO_MENU },
+    { "&UnAlign",  MENU_W1_UNALIGN, GUI_STYLE_MENU_ENABLED, NULL, GUI_NO_MENU },
 };
 
 static gui_menu_struct W1PopUp[] = {
-    { "&Say",      MENU_W1_SAY,     GUI_STYLE_MENU_ENABLED },
-    { "&More",     MENU_W1_MORE,    GUI_STYLE_MENU_ENABLED, NULL, ArraySize( W1Sub ), W1Sub },
-    { "&NewWord",  MENU_W1_NEWWORD, GUI_STYLE_MENU_ENABLED },
+    { "&Say",      MENU_W1_SAY,     GUI_STYLE_MENU_ENABLED, NULL, GUI_NO_MENU },
+    { "&More",     MENU_W1_MORE,    GUI_STYLE_MENU_ENABLED, NULL, GUI_MENU_ARRAY( W1Sub ) },
+    { "&NewWord",  MENU_W1_NEWWORD, GUI_STYLE_MENU_ENABLED, NULL, GUI_NO_MENU },
 };
 
 typedef struct {
@@ -172,10 +172,10 @@ static void     WNDCALLBACK W1Fini( a_window wnd )
 
     num_rows = w1->num_rows;
     for( i = 0; i < num_rows; ++i ) {
-        WndFree( w1->rows[i].pieces );
+        MemFree( w1->rows[i].pieces );
     }
-    WndFree( w1->rows );
-    WndFree( w1 );
+    MemFree( w1->rows );
+    MemFree( w1 );
 }
 
 
@@ -188,16 +188,16 @@ static bool W1Init( a_window wnd )
 
     num_rows = RandNum( 200 );
     w1->num_rows = num_rows;
-    w1->rows = WndAlloc( num_rows * sizeof( w1_row ) );
+    w1->rows = MemAlloc( num_rows * sizeof( w1_row ) );
     w1->align = true;
     if( w1->rows == NULL ) {
         WndClose( wnd );
-        WndNoMemory();
-        return( false );
+        Say( "No memory for window\n" );
+        exit( 1 );
     }
     for( i = 0; i < num_rows; ++i ) {
         pieces = RandNum( 10 );
-        w1->rows[i].pieces = WndAlloc( pieces * sizeof( char * ) );
+        w1->rows[i].pieces = MemAlloc( pieces * sizeof( char * ) );
         w1->rows[i].num_pieces = pieces;
         for( j = 0; j < pieces; ++j ) {
             w1->rows[i].pieces[j] = Word[RandNum( WORD_SIZE ) - 1];
@@ -242,7 +242,7 @@ static wnd_info W1Info = {
     NoNextRow,
     NoNotify,
     ChkUpdate,
-    PopUp( W1PopUp )
+    GUI_MENU_ARRAY( W1PopUp )
 };
 
 static gui_resource W1Icon = { ICON_WORDS, "W1" };
@@ -254,7 +254,7 @@ a_window W1Open( void )
 
     WndInitCreateStruct( &info );
     info.info = &W1Info;
-    info.extra = WndMustAlloc( sizeof( w1_window ) );
+    info.extra = MemAllocSafe( sizeof( w1_window ) );
     info.wndclass = CLASS_W1;
     info.title = "Words";
     info.style |= GUI_INIT_INVISIBLE;

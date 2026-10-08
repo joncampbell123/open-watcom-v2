@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2024      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2024-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,7 +35,7 @@
 #include "dbgdata.h"
 #include "dbgwind.h"
 #include "dbgerr.h"
-#include "dbgmem.h"
+#include "memfuncs.h"
 #include "dbgio.h"
 #include "guidlg.h"
 #include "dlgcmd.h"
@@ -70,7 +70,7 @@ static void MoveCursor( gui_window *gui, int edit, int list, int direction )
     GUISetCurrSelect( gui, list, i );
     cmd = GUIGetText( gui, list );
     GUISetText( gui, edit, cmd );
-    GUIMemFree( cmd );
+    MemFree( cmd );
     GUISelectAll( gui, edit, true );
 }
 
@@ -80,7 +80,7 @@ static void DlgClickHistory( gui_window *gui, int edit, int list )
 
     cmd = GUIGetText( gui, list );
     GUISetText( gui, edit, cmd );
-    GUIMemFree( cmd );
+    MemFree( cmd );
 }
 
 static void DlgSetHistory( gui_window *gui, void *history, char *cmd, int edit, int list )
@@ -159,15 +159,15 @@ static bool GUICALLBACK CmdGUIEventProc( gui_window *gui, gui_event gui_ev, void
             if( text != NULL ) {
                 if( text[0] != NULLCHAR )
                     WndSaveToHistory( CmdHistory, text );
-                DoCmd( DupStr( text ) );
-                GUIMemFree( text );
+                DoCmd( MemStrdupSafe( text ) );
+                MemFree( text );
             }
             GUICloseDialog( gui );
             return( true );
         }
         break;
     case GUI_DESTROY:
-        WndFree( dlg );
+        MemFree( dlg );
         return( true );
     default:
         break;
@@ -180,6 +180,6 @@ void    DlgCmd( void )
 {
     dlg_command *dlg;
 
-    dlg = WndMustAlloc( sizeof( dlg_command ) );
+    dlg = MemAllocSafe( sizeof( *dlg ) );
     DlgOpenRes( CmdGUIEventProc, dlg, DIALOG_CMD );
 }

@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -116,14 +117,18 @@ bool WdeInitCreateTable( void )
     first_inst = WdeIsFirstInst();
     if( WdeCreateTable == NULL ) {
         inst = WdeGetAppInstance();
-        WdeCreateTable = (CREATE_TABLE)WRMemAlloc( sizeof( FARPROC ) * NUM_USER_OBJECTS );
+        WdeCreateTable = MemAlloc( sizeof( *WdeCreateTable ) * NUM_USER_OBJECTS );
         for( i = 0; WdeObjectRoutines[i].create != NULL; i++ ) {
             if( WdeObjectRoutines[i].init != NULL ) {
                 if( !WdeObjectRoutines[i].init( first_inst ) ) {
                     return( FALSE );
                 }
             }
+#ifdef __WINDOWS__
             WdeCreateTable[i] = (CREATE_RTN *)MakeProcInstance( (FARPROC)WdeObjectRoutines[i].create, inst );
+#else
+            WdeCreateTable[i] = WdeObjectRoutines[i].create;
+#endif
         }
     }
 
@@ -139,11 +144,11 @@ void WdeFiniCreateTable( void )
             if( WdeObjectRoutines[i].fini != NULL ) {
                 WdeObjectRoutines[i].fini();
             }
-#ifndef __NT__
+#ifdef __WINDOWS__
             FreeProcInstance( (FARPROC)WdeCreateTable[i] );
 #endif
         }
-        WRMemFree( WdeCreateTable );
+        MemFree( WdeCreateTable );
         WdeCreateTable = NULL;
     }
 }

@@ -31,6 +31,7 @@
 
 
 #include "variety.h"
+#include "seterrno.h"
 #include <time.h>
 #if defined( __QNX__ )
     #include <sys/types.h>
@@ -38,7 +39,6 @@
 #elif defined( __LINUX__ )
     #include <sys/times.h>
 #endif
-#include "rterrno.h"
 #include "rtinit.h"
 #include "getctime.h"
 #include "thread.h"
@@ -57,12 +57,12 @@ _WCRTLINK clock_t clock( void )
 {
     struct tms  buf;
     clock_t     clk;
-    int         save_errno;
+    int         errno_save;
 
-    save_errno = _RWD_errno;
+    errno_save = lib_get_errno();
     times( &buf );
     clk = ( buf.tms_utime + buf.tms_stime ) * ( CLOCKS_PER_SEC / SYS_CLK_TCK );
-    _RWD_errno = save_errno;
+    lib_set_errno( errno_save );
     return clk;
 }
 
@@ -74,7 +74,7 @@ _WCRTLINK clock_t clock( void )
 static clock_t init_milliseconds;
 static time_t  init_seconds;
 
-static void get_clock_time( time_t *secs, clock_t *milliseconds )
+static void _WCNEAR get_clock_time( time_t *secs, clock_t *milliseconds )
 {
 #if defined( __QNX__ )
     struct timespec     timer;

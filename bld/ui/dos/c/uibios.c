@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -77,13 +77,11 @@ bool UIAPI uiset80col( void )
     return( status );
 }
 
-/*
-    The code for video_buffer is identical for DOS/V and desqview
-    (Get Video Buffer: int 10h, AH=FEh)
-*/
-
 LP_PIXEL UIAPI dos_uishadowbuffer( LP_PIXEL vbuff )
-/*************************************************/
+/**************************************************
+ * The code for video_buffer is identical for DOS/V and desqview
+ * (Get Video Buffer: int 10h, AH=FEh)
+ */
 {
 #ifdef _M_I86
     return( _BIOSVideo_desqview_shadow_buffer( vbuff ) );
@@ -104,9 +102,9 @@ LP_PIXEL UIAPI dos_uishadowbuffer( LP_PIXEL vbuff )
         dpmi_regs_struct    dr;
 
         memset( &dr, 0, sizeof( dr ) );
-        dr.r.x.eax = 0xfe00;                /* get video buffer addr */
+        dr.r.h.ah = 0xfe;                   /* get video buffer addr */
         dr.es = _FP_OFF( vbuff ) >> 4;
-        dr.r.x.edi = (_FP_OFF( vbuff ) & 0x0f);
+        dr.r.w.di = (_FP_OFF( vbuff ) & 0x0f);
         DPMISimulateRealModeInterrupt( VECTOR_VIDEO, 0, 0, &dr );
         vbuff = RealModeDataPtr( dr.es, dr.r.x.edi );
     }
@@ -293,12 +291,17 @@ void intern finibios( void )
 }
 
 /*
-    The code for desqview_update is identical for DOS/V
-    (Update Video Display: int 10h, AH=FFh, CX=count, ES:DI=buffer)
 */
 
 static void desqview_update( unsigned short offset, unsigned short count )
+/*************************************************************************
+ * The code for desqview_update is identical for DOS/V
+ * (Update Video Display: int 10h, AH=FFh, CX=count, ES:DI=buffer)
+ *
+ * offset and count arguments are in characters and transformed to bytes here
+ */
 {
+    count *= sizeof( *UIData->screen.origin );
 #ifdef _M_I86
     _BIOSVideo_desqview_update( UIData->screen.origin + offset, count );
 #else
@@ -309,15 +312,15 @@ static void desqview_update( unsigned short offset, unsigned short count )
         dp.r.h.ah = 0xff;            /* update from v-screen */
         dp.es = _FP_OFF( UIData->screen.origin ) >> 4;
         dp.intno = VECTOR_VIDEO;       /* VIDEO call */
-        PharlapSimulateRealModeInterrupt( &dp, 0, count, (_FP_OFF( UIData->screen.origin ) & 0x0f) + offset );
+        PharlapSimulateRealModeInterrupt( &dp, 0, count, (_FP_OFF( UIData->screen.origin ) & 0x0f) + sizeof( *UIData->screen.origin ) * offset );
     } else if( _DPMI || _IsRational() ) {
         dpmi_regs_struct    dr;
 
         memset( &dr, 0, sizeof( dr ) );
         dr.r.h.ah = 0xff;                /* update from v-screen */
         dr.es = _FP_OFF( UIData->screen.origin ) >> 4;
-        dr.r.x.edi = (_FP_OFF( UIData->screen.origin ) & 0x0f) + offset;
-        dr.r.x.ecx = count;
+        dr.r.w.di = (_FP_OFF( UIData->screen.origin ) & 0x0f) + sizeof( *UIData->screen.origin ) * offset;
+        dr.r.w.cx = count;
         DPMISimulateRealModeInterrupt( VECTOR_VIDEO, 0, 0, &dr );
     }
 #endif
@@ -328,15 +331,19 @@ void intern physupdate( SAREA *area )
  * update the physical screen with contents of virtual copy
  */
 {
-    unsigned short  i;
-    unsigned short  offset;
-    unsigned short  count;
+    uisize          count;
+    uisize          incr;
+    uisize          height;
+    uisize          offset;
 
     if( UIData->desqview ) {
-        count = area->width * sizeof( PIXEL );
-        for( i = area->row; i < (area->row + area->height); i++ ) {
-            offset = ( i * UIData->width + area->col ) * sizeof( PIXEL );
+        incr = UIData->width;
+        offset = area->row * incr + area->col;
+        count = area->width;
+        height = area->height;
+        while( height-- > 0 ) {
             desqview_update( offset, count );
+            offset += incr;
         }
     }
 }

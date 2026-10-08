@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -80,7 +80,7 @@ bool GUIInsertCtrlWnd( gui_window *wnd )
 {
     dialog_wnd_node     *dlg_wnd_node;
 
-    dlg_wnd_node = (dialog_wnd_node *)GUIMemAlloc( sizeof( dialog_wnd_node ) );
+    dlg_wnd_node = MemAlloc( sizeof( *dlg_wnd_node ) );
     if( dlg_wnd_node != NULL ) {
         dlg_wnd_node->wnd = wnd;
         dlg_wnd_node->next = DialogHead;
@@ -117,7 +117,7 @@ static void GUIDeleteCtrlWnd( gui_window *wnd )
             } else {
                 (*prev_owner)->next = curr->next;
             }
-            GUIMemFree( curr );
+            MemFree( curr );
             break;
         }
         prev_owner = owner;
@@ -169,7 +169,7 @@ control_item *GUIControlInsert( gui_window *parent_wnd, gui_control_class contro
 {
     control_item        *item;
 
-    item = (control_item *)GUIMemAlloc( sizeof( control_item ) );
+    item = MemAlloc( sizeof( *item ) );
     if( item != NULL ) {
         item->control_class = control_class;
         item->text = ctl_info->text;
@@ -195,12 +195,12 @@ control_item *GUIControlInsertByHWND( HWND hwnd, gui_window *parent_wnd )
     if( ( parent_wnd == NULL ) || ( phwnd != parent_wnd->hwnd ) ) {
         return( NULL );
     }
-    item = (control_item *)GUIMemAlloc( sizeof( control_item ) );
+    item = MemAlloc( sizeof( *item ) );
     if( item != NULL ) {
         memset( item, 0, sizeof( control_item ) );
         control_class = GUIGetControlClassFromHWND( hwnd );
         if( control_class == GUI_BAD_CLASS ) {
-            GUIMemFree( item );
+            MemFree( item );
             return( NULL );
         }
         item->control_class = control_class;
@@ -234,7 +234,7 @@ void GUIControlDelete( gui_window *wnd, gui_ctl_id id )
             } else {
                 prev->next = next;
             }
-            GUIMemFree( curr );
+            MemFree( curr );
             break;
         }
         prev = curr;
@@ -256,7 +256,7 @@ void GUIControlDeleteAll( gui_window *wnd )
 
     for( curr = wnd->controls; curr != NULL; curr = next ) {
         next = curr->next;
-        GUIMemFree( curr );
+        MemFree( curr );
     }
     wnd->controls = NULL;
     GUIDeleteCtrlWnd( wnd );
@@ -390,7 +390,7 @@ WPI_MRESULT CALLBACK GUIGroupBoxFunc( HWND hwnd, WPI_MSG message, WPI_PARAM1 wpa
     case WM_ERASEBKGND:
         hdc = _wpi_getpres( hwnd );
         _wpi_getupdaterect( hwnd, &wpi_rect );
-        _wpi_fillrect( hdc, &wpi_rect, (WPI_COLOUR)0, wnd->bk_brush );
+        _wpi_fillrect( hdc, &wpi_rect, 0, wnd->bk_brush );
         _wpi_releasepres( hwnd, hdc );
         break;
     }
@@ -618,7 +618,7 @@ static HWND CreateControl( gui_control_info *ctl_info, gui_window *parent_wnd, c
         }
   #endif
 
-        SendMessage( hwnd, WM_SETFONT, (WPARAM)setFont, (LPARAM)0 );
+        SendMessage( hwnd, WM_SETFONT, (WPARAM)setFont, 0 );
     }
 #endif
 
@@ -712,9 +712,9 @@ bool GUICheckRadioButton( gui_window *wnd, gui_ctl_id id )
                         }
                         if( in_group ) {
                             if( curr->id == id ) {
-                                GUISendMessage( curr->hwnd, BM_SETCHECK, (WPI_PARAM1)true, (WPI_PARAM2)0 );
+                                GUISendMessage( curr->hwnd, BM_SETCHECK, (WPI_PARAM1)true, 0 );
                             } else {
-                                GUISendMessage( curr->hwnd, BM_SETCHECK, (WPI_PARAM1)false, (WPI_PARAM2)0 );
+                                GUISendMessage( curr->hwnd, BM_SETCHECK, (WPI_PARAM1)false, 0 );
                             }
                         }
                         if( curr->id == last ) {

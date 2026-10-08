@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -101,12 +102,12 @@ void ScreenInit( void )
 
     EditFlags.Color = true;
 
-    Scrn = MemAlloc( EditVars.WindMaxWidth * EditVars.WindMaxHeight * sizeof( char_info ) );
+    Scrn = MemAllocSafe( EditVars.WindMaxWidth * EditVars.WindMaxHeight * sizeof( char_info ) );
     ScreenPage( 0 );
 
     tmp[0] = '\0';
     GetConsoleTitle( tmp, sizeof( tmp ) );
-    oldConTitle = DupString( tmp );
+    oldConTitle = MemStrdupSafe( tmp );
     if( !EditFlags.Quiet ) {
         SetConsoleTitle( "Open Watcom vi" );
     }

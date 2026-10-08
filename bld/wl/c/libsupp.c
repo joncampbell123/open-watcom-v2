@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -50,38 +50,37 @@
 #include "clibext.h"
 
 
-static bool SearchAndProcLibFile( file_list *lib, const char *name )
-/******************************************************************/
+static bool SearchAndProcLibFile( file_list *file, const char *name )
+/*******************************************************************/
 {
     mod_entry       *lp;
     mod_entry       **prev;
 
-    if( !CacheOpen( lib ) )
+    if( !CacheOpen( file ) )
         return( false );
-    lp = SearchLib( lib, name );
+    lp = SearchLib( file, name );
     if( lp == NULL ) {
-        CacheClose( lib, 1 );
+        CacheClose( file, 1 );
         return( false );
     }
-    lib->flags |= STAT_LIB_USED;
+    file->flags_file |= STAT_LIB_USED;
 #ifdef _EXE
     if( (FmtData.type & MK_OVERLAYS) && FmtData.u.dos.distribute ) {
-        if( lib->flags & STAT_LIB_FIXED ) {
-            lp->modinfo |= MOD_FIXED;
+        if( file->flags_file & STAT_LIB_FIXED ) {
+            lp->flags_mod |= MOD_FIXED;
         }
-        DistribAddMod( lp, lib->ovlref );
+        DistribAddMod( lp, file->ovlref );
     } else {
 #endif
-        for( prev = &LibModules; *prev != NULL; ) { /*  find end of list */
-            prev = &(*prev)->n.next_mod;
-        }
+        for( prev = &LibModules; *prev != NULL; prev = &(*prev)->u.next ) /*  find end of list */
+            /* nothing */;
         *prev = lp;
 #ifdef _EXE
     }
 #endif
     CurrMod = lp;
     ObjPass1();
-    CacheClose( lib, 1 );
+    CacheClose( file, 1 );
 #ifdef _EXE
     if( (FmtData.type & MK_OVERLAYS) && FmtData.u.dos.distribute ) {
         DistribFinishMod( lp );
@@ -99,20 +98,20 @@ bool LibFind( const char *name, bool old_sym )
 /*********************************************/
 /* Search for a file in a library */
 {
-    file_list   *lib;
+    file_list   *file;
     bool        isimpsym;
 
     DEBUG(( DBG_OLD, "LibFind( %s )", name ));
     isimpsym = (FmtData.type & MK_PE) && memcmp( name, ImportSymPrefix, PREFIX_LEN ) == 0;
-    for( lib = ObjLibFiles; lib != NULL; lib = lib->next_file ) {
-        if( lib->infile->status & INSTAT_IOERR )
+    for( file = ObjLibFiles; file != NULL; file = file->next ) {
+        if( file->infile->status & INSTAT_IOERR )
             continue;
-        if( old_sym && (lib->flags & STAT_OLD_LIB) )
+        if( old_sym && (file->flags_file & STAT_OLD_LIB) )
             continue;
-        if( SearchAndProcLibFile( lib, name ) )
+        if( SearchAndProcLibFile( file, name ) )
             return( true );
         if( isimpsym ) {
-            if( SearchAndProcLibFile( lib, name + PREFIX_LEN ) ) {
+            if( SearchAndProcLibFile( file, name + PREFIX_LEN ) ) {
                 return( true );
             }
         }
@@ -143,38 +142,38 @@ file_list *AddObjLib( const char *name, lib_priority priority )
 {
     file_list   **owner;
     file_list   **new_owner;
-    file_list   *lib;
+    file_list   *file;
 
     DEBUG(( DBG_OLD, "Adding Object library name %s", name ));
     /* search for new library position in linked list */
-    for( owner = &ObjLibFiles; (lib = *owner) != NULL; owner = &lib->next_file ) {
-        if( lib->priority < priority )
+    for( owner = &ObjLibFiles; (file = *owner) != NULL; owner = &file->next ) {
+        if( file->priority < priority )
             break;
         /* end search if library already exists with same or a higher priority */
-        if( FNAMECMPSTR( lib->infile->name.u.ptr, name ) == 0 ) {
-            return( lib );
+        if( FNAMECMPSTR( file->infile->name.u.ptr, name ) == 0 ) {
+            return( file );
         }
     }
     new_owner = owner;
     /* search for library definition with a lower priority */
-    for( ; (lib = *owner) != NULL; owner = &lib->next_file ) {
-        if( FNAMECMPSTR( lib->infile->name.u.ptr, name ) == 0 ) {
+    for( ; (file = *owner) != NULL; owner = &file->next ) {
+        if( FNAMECMPSTR( file->infile->name.u.ptr, name ) == 0 ) {
             /* remove library entry from linked list */
-            *owner = lib->next_file;
+            *owner = file->next;
             break;
         }
     }
     /* if we need to add one */
-    if( lib == NULL ) {
-        lib = AllocNewFile( NULL );
-        lib->infile = AllocUniqueFileEntry( name, UsrLibPath );
-        lib->infile->status |= INSTAT_LIBRARY | INSTAT_OPEN_WARNING;
+    if( file == NULL ) {
+        file = AllocNewFile( NULL );
+        file->infile = AllocUniqueFileEntry( name, UsrLibPath );
+        file->infile->status |= INSTAT_LIBRARY | INSTAT_OPEN_WARNING;
         LinkState |= LS_LIBRARIES_ADDED;
     }
     /* put it to new position and setup priority */
-    lib->next_file = *new_owner;
-    *new_owner = lib;
-    lib->priority = priority;
+    file->next = *new_owner;
+    *new_owner = file;
+    file->priority = priority;
 
-    return( lib );
+    return( file );
 }

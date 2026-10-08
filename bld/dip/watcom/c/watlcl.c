@@ -369,6 +369,10 @@ search_result SearchLclMod( imp_image_handle *iih, imp_mod_handle imh, lookup_it
                 next = ProcDefn( iih, curr, &defn, local );
                 if( len == defn.i.namelen && scompn( name, defn.i.name, len ) == 0 ) {
                     ish = DCSymCreate( iih, d );
+                    if( ish == NULL ) {
+                        sr = SR_FAIL;
+                        break;
+                    }
                     LclCreate( ish, curr, defn.i.name, local );
                     sr = SR_EXACT;
                 }
@@ -425,6 +429,10 @@ static search_result DoLclScope( imp_image_handle *iih, imp_mod_handle imh,
                         next = ProcDefn( iih, curr, &defn, local );
                         if( len == defn.i.namelen && scompn( name, defn.i.name, len ) == 0 ) {
                             ish = DCSymCreate( iih, d );
+                            if( ish == NULL ) {
+                                sr = SR_FAIL;
+                                break;
+                            }
                             LclCreate( ish, curr, defn.i.name, local );
                             sr = SR_EXACT;
                         }

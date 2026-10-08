@@ -32,11 +32,11 @@
 
 
 #include "variety.h"
+#include "seterrno.h"
 #include <sys/types.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
-#include "rterrno.h"
 #include "iomode.h"
 #include "rtcheck.h"
 #include "thread.h"
@@ -69,7 +69,7 @@ _WCRTLINK int _chsize( int handle, long size )
                 case -1:
                     return( -1 );
                 case 0:
-                    _RWD_errno = ENOSPC;
+                    lib_set_errno( ENOSPC );
                     return( -1 );
                 }
                 diff -= amount;

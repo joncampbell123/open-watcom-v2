@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,10 +34,12 @@
 #include "rxsupp.h"
 #include "win.h"
 #include "parse.h"
-#ifdef __WIN__
-#include "wclbproc.h"
-#endif
 #include "oswincls.h"
+#ifdef __WIN__
+#ifdef __WINDOWS__
+    #include "wclbproc.h"
+#endif
+#endif
 
 
 /* Local Windows CALLBACK function prototypes */
@@ -97,7 +99,11 @@ static int MyMessageBox( window_id wid, char _FAR *lpText, char _FAR *lpCaption,
     HOOKPROC    hookproc;
     int         rc;
 
+#ifdef __WINDOWS__
     hookproc = MakeProcInstance_HOOK( MyMessageBoxWndFunc, InstanceHandle );
+#else
+    hookproc = MyMessageBoxWndFunc;
+#endif
 #if defined(__NT__)
     hhookMB = SetWindowsHookEx( WH_CBT, hookproc, 0, GetCurrentThreadId() );
 #else
@@ -105,7 +111,9 @@ static int MyMessageBox( window_id wid, char _FAR *lpText, char _FAR *lpCaption,
 #endif
     rc = MessageBox( wid, lpText, lpCaption, uType );
     UnhookWindowsHookEx( hhookMB );
+#ifdef __WINDOWS__
     FreeProcInstance_HOOK( hookproc );
+#endif
     return( rc );
 }
 #endif
@@ -152,7 +160,7 @@ vi_rc TwoPartSubstitute( const char *find, const char *replace, int prompt, int 
     long    changecnt, linecnt;
     linenum end_line;
 
-    char *cmd = _MemAllocArray( char, MAX_INPUT_LINE );
+    char *cmd = _MemAllocArraySafe( char, MAX_INPUT_LINE );
 
     StartUndoGroup( UndoStack );
 
@@ -176,7 +184,7 @@ vi_rc TwoPartSubstitute( const char *find, const char *replace, int prompt, int 
     }
     EndUndoGroup( UndoStack );
 
-    _MemFreeArray( cmd );
+    MemFree( cmd );
     return( rc );
 
 } /* TwoPartSubstitute */

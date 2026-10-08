@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -104,7 +104,8 @@ bool InitMsg( void )
 bool Msg_Get( int msgid, char *buffer )
 {
 #ifdef USE_WRESLIB
-    if( hInstance.status == 0 || WResLoadString( &hInstance, msgid + msgShift, (lpstr)buffer, RESOURCE_MAX_SIZE ) <= 0 ) {
+    if( hInstance.status == 0
+      || WResLoadString( &hInstance, msgid + msgShift, (lpstr)buffer, RESOURCE_MAX_SIZE ) <= 0 ) {
         buffer[0] = '\0';
         return( false );
     }
@@ -152,7 +153,7 @@ void Msg_Put_Args(
                 if( types_buff[j] == specifier ) {
                     order[j] = argnum;
                     argnum++;
-                    if( isdigit( specifier ) )          // Digit becomes s
+                    if( isdigit( (unsigned char)specifier ) )          // Digit becomes s
                         types_buff[j] = percent[1] = 's';
                     break;
                 }
@@ -174,7 +175,7 @@ void Msg_Put_Args(
                 break;
             case 'A':
             case 'a':
-                arginfo->address = va_arg( args, targ_addr * );
+                arginfo->address = va_arg( args, addr_type * );
                 break;
             case 'S':
                 arginfo->symb = va_arg( args, symbol * );
@@ -319,4 +320,4 @@ bool res_ioerr( FILE *fp, size_t rc )
     return( rc == -1 );
 }
 
-WResSetRtns(res_open,res_close,res_read,res_write,res_seek,res_tell,res_ioerr,ChkLAlloc,LFree);
+WResSetRtns(res_open,res_close,res_read,res_write,res_seek,res_tell,res_ioerr,MemAlloc,MemFree);

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2019 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -100,7 +100,7 @@ struct patch_entry {
 
 typedef struct case_entry {
     struct case_entry   *next_case;
-    int                 value;
+    unsigned_64         value;
     LABEL_INDEX         label;
     bool                gen_label;
 } CASEDEFN, *CASEPTR;
@@ -110,10 +110,9 @@ typedef struct  switch_entry {
     LABEL_INDEX         default_label;
     unsigned            number_of_cases;
     CASEPTR             case_list;
-    unsigned            low_value;
-    unsigned            high_value;
+    unsigned_64         low_value;
+    unsigned_64         high_value;
     LABEL_INDEX         last_case_label;
-    char                *case_format;   /* "%ld" or "%lu" */
 } SWITCHDEFN, *SWITCHPTR;
 
 // if we end up converting the string to binary to store in long_double
@@ -125,7 +124,7 @@ typedef struct floatval {
     long_double         ld;
     unsigned char       len;
     unsigned char       type;
-    char                string[2];
+    char                string[1];  /* variable length array */
 } FLOATVAL;
 
 typedef short           tryindex_t;

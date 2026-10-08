@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -41,6 +41,7 @@
 #include "stmtsw.h"
 #include "opn.h"
 #include "cpopt.h"
+#include "namecod.h"
 #include "recog.h"
 #include "emitobj.h"
 #include "types.h"
@@ -154,14 +155,14 @@ static  void    DoLoop( TYPE do_type ) {
     e1_type = CITNode->typ;
     e1_size = CITNode->size;
     AdvanceITPtr();
-    if( ReqComma() ) {
+    if( ReqCommaOpr() ) {
         EatDoParm();                            // process e2
         e2_const = CITNode->opn.us == USOPN_CON;
         PushOpn( CITNode );
         e2_node = CITNode;
         AdvanceITPtr();
         e3_node = NULL;
-        if( RecComma() ) {
+        if( RecCommaOpr() ) {
             EatDoParm();                        // process e3
             e3_node = CITNode;
             if( !AError ) {
@@ -174,16 +175,16 @@ static  void    DoLoop( TYPE do_type ) {
                             limit = GetIntValue( e2_node );
                             if( NeedIncrement( limit, incr, do_type ) ) {
                                 PushOpn( CITNode );
-                                doptr->increment = StaticAlloc( do_size, do_type );
+                                doptr->increment = TmpVar( do_type, do_size );
                             }
                         } else {
                             PushOpn( CITNode );
-                            doptr->increment = StaticAlloc( do_size, do_type );
+                            doptr->increment = TmpVar( do_type, do_size );
                         }
                     }
                 } else {
                     PushOpn( CITNode );
-                    doptr->increment = StaticAlloc( do_size, do_type );
+                    doptr->increment = TmpVar( do_type, do_size );
                 }
                 AdvanceITPtr();
             }
@@ -196,30 +197,30 @@ static  void    DoLoop( TYPE do_type ) {
                         limit = GetIntValue( e2_node );
                         if( NeedIncrement( limit, 1, do_type ) ) {
                             PushConst( 1 );
-                            doptr->increment = StaticAlloc( do_size, do_type );
+                            doptr->increment = TmpVar( do_type, do_size );
                         }
                     } else {
                         PushConst( 1 );
-                        doptr->increment = StaticAlloc( do_size, do_type );
+                        doptr->increment = TmpVar( do_type, do_size );
                     }
                 }
             } else {
                 PushConst( 1 );
-                doptr->increment = StaticAlloc( do_size, do_type );
+                doptr->increment = TmpVar( do_type, do_size );
             }
         }
         EmitOp( FC_DO_BEGIN );
         OutPtr( doptr->do_parm );
         OutPtr( doptr->increment );
         if( doptr->increment == NULL ) { // INTEGER do-loop with constant incr
-            loop_ctrl = StaticAlloc( do_size, do_type );
-            OutConst32( doptr->incr_value );
+            loop_ctrl = TmpVar( do_type, do_size );
+            OutU32( doptr->incr_value );
             OutPtr( loop_ctrl );
         } else {
             if( _IsTypeInteger( do_type ) ) {
-                loop_ctrl = StaticAlloc( do_size, do_type );
+                loop_ctrl = TmpVar( do_type, do_size );
             } else {
-                loop_ctrl = StaticAlloc( sizeof( intstar4 ), FT_INTEGER );
+                loop_ctrl = TmpVar( FT_INTEGER, sizeof( intstar4 ) );
             }
             doptr->iteration = loop_ctrl;
             OutPtr( loop_ctrl );
@@ -249,9 +250,9 @@ static  void    DataDo( TYPE do_type ) {
     do_var = CITNode->sym_ptr;
     AdvanceITPtr();
     DoExpr();                           // process e1
-    if( ReqComma() ) {
+    if( ReqCommaOpr() ) {
         DoExpr();                       // process e2
-        if( RecComma() ) {
+        if( RecCommaOpr() ) {
             DoExpr();                   // process e3
         } else {
             PushConst( 1 );             // indicate unit incrementation
@@ -298,7 +299,7 @@ static  void    DoLoopEnd( void ) {
     OutPtr( doptr->do_parm );
     OutPtr( doptr->increment );
     if( doptr->increment == NULL ) {
-        OutConst32( doptr->incr_value );
+        OutU32( doptr->incr_value );
     } else {
         OutPtr( doptr->iteration );
     }

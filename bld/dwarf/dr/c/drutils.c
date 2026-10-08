@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -37,81 +37,133 @@
 
 
 const dw_tagnum FunctionTags[] = {
-    DW_TAG_subprogram, 0
+    DW_TAG_subprogram,
+    0
 };
 
 const dw_tagnum ClassTags[] = {
-    DW_TAG_class_type, DW_TAG_union_type, DW_TAG_structure_type, 0
+    DW_TAG_class_type,
+    DW_TAG_union_type,
+    DW_TAG_structure_type,
+    0
 };
 
 const dw_tagnum TypedefTags[] = {
-    DW_TAG_typedef, 0
+    DW_TAG_typedef,
+    0
 };
 
 const dw_tagnum EnumTags[] = {
-    DW_TAG_enumeration_type, 0
+    DW_TAG_enumeration_type,
+    0
 };
 
 const dw_tagnum LabelTags[] = {
-    DW_TAG_label, 0
+    DW_TAG_label,
+    0
 };
 
 const dw_tagnum VariableTags[] = {
-    DW_TAG_common_block, DW_TAG_variable,
-    DW_TAG_formal_parameter, DW_TAG_member, 0
+    DW_TAG_common_block,
+    DW_TAG_variable,
+    DW_TAG_formal_parameter,
+    DW_TAG_member,
+    0
 };
 
-const dw_tagnum MacroTags[] = { 0 };
+const dw_tagnum MacroTags[] = {
+    0
+};
 
 const dw_tagnum *const SearchTags[] = {
-    FunctionTags, ClassTags, EnumTags,
-    TypedefTags, VariableTags,
-    MacroTags, LabelTags
+    FunctionTags,
+    ClassTags,
+    EnumTags,
+    TypedefTags,
+    VariableTags,
+    MacroTags,
+    LabelTags
 };
 
 const dw_tagnum SearchSymbolTags[] = {
-    DW_TAG_class_type, DW_TAG_common_block, DW_TAG_enumeration_type,
-    DW_TAG_subprogram, DW_TAG_variable, DW_TAG_member, DW_TAG_structure_type,
-    DW_TAG_typedef, DW_TAG_union_type, DW_TAG_label, 0
+    DW_TAG_class_type,
+    DW_TAG_common_block,
+    DW_TAG_enumeration_type,
+    DW_TAG_subprogram,
+    DW_TAG_variable,
+    DW_TAG_member,
+    DW_TAG_structure_type,
+    DW_TAG_typedef,
+    DW_TAG_union_type,
+    DW_TAG_label,
+    0
 };
 
 const dw_tagnum SearchFunctionTags[] = {
-    DW_TAG_subprogram, 0
+    DW_TAG_subprogram,
+    0
 };
 
 const dw_tagnum SearchClassTags[] = {
-    DW_TAG_class_type, DW_TAG_union_type, DW_TAG_structure_type, 0
+    DW_TAG_class_type,
+    DW_TAG_union_type,
+    DW_TAG_structure_type,
+    0
 };
 
 const dw_tagnum SearchTypeTags[] = {
-    DW_TAG_typedef, DW_TAG_enumeration_type, 0
+    DW_TAG_typedef,
+    DW_TAG_enumeration_type,
+    0
 };
 
 const dw_tagnum SearchVariableTags[] = {
-    DW_TAG_common_block, DW_TAG_variable, DW_TAG_member, 0
+    DW_TAG_common_block,
+    DW_TAG_variable,
+    DW_TAG_member,
+    0
 };
 
 const dw_tagnum SearchFriendTags[] = {
-    DW_TAG_friend, 0
+    DW_TAG_friend,
+    0
 };
 
 const dw_tagnum SearchBaseTags[] = {
-    DW_TAG_inheritance, 0
+    DW_TAG_inheritance,
+    0
 };
 
 const dw_tagnum ScanKidsTags[] = {
-    DW_TAG_compile_unit,  DW_TAG_lexical_block, 0
+    DW_TAG_compile_unit,
+    DW_TAG_lexical_block,
+    0
 };
 
 const dw_tagnum DeclarationTags[] = {
-    DW_TAG_array_type, DW_TAG_class_type, DW_TAG_common_block, DW_TAG_constant,
-    DW_TAG_enumeration_type, DW_TAG_member, DW_TAG_structure_type,
-    DW_TAG_subprogram, DW_TAG_union_type, DW_TAG_variable, 0
+    DW_TAG_array_type,
+    DW_TAG_class_type,
+    DW_TAG_common_block,
+    DW_TAG_constant,
+    DW_TAG_enumeration_type,
+    DW_TAG_member,
+    DW_TAG_structure_type,
+    DW_TAG_subprogram,
+    DW_TAG_union_type,
+    DW_TAG_variable,
+    0
 };
 
 const dw_tagnum *const SearchTypes[] = {
-    SearchSymbolTags, SearchFunctionTags, SearchClassTags,
-    SearchTypeTags, SearchVariableTags, SearchFriendTags, SearchBaseTags
+    SearchSymbolTags,       /* DR_SEARCH_ALL */
+    SearchFunctionTags,     /* DR_SEARCH_FUNCTIONS */
+    SearchClassTags,        /* DR_SEARCH_CLASSES */
+    SearchTypeTags,         /* DR_SEARCH_TYPES */
+    SearchVariableTags,     /* DR_SEARCH_VARIABLES */
+    SearchFriendTags,       /* DR_SEARCH_FRIENDS */
+    SearchBaseTags,         /* DR_SEARCH_BASE */
+                            /* DR_SEARCH_MACROS */
+                            /* DR_SEARCH_NOT_SYM should always be last */
 };
 
 
@@ -122,12 +174,12 @@ long DR_InfoLength( drmem_hdl mod )
     drmem_hdl           finish;
 
     finish = mod + DR_VMReadDWord( mod );
-    mod += sizeof( compuhdr_prologue );
+    mod += sizeof( comp_unit_prologue );
     return( (long)( finish - mod ) );
 }
 
 
-bool DR_ScanCompileUnit( dr_search_context *ctxt,
+bool DR_ScanCompileUnit( dr_search_context *context,
                            DR_CUWLK fn,
                            const dw_tagnum *tagarray, dr_depth depth, void *data)
 /*********************************************************************************/
@@ -141,35 +193,35 @@ bool DR_ScanCompileUnit( dr_search_context *ctxt,
     drmem_hdl           abbrev;
     bool                skipped;
 
-    mod = ctxt->start;
-    info.context = ctxt;
+    mod = context->start;
+    info.context = context;
 
-    if( ctxt->stack.free == 0 ) { // start out in an unnamed chain
-        DR_ContextPush( &ctxt->stack, mod );
-        DR_ContextPushOP( &ctxt->stack, DO_NOTHING );
+    if( context->stack.free == 0 ) { // start out in an unnamed chain
+        DR_ContextPush( &context->stack, mod );
+        DR_ContextPushOP( &context->stack, DO_NOTHING );
     }
 
-    while( mod < ctxt->end ) {
+    while( mod < context->end ) {
         info.handle = mod;
         abbrev_idx = DR_VMReadULEB128( &mod );
         if( abbrev_idx == 0 ) {
-            op = DR_ContextPopOP( &ctxt->stack );
+            op = DR_ContextPopOP( &context->stack );
             switch( op ) {
             case SET_CLASS:
-                ctxt->classhdl = DR_ContextPop( &ctxt->stack );
+                context->classhdl = DR_ContextPop( &context->stack );
                 break;
             case SET_FUNCTION:
-                ctxt->functionhdl = DR_ContextPop( &ctxt->stack );
+                context->functionhdl = DR_ContextPop( &context->stack );
                 break;
             case DO_NOTHING:
-                DR_ContextPop( &ctxt->stack );
+                DR_ContextPop( &context->stack );
                 break;
             }
-            if( ctxt->stack.free < 0 ) {
+            if( context->stack.free < 0 ) {
                 DR_EXCEPT( DREXCEP_BAD_DBG_INFO );
             }
         } else {
-            abbrev = ctxt->compunit->abbrevs[abbrev_idx];
+            abbrev = context->cui->abbrevs[abbrev_idx];
             info.tag = DR_VMReadULEB128( &abbrev );
             haschild = DR_VMReadByte( abbrev );
             abbrev++;
@@ -186,9 +238,9 @@ bool DR_ScanCompileUnit( dr_search_context *ctxt,
                         DR_SkipChildren( &abbrev, &mod );
                         skipped = true;
                     } else {
-                        DR_ContextPush( &ctxt->stack, ctxt->classhdl );
-                        DR_ContextPushOP( &ctxt->stack, SET_CLASS );
-                        ctxt->classhdl = info.handle;
+                        DR_ContextPush( &context->stack, context->classhdl );
+                        DR_ContextPushOP( &context->stack, SET_CLASS );
+                        context->classhdl = info.handle;
                     }
                 } else {
                     if( DR_SearchArray( SearchFunctionTags, info.tag ) ) {
@@ -196,13 +248,13 @@ bool DR_ScanCompileUnit( dr_search_context *ctxt,
                             DR_SkipChildren( &abbrev, &mod );
                             skipped = true;
                         } else {
-                            DR_ContextPush( &ctxt->stack, ctxt->functionhdl );
-                            DR_ContextPushOP( &ctxt->stack, SET_FUNCTION );
-                            ctxt->functionhdl = info.handle;
+                            DR_ContextPush( &context->stack, context->functionhdl );
+                            DR_ContextPushOP( &context->stack, SET_FUNCTION );
+                            context->functionhdl = info.handle;
                         }
                     } else {
-                        DR_ContextPush( &ctxt->stack, info.handle );
-                        DR_ContextPushOP( &ctxt->stack, DO_NOTHING );
+                        DR_ContextPush( &context->stack, info.handle );
+                        DR_ContextPushOP( &context->stack, DO_NOTHING );
                     }
                 }
             }
@@ -549,7 +601,8 @@ int DR_ReadFlag( drmem_hdl abbrev, drmem_hdl info )
     dw_formnum  form;
 
     form = DR_VMReadULEB128( &abbrev );
-    if( form == DW_FORM_data1 || form == DW_FORM_flag ) {
+    if( form == DW_FORM_data1
+      || form == DW_FORM_flag ) {
         return( DR_VMReadByte( info ) );
     } else {
         DR_EXCEPT( DREXCEP_BAD_DBG_INFO );
@@ -562,16 +615,16 @@ dw_tagnum DR_ReadTag( drmem_hdl *entry, drmem_hdl *abbrev )
 {
     dw_tagnum       tag;
     dr_abbrev_idx   abbrev_idx;
-    dr_cu_handle    cu;
+    dr_cui_handle   cui;
 
     abbrev_idx = DR_VMReadULEB128( entry );
-    cu = DR_FindCompileInfo( *entry );
-    if( abbrev_idx >= cu->numabbrevs ) {
+    cui = DR_FindCompileInfo( *entry );
+    if( abbrev_idx >= cui->numabbrevs ) {
         DR_EXCEPT( DREXCEP_BAD_DBG_INFO );
         *abbrev = DRMEM_HDL_NULL;
         tag = 0;
     } else {
-        *abbrev = cu->abbrevs[abbrev_idx];
+        *abbrev = cui->abbrevs[abbrev_idx];
         tag = DR_VMReadULEB128( abbrev );
     }
     return( tag );
@@ -598,7 +651,7 @@ bool DR_ReadTagEnd( drmem_hdl *entry, drmem_hdl *pabbrev, dw_tagnum *ptag )
 /***************************************************************************/
 {
     dr_abbrev_idx   abbrev_idx;
-    dr_cu_handle    cu;
+    dr_cui_handle   cui;
     drmem_hdl       abbrev;
     dw_tagnum       tag;
 
@@ -606,11 +659,11 @@ bool DR_ReadTagEnd( drmem_hdl *entry, drmem_hdl *pabbrev, dw_tagnum *ptag )
     tag = 0;
     abbrev_idx = DR_VMReadULEB128( entry );
     if( abbrev_idx != 0 ) {
-        cu = DR_FindCompileInfo( *entry );
-        if( abbrev_idx >= cu->numabbrevs ) {
+        cui = DR_FindCompileInfo( *entry );
+        if( abbrev_idx >= cui->numabbrevs ) {
             DR_EXCEPT( DREXCEP_BAD_DBG_INFO );
         } else {
-            abbrev = cu->abbrevs[abbrev_idx];
+            abbrev = cui->abbrevs[abbrev_idx];
             tag = DR_VMReadULEB128( &abbrev );
         }
     }
@@ -621,8 +674,8 @@ bool DR_ReadTagEnd( drmem_hdl *entry, drmem_hdl *pabbrev, dw_tagnum *ptag )
     return( abbrev_idx == 0 );
 }
 
-char * DR_CopyDbgSecString( drmem_hdl *info, unsigned_32 offset )
-/***************************************************************/
+char *DR_CopyDbgSecString( drmem_hdl *info, unsigned_32 offset )
+/**************************************************************/
 {
     drmem_hdl   dbgsec_str;
     char        *str;
@@ -657,26 +710,29 @@ bool DR_ScanForAttrib( drmem_hdl *abbrev, drmem_hdl *info, dw_atnum at )
     return( found );
 }
 
-static const dw_tagnum CompUnitTag[] = { DW_TAG_compile_unit, 0 };
+static const dw_tagnum CompUnitTag[] = {
+    DW_TAG_compile_unit,
+    0
+};
 
 void DR_GetCompileUnitHdr( drmem_hdl mod, DR_CUWLK fn, void *data )
 /*****************************************************************/
 {
-    dr_search_context   ctxt;
-    dr_cu_handle        compunit;
+    dr_search_context   context;
+    dr_cui_handle       cui;
 
-    compunit = DR_FindCompileInfo( mod );
-    ctxt.compunit = compunit;
+    cui = DR_FindCompileInfo( mod );
+    context.cui = cui;
 
-    ctxt.start = compunit->start;
-    ctxt.end = compunit->start + DR_VMReadDWord( compunit->start );
-    ctxt.start += sizeof( compuhdr_prologue );
-    ctxt.stack.size = 0;
-    ctxt.stack.free = 0;
-    ctxt.stack.stack = NULL;
+    context.start = cui->start;
+    context.end = cui->start + DR_VMReadDWord( cui->start );
+    context.start += sizeof( comp_unit_prologue );
+    context.stack.size = 0;
+    context.stack.free = 0;
+    context.stack.stack = NULL;
 
-    DR_ScanCompileUnit( &ctxt, fn, CompUnitTag, 0, data );
-    DR_FreeContextStack( &ctxt.stack );
+    DR_ScanCompileUnit( &context, fn, CompUnitTag, 0, data );
+    DR_FreeContextStack( &context.stack );
 }
 
 drmem_hdl DRENTRY DRGetCompileUnitTag( drmem_hdl comp_unit )
@@ -686,14 +742,14 @@ drmem_hdl DRENTRY DRGetCompileUnitTag( drmem_hdl comp_unit )
  * assume it starts after header
  */
 {
-    comp_unit += sizeof( compuhdr_prologue );
+    comp_unit += sizeof( comp_unit_prologue );
     return( comp_unit );
 }
 
 #define DEMANGLE_BUF_SIZE 256
 
-char * DR_GetName( drmem_hdl abbrev, drmem_hdl entry )
-/****************************************************/
+char *DR_GetName( drmem_hdl abbrev, drmem_hdl entry )
+/***************************************************/
 {
     char    *name;
     char    buffer[DEMANGLE_BUF_SIZE];
@@ -716,57 +772,57 @@ char * DR_GetName( drmem_hdl abbrev, drmem_hdl entry )
 void DRENTRY DRIterateCompileUnits( void *data, DRITERCUCB callback )
 /*******************************************************************/
 {
-    dr_cu_handle    compunit;
+    dr_cui_handle   cui;
 
-    compunit = &DR_CurrNode->compunit;
+    cui = &DR_CurrNode->cu_info;
     do {
-        if( !callback( data, compunit->start ) ) {
+        if( !callback( data, cui->start ) ) {
             break;    // false == quit
         }
-        compunit = compunit->next;
-    } while( compunit != NULL );
+        cui = cui->next;
+    } while( cui != NULL );
 }
 
-bool DR_ScanAllCompileUnits( dr_search_context *startingCtxt, DR_CUWLK fn,
+bool DR_ScanAllCompileUnits( dr_search_context *scontext, DR_CUWLK fn,
                         const dw_tagnum *tagarray, dr_depth depth, void *data )
 /*****************************************************************************/
 {
     bool                cont;
-    dr_search_context   ctxt;
+    dr_search_context   context;
     int                 i;
 
-    if( startingCtxt == NULL ) {
-        ctxt.compunit = &DR_CurrNode->compunit;
-        ctxt.start = ((dr_cu_handle)ctxt.compunit)->start;
-        ctxt.end = ctxt.start + DR_VMReadDWord( ctxt.start );
-        ctxt.start += sizeof( compuhdr_prologue );
-        ctxt.classhdl = DRMEM_HDL_NULL;
-        ctxt.functionhdl = DRMEM_HDL_NULL;
-        ctxt.stack.size = 0;
-        ctxt.stack.free = 0;
-        ctxt.stack.stack = NULL;
+    if( scontext == NULL ) {
+        context.cui = &DR_CurrNode->cu_info;
+        context.start = context.cui->start;
+        context.end = context.start + DR_VMReadDWord( context.start );
+        context.start += sizeof( comp_unit_prologue );
+        context.classhdl = DRMEM_HDL_NULL;
+        context.functionhdl = DRMEM_HDL_NULL;
+        context.stack.size = 0;
+        context.stack.free = 0;
+        context.stack.stack = NULL;
     } else {
-        ctxt = *startingCtxt;   /* structure copy */
+        context = *scontext;   /* structure copy */
 
         /* but allocate and copy own stack */
-        ctxt.stack.stack = DR_ALLOC( ctxt.stack.size * sizeof( uint_32 ) );
-        for( i = 0; i < ctxt.stack.free; i += 1 ) {
-            ctxt.stack.stack[i] = startingCtxt->stack.stack[i];
+        context.stack.stack = DR_ALLOC( context.stack.size * sizeof( uint_32 ) );
+        for( i = 0; i < context.stack.free; i += 1 ) {
+            context.stack.stack[i] = scontext->stack.stack[i];
         }
     }
 
     do {
-        cont = DR_ScanCompileUnit( &ctxt, fn, tagarray, depth, data );
+        cont = DR_ScanCompileUnit( &context, fn, tagarray, depth, data );
 
-        ctxt.compunit = ((dr_cu_handle)ctxt.compunit)->next;
-        if( ctxt.compunit ) {
-            ctxt.start = ((dr_cu_handle)ctxt.compunit)->start;
-            ctxt.end = ctxt.start + DR_VMReadDWord( ctxt.start );
-            ctxt.start += sizeof( compuhdr_prologue );
+        context.cui = context.cui->next;
+        if( context.cui ) {
+            context.start = context.cui->start;
+            context.end = context.start + DR_VMReadDWord( context.start );
+            context.start += sizeof( comp_unit_prologue );
         }
-    } while( cont && ctxt.compunit != NULL );
+    } while( cont && context.cui != NULL );
 
-    DR_FreeContextStack( &ctxt.stack );
+    DR_FreeContextStack( &context.stack );
 
     return( cont );     /* false if more symbols, true if at end of info */
 }
@@ -776,23 +832,23 @@ bool DR_WalkCompileUnit( drmem_hdl mod, DR_CUWLK fn,
 /*******************************************************************************/
 {
     bool                cont;
-    dr_search_context   ctxt;
-    dr_cu_handle        compunit;
+    dr_search_context   context;
+    dr_cui_handle       cui;
 
-    compunit = DR_FindCompileInfo( mod );
-    ctxt.compunit = compunit;
-    ctxt.start = mod;
-    ctxt.end = compunit->start + DR_VMReadDWord( compunit->start );
-    ctxt.classhdl = DRMEM_HDL_NULL;
-    ctxt.functionhdl = DRMEM_HDL_NULL;
-    ctxt.stack.size = 0;
-    ctxt.stack.free = 0;
-    ctxt.stack.stack = NULL;
+    cui = DR_FindCompileInfo( mod );
+    context.cui = cui;
+    context.start = mod;
+    context.end = cui->start + DR_VMReadDWord( cui->start );
+    context.classhdl = DRMEM_HDL_NULL;
+    context.functionhdl = DRMEM_HDL_NULL;
+    context.stack.size = 0;
+    context.stack.free = 0;
+    context.stack.stack = NULL;
 
-    cont = DR_ScanCompileUnit( &ctxt, fn, tagarray, depth, data );
+    cont = DR_ScanCompileUnit( &context, fn, tagarray, depth, data );
 
 
-    DR_FreeContextStack( &ctxt.stack );
+    DR_FreeContextStack( &context.stack );
 
     return( cont );     /* false if more symbols, true if at end of info */
 }
@@ -809,14 +865,14 @@ bool DR_WalkChildren( drmem_hdl mod, const dw_tagnum *tags, const DRWLKBLK *wlks
     dw_children     haschild;
     int             index;
     DRWLKBLK        wlk;
-    dr_cu_handle    cu;
+    dr_cui_handle   cui;
 
-    cu = DR_FindCompileInfo( mod );
+    cui = DR_FindCompileInfo( mod );
     abbrev_idx = DR_VMReadULEB128( &mod );
     if( abbrev_idx == 0 ) {
         DR_EXCEPT( DREXCEP_DWARF_LIB_FAIL );
     }
-    abbrev = cu->abbrevs[abbrev_idx];
+    abbrev = cui->abbrevs[abbrev_idx];
     tag = DR_VMReadULEB128( &abbrev );
     haschild = DR_VMReadByte( abbrev );
 
@@ -829,7 +885,7 @@ bool DR_WalkChildren( drmem_hdl mod, const dw_tagnum *tags, const DRWLKBLK *wlks
             abbrev_idx = DR_VMReadULEB128( &curr );
             if( abbrev_idx == 0 )
                 break;
-            abbrev = cu->abbrevs[abbrev_idx];
+            abbrev = cui->abbrevs[abbrev_idx];
             tag = DR_VMReadULEB128( &abbrev );
             haschild = DR_VMReadByte( abbrev );
             abbrev += sizeof( unsigned_8 );
@@ -1004,45 +1060,47 @@ bool DR_WalkScope( drmem_hdl mod, const dw_tagnum *tags, DRWLKBLK wlk, void *d )
     return( true );
 }
 
-static dr_cu_handle FindCompileInfo( dr_cu_handle compunit, drmem_hdl addr )
-/**************************************************************************/
+static dr_cui_handle FindCompileInfo( dr_cui_handle cui, drmem_hdl addr )
+/***********************************************************************/
 {
     for( ;; ) {
-        if( (addr >= compunit->start) && (addr <= compunit->end) )
+        if( (addr >= cui->start)
+          && (addr <= cui->end) )
             break;
-        compunit = compunit->next;
-        if( compunit == NULL ) {
+        cui = cui->next;
+        if( cui == NULL ) {
             break;
         }
     }
-    if( compunit == NULL ) {
+    if( cui == NULL ) {
         DR_EXCEPT( DREXCEP_DWARF_LIB_FAIL );
     }
-    return( compunit );
+    return( cui );
 }
 
-dr_cu_handle DR_FindCompileInfo( drmem_hdl addr )
-/***********************************************/
-/* gets the drmem_hdl of the module that addr is in */
+dr_cui_handle DR_FindCompileInfo( drmem_hdl addr )
+/*************************************************
+ * gets the drmem_hdl of the module that addr is in
+ */
 {
-    dr_cu_handle    compunit;
+    dr_cui_handle   cui;
 
-    compunit = DR_CurrNode->last_ccu;
-    if( addr < compunit->start ) {  // start at begining
-        compunit = &DR_CurrNode->compunit;
+    cui = DR_CurrNode->last_cui;
+    if( addr < cui->start ) {  // start at begining
+        cui = &DR_CurrNode->cu_info;
     }
-    compunit = FindCompileInfo( compunit, addr );
-    DR_CurrNode->last_ccu = compunit;
-    return( compunit );
+    cui = FindCompileInfo( cui, addr );
+    DR_CurrNode->last_cui = cui;
+    return( cui );
 }
 
 drmem_hdl DR_FindCompileUnit( drmem_hdl addr )
 /********************************************/
 {
-    dr_cu_handle    compunit;
+    dr_cui_handle   cui;
 
-    compunit = DR_FindCompileInfo( addr );
-    return( compunit->start );
+    cui = DR_FindCompileInfo( addr );
+    return( cui->start );
 }
 
 #define CONTEXT_GUESS 0x10
@@ -1094,4 +1152,24 @@ void DR_FreeContextStack( dr_context_stack *stack )
     DR_FREE( stack->stack );
     stack->free = 0;
     stack->size = 0;
+}
+
+unsigned_16      DR_ReadWord( const char *p )
+/*******************************************/
+{
+    if( DR_CurrNode->big_endian ) {
+        return( MGET_BE_U16_UN( p ) );
+    } else {
+        return( MGET_LE_U16_UN( p ) );
+    }
+}
+
+unsigned_32      DR_ReadDWord( const char *p )
+/********************************************/
+{
+    if( DR_CurrNode->big_endian ) {
+        return( MGET_BE_U32_UN( p ) );
+    } else {
+        return( MGET_LE_U32_UN( p ) );
+    }
 }

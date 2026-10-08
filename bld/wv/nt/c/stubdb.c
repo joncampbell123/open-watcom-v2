@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -54,7 +54,7 @@
 #include "dbgcmd.h"
 #include "dbgtrace.h"
 #include "dipimp.h"
-#include "dipinter.h"
+#include "wvdipcli.h"
 #include "dbgdot.h"
 #include "ntdbgpb.h"
 #include "dlgcmd.h"
@@ -228,7 +228,6 @@ int main( int argc, char **argv )
     _bgetcmd( cmd_line, sizeof( cmd_line ) );
     CmdData = cmd_line;
     DebugMain();
-    _SwitchOff( SW_ERROR_STARTUP );
     DoInput();
     VarInitInfo( &Locals );
     Requestsem = CreateSemaphore( NULL, 0, 1, NULL );
@@ -288,7 +287,7 @@ void DlgCmd( void )
             printf( "Error - unrecognized command\n" );
         }
     } else {
-        DoCmd( DupStr( buff ) );
+        DoCmd( MemStrdupSafe( buff ) );
         DoInput();
     }
 }

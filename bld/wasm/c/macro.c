@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -65,9 +65,9 @@ static asmline *asmline_append( asmlines *lines, char *line )
 {
     asmline *entry;
 
-    entry = AsmAlloc( sizeof( asmline ) );
+    entry = MemAllocSafe( sizeof( asmline ) );
     entry->paramscount = 0;
-    entry->line = AsmStrDup( line );
+    entry->line = MemStrdupSafe( line );
     /*
      * add macro line to the end of macro lines list
      */
@@ -87,7 +87,11 @@ static char *replace_param( parm_list *param, char *start, size_t len, asmline *
  * search through params list for word pointed at by start,
  * if you find it, set up the line string
  * this is similar to a printf format string
- * the placeholders are of the form #dd ( #, digit, digit )
+ * placeholders are of the form Xdd (digit, digit) where X is '#' for a
+ * standalone reference (preserve original quote delimiters at substitution)
+ * or '@' for an `&`-adjacent reference inside a string (raw substitution,
+ * matching MASM/TASM `&` text-substitution semantics that strip the arg's
+ * outer quotes -- mdef.inc relies on this for `extrn "&p1",...` patterns).
  * this allows up to 100 parameters - lots :)
  * fixme - this max. should be docmented & checked for.
  */
@@ -97,6 +101,7 @@ static char *replace_param( parm_list *param, char *start, size_t len, asmline *
     char            *old_line;
     size_t          before;             // length of text before placeholder
     char            count = 0;
+    char            kind;
 
     old_line = lineinfo->line;
     for( ; param != NULL; param = param->next ) {
@@ -106,7 +111,12 @@ static char *replace_param( parm_list *param, char *start, size_t len, asmline *
             /*
              * hey! it matches!
              */
-            new_line = AsmAlloc( strlen( old_line ) - len + PLACEHOLDER_SIZE + 1 );
+            kind = '#';
+            if( ( start > old_line && *(start - 1) == '&' )
+              || *(start + len) == '&' ) {
+                kind = '@';
+            }
+            new_line = MemAllocSafe( strlen( old_line ) - len + PLACEHOLDER_SIZE + 1 );
             before = start - old_line;
             if( before > 0 ) {
                 if( *(start - 1) == '&' )
@@ -114,7 +124,7 @@ static char *replace_param( parm_list *param, char *start, size_t len, asmline *
                 strncpy( new_line, old_line, before );
             }
             *(new_line + before) = '\0';
-            if( sprintf( buffer, "#%-2.2d", count ) != 3 ) {
+            if( sprintf( buffer, "%c%-2.2d", kind, count ) != 3 ) {
                 myassert( 0 );
             }
             strcat( new_line, buffer );
@@ -124,9 +134,9 @@ static char *replace_param( parm_list *param, char *start, size_t len, asmline *
             lineinfo->line = new_line;
             lineinfo->paramscount++;
 
-            AsmFree( old_line );
+            MemFree( old_line );
             /*
-             * ptr to char after #dd
+             * ptr to char after placeholder
              */
             return( new_line + before + PLACEHOLDER_SIZE );
         }
@@ -146,6 +156,7 @@ static char *replace_label( local_label *locallabel, char *start, size_t len, as
     char            *new_line;
     char            *old_line;
     size_t          before;             // length of text before word
+    size_t          label_len;
 
     old_line = lineinfo->line;
     for( ; locallabel != NULL; locallabel = locallabel->next ) {
@@ -156,7 +167,7 @@ static char *replace_label( local_label *locallabel, char *start, size_t len, as
              *
              * check internal symbol
              */
-            if( locallabel->label_len == 0 ) {
+            if( locallabel->label == NULL ) {
                 /*
                  * if the internal symbol does not exist, it is created
                  * and saved for further use
@@ -164,10 +175,10 @@ static char *replace_label( local_label *locallabel, char *start, size_t len, as
                 char    label[10];
 
                 sprintf( label, "??%04d", MacroLocalVarCounter++ );
-                locallabel->label = AsmStrDup( label );
-                locallabel->label_len = strlen( locallabel->label );
+                locallabel->label = MemStrdupSafe( label );
             }
-            new_line = AsmAlloc( strlen( old_line ) - len + locallabel->label_len + 1 );
+            label_len = strlen( locallabel->label );
+            new_line = MemAllocSafe( strlen( old_line ) - len + label_len + 1 );
             before = start - old_line;
             if( before > 0 ) {
                 if( *(start - 1) == '&' )
@@ -177,14 +188,14 @@ static char *replace_label( local_label *locallabel, char *start, size_t len, as
             strcpy( new_line + before, locallabel->label );
             if( *(start + len) == '&' )
                 len++;
-            strcpy( new_line + before + locallabel->label_len, start + len );
+            strcpy( new_line + before + label_len, start + len );
             lineinfo->line = new_line;
 
-            AsmFree( old_line );
+            MemFree( old_line );
             /*
              * ptr to char after new label
              */
-            return( new_line + before + locallabel->label_len );
+            return( new_line + before + label_len );
         }
     }
     return( start + len );
@@ -268,32 +279,33 @@ static char *find_replacement_items( char **pline, bool *pquote )
     return( NULL );
 }
 
-static bool lineis( char *str, char *substr )
-/*******************************************/
+static bool lineis( const char *str, const char *substr )
+/*******************************************************/
 {
     size_t  len;
 
     len = strlen( substr );
-    wipe_space( str );
     if( strnicmp( str, substr, len ) ) {
         return( false );
     }
-    if( str[len] != '\0'
-      && !isspace( str[len] ) ) {
-        return( false );
-    }
-    return( true );
+    return( str[len] == '\0' || isspace( str[len] ) );
 }
 
-static bool is_repeat_block( char *ptr )
-/**************************************/
+static bool lineis_repeat_block( const char *ptr )
+/************************************************/
 {
-    return( lineis( ptr, "for" )
-          || lineis( ptr, "forc" )
-          || lineis( ptr, "irp" )
-          || lineis( ptr, "irpc" )
-          || lineis( ptr, "rept" )
-          || lineis( ptr, "repeat" ) );
+    switch( strcspn( ptr, " \t" ) ) {
+    case 3:
+        return( strnicmp( ptr, "for", 3 ) == 0
+            || strnicmp( ptr, "irp", 3 ) == 0 );
+    case 4:
+        return( strnicmp( ptr, "forc", 4 ) == 0
+            || strnicmp( ptr, "irpc", 4 ) == 0
+            || strnicmp( ptr, "rept", 4 ) == 0 );
+    case 6:
+        return( strnicmp( ptr, "repeat", 6 ) == 0 );
+    }
+    return( false );
 }
 
 static bool macro_local( token_buffer *tokbuf, macro_info *info )
@@ -304,11 +316,10 @@ static bool macro_local( token_buffer *tokbuf, macro_info *info )
     while( tok->class == TC_ID ) {
         local_label *locallabel;
 
-        locallabel = AsmAlloc( sizeof( local_label ) );
-        locallabel->local = AsmStrDup( tok->string_ptr );
+        locallabel = MemAllocSafe( sizeof( local_label ) );
+        locallabel->local = MemStrdupSafe( tok->string_ptr );
         locallabel->local_len = strlen( locallabel->local );
         locallabel->label = NULL;
-        locallabel->label_len = 0;
         /*
          * add to the head of linked list
          */
@@ -334,13 +345,60 @@ static bool macro_local( token_buffer *tokbuf, macro_info *info )
     return( RC_OK );
 }
 
+static bool expand_macro_default( token_buffer *tokbuf, token_idx start,
+                                  token_idx end, char *buffer, size_t buffer_len )
+{
+    token_buffer    work;
+    token_idx       i;
+    char            *p;
+
+    if( end <= start ) {
+        buffer[0] = '\0';
+        return( RC_OK );
+    }
+    for( i = 0; start + i < end; ++i ) {
+        work.tokens[i] = tokbuf->tokens[start + i];
+    }
+    SetFinalToken( &work, i );
+    if( ExpandAllConsts( &work, 0, false ) ) {
+        return( RC_ERROR );
+    }
+
+    p = buffer;
+    for( i = 0; i < work.count; i++ ) {
+        size_t  len;
+
+        if( i > 0 ) {
+            if( p + 1 >= buffer + buffer_len ) {
+                AsmError( EXPANDED_LINE_TOO_LONG );
+                return( RC_ERROR );
+            }
+            *p++ = ' ';
+        }
+        if( work.tokens[i].class == TC_NUM ) {
+            len = sprintf( p, "%lu", work.tokens[i].u.value );
+        } else {
+            len = strlen( work.tokens[i].string_ptr );
+            if( p + len >= buffer + buffer_len ) {
+                AsmError( EXPANDED_LINE_TOO_LONG );
+                return( RC_ERROR );
+            }
+            memcpy( p, work.tokens[i].string_ptr, len );
+        }
+        p += len;
+    }
+    *p = '\0';
+    return( RC_OK );
+}
+
 static bool macro_exam( token_buffer *tokbuf, token_idx i )
 /*********************************************************/
 {
     macro_info      *info;
     char            *line;
-    char            *name;
+    const char      *name;
     char            buffer[ MAX_LINE_LEN ];
+    char            def_buffer[ MAX_LINE_LEN ];
     dir_node_handle dir;
     uint            nesting_depth = 0;
     bool            store_data;
@@ -361,46 +419,22 @@ static bool macro_exam( token_buffer *tokbuf, token_idx i )
     i += 2;
 
     if( store_data ) {
-        for( ; i < tokbuf->count ; ) {
+        while( i < tokbuf->count ) {
             parm_list   *paramnode;
-            char        *def_value;
-            bool        required;
+
             /*
              * first get the param name
              */
             name = tokbuf->tokens[i].string_ptr;
-            i++;
             /*
-             * now see if it has a default value or is required
+             * create new parameter
              */
-            def_value = NULL;
-            required = false;
-            if( tokbuf->tokens[i].class == TC_COLON ) {
-                i++;
-                if( *tokbuf->tokens[i].string_ptr == '=' ) {
-                    i++;
-                    if( tokbuf->tokens[i].class != TC_STRING ) {
-                        AsmError( SYNTAX_ERROR );
-                        return( RC_ERROR );
-                    }
-                    def_value = tokbuf->tokens[i].string_ptr;
-                    i++;
-                } else if( CMPLIT( tokbuf->tokens[i].string_ptr, "REQ" ) == 0 ) {
-                    /*
-                     * required parameter
-                     */
-                    required = true;
-                    i++;
-                }
-            }
-            /*
-             * add parameter to the end of list
-             */
-            paramnode = AsmAlloc( sizeof( parm_list ) );
+            paramnode = MemAllocSafe( sizeof( parm_list ) );
             paramnode->replace = NULL;
-            paramnode->label = AsmStrDup( name );
-            paramnode->def = AsmStrDup( def_value );
-            paramnode->required = required;
+            paramnode->label = MemStrdupSafe( name );
+            paramnode->def = NULL;
+            paramnode->required = false;
+            paramnode->delim = 0;
             /*
              * add to the tail of linked list
              */
@@ -412,8 +446,50 @@ static bool macro_exam( token_buffer *tokbuf, token_idx i )
             }
             info->params.tail = paramnode;
 
-            if( i < tokbuf->count
-              && tokbuf->tokens[i].class != TC_COMMA ) {
+            i++;
+            if( i >= tokbuf->count )
+                break;
+            /*
+             * now see if parameter is required
+             */
+            if( tokbuf->tokens[i].class == TC_COLON ) {
+                i++;
+                if( i >= tokbuf->count )
+                    break;
+                if( CMPLIT( tokbuf->tokens[i].string_ptr, "REQ" ) == 0 ) {
+                    /*
+                     * required parameter
+                     */
+                    paramnode->required = true;
+                    i++;
+                    if( i >= tokbuf->count ) {
+                        break;
+                    }
+                }
+            }
+            /*
+             * now see if it has a default value
+             */
+            if( tokbuf->tokens[i].class == TC_COLON_EQU ) {
+                token_idx   def_start;
+
+                i++;
+                if( i >= tokbuf->count )
+                    break;
+                def_start = i;
+                while( i < tokbuf->count && tokbuf->tokens[i].class != TC_COMMA ) {
+                    i++;
+                }
+                if( expand_macro_default( tokbuf, def_start, i,
+                                          def_buffer, sizeof( def_buffer ) ) ) {
+                    return( RC_ERROR );
+                }
+                paramnode->def = MemStrdupSafe( def_buffer );
+                if( i >= tokbuf->count ) {
+                    break;
+                }
+            }
+            if( tokbuf->tokens[i].class != TC_COMMA ) {
                 AsmError( EXPECTING_COMMA );
                 return( RC_ERROR );
             }
@@ -454,28 +530,55 @@ static bool macro_exam( token_buffer *tokbuf, token_idx i )
      */
     for( ;; ) {
         char        *ptr;
+        char        *p;
         asmline     *lineinfo;
         bool        quote;
 
-        if( lineis( line, "endm" ) ) {
+        ptr = line;
+        while( isspace( *ptr ) )
+            ptr++;
+        if( lineis( ptr, "endm" ) ) {
             if( nesting_depth == 0 ) {
                 return( RC_OK );
             }
             nesting_depth--;
+        } else {
+            /*
+             * &endm is an escaped keyword: strip the & prefix
+             * but don't affect nesting depth
+             */
+            if( *ptr == '&' && lineis( ptr + 1, "endm" ) ) {
+                /*
+                 * strip the & prefix: shift the string left by one character
+                 */
+                for( p = ptr; *p != '\0'; ++p ) {
+                    *p = *(p + 1);
+                }
+            }
         }
-        ptr = line;
-        while( isspace( *ptr ) )
-            ptr++;
-        if( is_repeat_block( ptr ) ) {
+        if( lineis_repeat_block( ptr ) ) {
             nesting_depth++;
         }
         while( *ptr != '\0' && !isspace( *ptr ) )
             ptr++; // skip 1st token
         while( isspace( *ptr ) )
             ptr++;
-        if( is_repeat_block( ptr )
+        if( lineis_repeat_block( ptr )
           || lineis( ptr, "macro" ) ) {
             nesting_depth++;
+        } else {
+            /*
+             * &macro is an escaped keyword: strip the & prefix
+             * but don't affect nesting depth
+             */
+            if( *ptr == '&' && lineis( ptr + 1, "macro" ) ) {
+                /*
+                 * strip the & prefix: shift the string left by one character
+                 */
+                for( p = ptr; *p != '\0'; ++p ) {
+                    *p = *(p + 1);
+                }
+            }
         }
 
         if( store_data ) {
@@ -499,16 +602,27 @@ static bool macro_exam( token_buffer *tokbuf, token_idx i )
     }
 }
 
-static size_t my_sprintf( char *dest, char *format, int argc, char *argv[] )
-/***************************************************************************
+static size_t my_sprintf( char *dest, const char *format, int argc, char *argv[], char delims[] )
+/************************************************************************************************
  * just like sprintf, except take argv & argc for params
  * so far it only handles string params
+ *
+ * placeholders are 3 chars: kind ('#' or '@') + 2 decimal digits.
+ * '#dd' wraps argv[dd] with delims[dd] (when non-zero), doubling embedded
+ *   delim chars -- this is the MASM-style round-trip for `m '/'` style use.
+ * '@dd' substitutes argv[dd] raw, with no surrounding quotes -- used for
+ *   `&p` references inside a body string, since `&` is a text-substitution
+ *   operator that should drop the arg's outer quotes.
  */
 {
-    char buffer[3];
-    char *start;
-    char *end;
-    int  paramno;
+    char        buffer[3];
+    const char  *start;
+    const char  *end;
+    char        *q;
+    char        *src;
+    char        delim;
+    char        kind;
+    int         paramno;
 
     /* unused parameters */ (void)argc;
 
@@ -516,12 +630,12 @@ static size_t my_sprintf( char *dest, char *format, int argc, char *argv[] )
     start = format;
     for( end = start ; *end != '\0'; start = end + PLACEHOLDER_SIZE ) {
         /*
-         * scan till we hit a placeholdr ( #dd ) or the end of the string
+         * scan till we hit a placeholder (#dd or @dd) or the end of the string
          */
         for( end = start; *end != '\0'; end++ ) {
-            if( end[0] == '#'
-              && isdigit( end[1] )
-              && isdigit( end[2] ) ) {
+            if( ( end[0] == '#' || end[0] == '@' )
+              && isdigit( (unsigned char)end[1] )
+              && isdigit( (unsigned char)end[2] ) ) {
                 break;
             }
         }
@@ -529,9 +643,7 @@ static size_t my_sprintf( char *dest, char *format, int argc, char *argv[] )
             strncat( dest, start, end - start );
             break;
         }
-        /*
-         * we have a placeholder ( #dd )
-         */
+        kind = end[0];
         buffer[0] = end[1];
         buffer[1] = end[2];
         buffer[2] = '\0';
@@ -539,7 +651,22 @@ static size_t my_sprintf( char *dest, char *format, int argc, char *argv[] )
         strncat( dest, start, end - start );
         /**/myassert( paramno < argc );
         if( argv[paramno] != NULL ) {
-            strcat( dest, argv[paramno] );
+            delim = ( kind == '#' && delims != NULL ) ? delims[paramno] : 0;
+            q = dest + strlen( dest );
+            if( delim != 0 ) {
+                *q++ = delim;
+                for( src = argv[paramno]; *src != '\0'; src++ ) {
+                    if( *src == delim ) {
+                        /* double an embedded delim, MASM idiom */
+                        *q++ = delim;
+                    }
+                    *q++ = *src;
+                }
+                *q++ = delim;
+                *q = '\0';
+            } else {
+                strcpy( q, argv[paramno] );
+            }
         }
     }
     return( strlen( dest ) );
@@ -562,7 +689,7 @@ static char *fill_in_params_and_labels( char *line, macro_info *info )
         /*
          * replace macro local labels by internal symbols
          */
-        lineinfo.line = line = AsmStrDup( line );
+        lineinfo.line = line = MemStrdupSafe( line );
         quote = false;
         for( ; *line != '\0'; ) {
             start = find_replacement_items( &line, &quote );
@@ -577,23 +704,28 @@ static char *fill_in_params_and_labels( char *line, macro_info *info )
         count++;
     }
     if( count > 0 ) {
-        param_array = AsmAlloc( count * sizeof( char * ) );
+        char *param_delims;
+
+        param_array = MemAllocSafe( count * sizeof( char * ) );
+        param_delims = MemAllocSafe( count );
         count = 0;
         for( param = info->params.head; param != NULL; param = param->next ) {
             param_array[count] = param->replace;
+            param_delims[count] = param->delim;
             count++;
         }
         /*
          * replace parameters by actual values
          */
-        my_sprintf( buffer, line, count, param_array );
-        new_line = AsmStrDup( buffer );
-        AsmFree( param_array );
+        my_sprintf( buffer, line, count, param_array, param_delims );
+        new_line = MemStrdupSafe( buffer );
+        MemFree( param_delims );
+        MemFree( param_array );
     } else {
-        new_line = AsmStrDup( line );
+        new_line = MemStrdupSafe( line );
     }
     if( info->labels.head != NULL ) {
-        AsmFree( lineinfo.line );
+        MemFree( lineinfo.line );
     }
     return( new_line );
 }
@@ -602,8 +734,21 @@ static void reset_paramslist( parm_list *param )
 /**********************************************/
 {
     for( ; param != NULL; param = param->next ) {
-        AsmFree( param->replace );
+        MemFree( param->replace );
         param->replace = NULL;
+        param->delim = 0;
+    }
+}
+
+static void reset_localslist( local_label *locallabel )
+/*****************************************************/
+{
+    while( locallabel != NULL ) {
+        if( locallabel->label != NULL ) {
+            MemFree( locallabel->label );
+            locallabel->label = NULL;
+        }
+        locallabel = locallabel->next;
     }
 }
 
@@ -612,7 +757,7 @@ bool ExpandMacro( token_buffer *tokbuf )
 {
     char            buffer[MAX_LINE_LEN];
     dir_node_handle dir;
-    asm_sym_handle  sym = NULL;
+    asm_sym_handle  sym;
     macro_info      *info;
     parm_list       *param;
     asmline         *lineinfo;
@@ -622,25 +767,25 @@ bool ExpandMacro( token_buffer *tokbuf )
     bool            expansion_flag = false;
     token_idx       expr_start = 0;
     char            *p;
-    size_t          len;
-    local_label     *locallabel;
 
     if( tokbuf->tokens[0].class == TC_FINAL )
         return( RC_OK );
     /*
      * first, find out if it is a macro
      */
+    sym = NULL;
     for( macro_name_loc = 0; macro_name_loc < tokbuf->count; macro_name_loc++ ) {
         if( tokbuf->tokens[macro_name_loc].class == TC_ID ) {
             sym = AsmGetSymbol( tokbuf->tokens[macro_name_loc].string_ptr );
-        }
-        if( sym != NULL
-          && sym->state == SYM_MACRO ) {
-            break;
+            if( sym != NULL ) {
+                if( sym->state == SYM_MACRO ) {
+                    break;
+                }
+                sym = NULL;
+            }
         }
     }
-    if( sym == NULL
-      || sym->state != SYM_MACRO ) {
+    if( sym == NULL ) {
         /*
          * not a macro, continue regular processing
          */
@@ -662,6 +807,28 @@ bool ExpandMacro( token_buffer *tokbuf )
             return( RC_OK );
         }
     }
+    if( macro_name_loc > 0 ) {
+        i = macro_name_loc - 1;
+        if( tokbuf->tokens[i].class == TC_DIRECTIVE ) {
+            switch( tokbuf->tokens[i].u.token ) {
+            case T_PURGE:
+            case T_IFDEF:
+            case T_IFNDEF:
+            case T_ELSEIFDEF:
+            case T_ELSEIFNDEF:
+            case T_DOT_ERRDEF:
+            case T_DOT_ERRNDEF:
+            case T_ERRIFDEF:
+            case T_ERRIFNDEF:
+                /*
+                 * this is a directive that takes a symbol/macro name as
+                 * its argument — don't expand the name as a macro
+                 * invocation, continue regular processing
+                 */
+                return( RC_OK );
+            }
+        }
+    }
     if( macro_name_loc != 0 ) {
         /*
          * save the rest of the line from before the macro
@@ -669,9 +836,7 @@ bool ExpandMacro( token_buffer *tokbuf )
         PushLineQueue();
         p = buffer;
         for( i = 0; i < macro_name_loc; i++ ) {
-            len = strlen( tokbuf->tokens[i].string_ptr );
-            p = CATSTR( p, tokbuf->tokens[i].string_ptr, len );
-            *p++ = ' ';;
+            p += sprintf( p, "%s ", tokbuf->tokens[i].string_ptr );
         }
         *p = '\0';
         InputQueueLine( buffer );
@@ -689,12 +854,13 @@ bool ExpandMacro( token_buffer *tokbuf )
         p = buffer;
         if( i < tokbuf->count ) {
             if( tokbuf->tokens[i].class == TC_COMMA
-              || ( tokbuf->tokens[i].class == TC_STRING
+              || ( IS_STRING_TOKEN( tokbuf->tokens[i].class )
               && strlen( tokbuf->tokens[i].string_ptr ) == 0 ) ) {
                 /*
                  * blank param
                  */
                 if( param->required ) {
+                    reset_paramslist( info->params.head );
                     AsmError( PARM_REQUIRED );
                     return( RC_ERROR );
                 }
@@ -702,12 +868,13 @@ bool ExpandMacro( token_buffer *tokbuf )
                     /*
                      * fill in the default value
                      */
-                    param->replace = AsmStrDup( param->def );
+                    param->replace = MemStrdupSafe( param->def );
                 }
                 if( tokbuf->tokens[i].class != TC_COMMA ) {
                     i++;
                     if( i < tokbuf->count
                       && tokbuf->tokens[i].class != TC_COMMA ) {
+                        reset_paramslist( info->params.head );
                         AsmError( EXPECTING_COMMA );
                         return( RC_ERROR );
                     }
@@ -719,7 +886,17 @@ bool ExpandMacro( token_buffer *tokbuf )
             } else {
                 /*
                  * we have a param! :)
+                 *
+                 * Store the param content RAW (no surrounding quotes). The
+                 * delimiter is recorded separately in param->delim and reapplied
+                 * at substitution time only for non-`&` references -- see
+                 * my_sprintf. This split is what lets `m '/'` round-trip its
+                 * quotes while `extrn "&p1",...` (mdef.inc) still gets the
+                 * raw text inside its surrounding "...".
                  */
+                char    arg_first_delim = 0;
+                int     arg_token_count = 0;
+
                 for( ;; ) {
                     if( tokbuf->tokens[i].class == TC_FINAL )
                         break;
@@ -739,24 +916,23 @@ bool ExpandMacro( token_buffer *tokbuf )
                             if( *tokbuf->tokens[i].string_ptr == 0 ) {
                                 p += sprintf( p, "%lu", tokbuf->tokens[i].u.value );
                             } else {
-                                len = strlen( tokbuf->tokens[i].string_ptr );
-                                p = CATSTR( p, tokbuf->tokens[i].string_ptr, len );
+                                p += sprintf( p, "%s", tokbuf->tokens[i].string_ptr );
                             }
-                        } else if( tokbuf->tokens[i].class == TC_STRING ) {
-                            char        *src;
+                        } else if( IS_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
+                            const char  *src;
 
+                            if( arg_token_count == 0
+                              && IS_QUOTED_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
+                                arg_first_delim = STRING_TOKEN_DELIM( tokbuf->tokens[i].class );
+                            }
                             src = tokbuf->tokens[i].string_ptr;
                             while( *src != '\0' ) {
-                                if( *src == '\'' ) {
-                                    /* have to escape delim */
-                                    *p++ = '\'';
-                                }
                                 *p++ = *src++;
                             }
                         } else {
-                            len = strlen( tokbuf->tokens[i].string_ptr );
-                            p = CATSTR( p, tokbuf->tokens[i].string_ptr, len );
+                            p += sprintf( p, "%s", tokbuf->tokens[i].string_ptr );
                         }
+                        arg_token_count++;
                     } else {
                         bool expanded;
                         if( ExpandSymbol( tokbuf, i, false, &expanded ) ) {
@@ -780,7 +956,11 @@ bool ExpandMacro( token_buffer *tokbuf )
                     i++;
                 }
                 *p = '\0';
-                param->replace = AsmStrDup( buffer );
+                param->replace = MemStrdupSafe( buffer );
+                /* only honor the delim when the arg was a single quoted string
+                 * token; mixed/multi-token args (e.g. expressions) get raw */
+                if( arg_token_count == 1 )
+                    param->delim = arg_first_delim;
                 /*
                  * go past the comma
                  */
@@ -788,6 +968,7 @@ bool ExpandMacro( token_buffer *tokbuf )
             }
         } else {
             if( param->required ) {
+                reset_paramslist( info->params.head );
                 AsmError( PARM_REQUIRED );
                 return( RC_ERROR );
             }
@@ -800,7 +981,7 @@ bool ExpandMacro( token_buffer *tokbuf )
     for( lineinfo = info->lines.head; lineinfo != NULL; lineinfo = lineinfo->next ) {
         line = fill_in_params_and_labels( lineinfo->line, info );
         InputQueueLine( line );
-        AsmFree( line );
+        MemFree( line );
     }
     /*
      * put this macro into the file stack
@@ -813,20 +994,12 @@ bool ExpandMacro( token_buffer *tokbuf )
     /*
      * reset the local label replace strings, if exists
      */
-    for( locallabel = info->labels.head; locallabel != NULL; locallabel = locallabel->next ) {
-        if( locallabel->label_len > 0 ) {
-            locallabel->label_len = 0;
-            AsmFree( locallabel->label );
-            locallabel->label = NULL;
-        }
-    }
+    reset_localslist( info->labels.head );
     /*
      * free the scanner token array
      * macro is expanded in source queue and original scanner tokens are not necessary
      */
-    tokbuf->count = 0;
-    tokbuf->tokens[0].class = TC_FINAL;
-    tokbuf->tokens[0].string_ptr = tokbuf->stringbuf;
+    SetFinalToken( tokbuf, 0 );
 
     return( RC_OK );
 }
@@ -834,7 +1007,7 @@ bool ExpandMacro( token_buffer *tokbuf )
 bool MacroDef( token_buffer *tokbuf, token_idx i, bool hidden )
 /*************************************************************/
 {
-    char            *name;
+    const char      *name;
     token_idx       n;
     dir_node_handle currproc;
 

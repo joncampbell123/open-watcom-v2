@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -32,26 +32,26 @@
 
 #include "spy.h"
 #include "spymem.h"
-#ifdef TRMEM
-    #include "trmem.h"
-#endif
+#include "trmem.h"
 
 
 #ifdef TRMEM
-static _trmem_hdl  MemHandle;
 
-static FILE *MemFP = NULL;   /* stream to put output on */
+static _trmem_hdl  TrHdl = _TRMEM_HDL_NONE;
+
+static FILE *TrFile = NULL;   /* stream to put output on */
 
 static void MemPrintLine( void *parm, const char *buff, size_t len )
 /******************************************************************/
 {
     /* unused parameters */ (void)parm; (void)len;
 
-    if( MemFP != NULL ) {
-        fprintf( MemFP, "%s\n", buff );
+    if( TrFile != NULL ) {
+        fprintf( TrFile, "%s\n", buff );
     }
 }
-#endif
+
+#endif  /* TRMEM */
 
 void MemOpen( void )
 /******************/
@@ -65,14 +65,12 @@ void MemOpen( void )
     __win_realloc_flags = GMEM_MOVEABLE | GMEM_SHARE;
 #endif
 #ifdef TRMEM
-    MemHandle = _trmem_open( malloc, free, realloc, NULL,
-        NULL, MemPrintLine,
-        _TRMEM_ALLOC_SIZE_0 | _TRMEM_REALLOC_SIZE_0 |
-        _TRMEM_OUT_OF_MEMORY | _TRMEM_CLOSE_CHECK_FREE );
+    TrHdl = _trmem_open( malloc, free, realloc, _TRMEM_NO_STRDUP,
+        NULL, MemPrintLine, _TRMEM_DEF );
 
     tmpdir = getenv( "TRMEMFILE" );
     if( tmpdir != NULL ) {
-        MemFP = fopen( tmpdir, "w" );
+        TrFile = fopen( tmpdir, "w" );
     }
 #endif
 }
@@ -81,22 +79,31 @@ void MemClose( void )
 /*******************/
 {
 #ifdef TRMEM
-    _trmem_prt_list( MemHandle );
-    _trmem_close( MemHandle );
-    if( MemFP != NULL ) {
-        fclose( MemFP );
-        MemFP = NULL;
+    _trmem_prt_list( TrHdl );
+    _trmem_close( TrHdl );
+    if( TrFile != NULL ) {
+        fclose( TrFile );
+        TrFile = NULL;
     }
 #endif
 }
 
+static void *check_nomem( void *ptr )
+{
+    if( ptr == NULL ) {
+        exit( 1 );
+    }
+    return( ptr );
+}
+
+TRMEMAPI( MemAlloc )
 void *MemAlloc( size_t size )
 /***************************/
 {
     void        *ptr;
 
 #ifdef TRMEM
-    ptr = _trmem_alloc( size, _trmem_guess_who(), MemHandle );
+    ptr = _trmem_alloc( size, _TRMEM_WHO( 1 ), TrHdl );
 #else
     ptr = malloc( size );
     memset( ptr, 0, size );
@@ -104,21 +111,34 @@ void *MemAlloc( size_t size )
     return( ptr );
 }
 
+TRMEMAPI( MemStrdupSafe )
+char *MemStrdupSafe( const char *str )
+/************************************/
+{
+#ifdef TRMEM
+    return( check_nomem( _trmem_strdup( str, _TRMEM_WHO( 2 ), TrHdl ) ) );
+#else
+    return( check_nomem( strdup( str ) ) );
+#endif
+}
+
+TRMEMAPI( MemRealloc )
 void *MemRealloc( void *ptr, size_t size )
 /****************************************/
 {
 #ifdef TRMEM
-    return( _trmem_realloc( ptr, size, _trmem_guess_who(), MemHandle ) );
+    return( _trmem_realloc( ptr, size, _TRMEM_WHO( 2 ), TrHdl ) );
 #else
     return( realloc( ptr, size ) );
 #endif
 }
 
+TRMEMAPI( MemFree )
 void MemFree( void *ptr )
 /***********************/
 {
 #ifdef TRMEM
-    _trmem_free( ptr, _trmem_guess_who(), MemHandle );
+    _trmem_free( ptr, _TRMEM_WHO( 3 ), TrHdl );
 #else
     free( ptr );
 #endif

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -33,6 +33,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stddef.h>
+#include <ctype.h>
 #include <conio.h>
 #include <stdio.h>
 #include <i86.h>
@@ -45,23 +46,15 @@
 #include "envlkup.h"
 #include "realmod.h"
 #include "roundmac.h"
+#include "trpdoshd.h"
 
 
 #define DOS4G_COMM_VECTOR       0x15
 #define NUM_BUFF_RELOCS         16
-#define TRAP_VECTOR             0x1a
+#define TRAP_SWITCH_VECTOR      0x1a
 #define PSP_ENVSEG_OFF          0x2c
 
-#define TRAP_SIGNATURE          0xdeaf
-
 #include "pushpck1.h"
-typedef struct {
-    unsigned_16         sig;
-    addr32_off          init;
-    addr32_off          req;
-    addr32_off          fini;
-} trap_file_header;
-
 typedef struct {
     memptr      ptr;
     unsigned_16 len;
@@ -149,7 +142,7 @@ extern void DoIntSwitchToRM( void );
         "xor    eax,eax" \
         "mov    ah,6" \
         "mov    cx,0xffff" \
-        "int    1ah" \
+        _INT TRAP_SWITCH_VECTOR /* int TRAP_SWITCH_VECTOR */ \
         "popad" \
     __parm              [] \
     __value             \
@@ -194,13 +187,19 @@ static int __cdecl D32NullPtrCheck( unsigned short on )
     static int  old_state;
     int         old;
     char        buff[128];
+    int         c;
+    char        *p;
 
     if( _D32NullPtrCheck == P1616NULL ) {
         _D32NullPtrCheck = find_entry();
         if( _D32NullPtrCheck == P1616NULL )
             return( 0 );
         EnvLkup( "DOS4G", buff, sizeof( buff ) );
-        if( strstr( strupr( buff ), "NULLP" ) ) {
+        p = buff;
+        while( (c = *(unsigned char *)p) != '\0' ) {
+            *p++ = toupper( c );
+        }
+        if( strstr( buff, "NULLP" ) ) {
             old_state = 1;
         }
     }
@@ -285,6 +284,11 @@ static void GoToRealMode( void *rm_func )
             DPMISetPMInterruptVector( PMVectSaveList[i], OrigPMVects[i] );
         }
     } else {
+        /*
+         * DOS4GW has no raw switch to RM (DPMI API 0306)
+         * therefore it is emulated by call INT TRAP_SWITCH_VECTOR
+         * INT TRAP_SWITCH_VECTOR is setup to call RM function
+         */
         DoIntSwitchToRM();
     }
 }
@@ -364,7 +368,7 @@ static digld_error SetTrapHandler( void )
         }
     }
     if( IntrState == IS_RATIONAL ) {
-        MySetRMVector( TRAP_VECTOR, RMData.rm, RM_OFF( RMTrapHandler ) );
+        MySetRMVector( TRAP_SWITCH_VECTOR, RMData.rm, RM_OFF( RMTrapHandler ) );
     }
     return( DIGS_OK );
 }
@@ -427,7 +431,7 @@ static trap_retval DoTrapAccess( trap_elen num_in_mx, in_mx_entry_p mx_in, trap_
     struct {
         mx_entry16      in;
         mx_entry16      out;
-        unsigned_16     retlen;
+        unsigned_16     retval;
     }                   __far *callstruct;
     unsigned            len;
     unsigned            copy;
@@ -454,37 +458,36 @@ static trap_retval DoTrapAccess( trap_elen num_in_mx, in_mx_entry_p mx_in, trap_
         callstruct->out.ptr.a = 0;
     }
     GoToRealMode( RMTrapAccess );
-    if( callstruct->retlen == (unsigned_16)REQUEST_FAILED ) {
-        return( REQUEST_FAILED );
-    }
-    if( mx_out != NULL ) {
-        /*
-         * msgptr is pointing at the start of the output buffer
-         */
-        j = 0;
-        for( len = callstruct->retlen; len != 0; len -= copy ) {
-            copy = len;
-            if( copy > mx_out[j].len )
-                copy = mx_out[j].len;
-            _fmemcpy( mx_out[j].ptr, msgptr, copy );
-            ++j;
-            msgptr += copy;
+    if( callstruct->retval != TRAP_REQUEST_FAILED ) {
+        if( mx_out != NULL ) {
+            /*
+             * msgptr is pointing at the start of the output buffer
+             */
+            j = 0;
+            for( len = callstruct->retval; len != 0; len -= copy ) {
+                copy = len;
+                if( copy > mx_out[j].len )
+                    copy = mx_out[j].len;
+                _fmemcpy( mx_out[j].ptr, msgptr, copy );
+                ++j;
+                msgptr += copy;
+            }
+        } else {
+            callstruct->retval = 0;
         }
-    } else {
-        callstruct->retlen = 0;
-    }
-    if( TRP_REQUEST( mx_in ) == REQ_CONNECT ) {
-        if( ((connect_ret *)mx_out->ptr)->max_msg_size > MAX_MSG_SIZE ) {
-            ((connect_ret *)mx_out->ptr)->max_msg_size = MAX_MSG_SIZE;
+        if( TRP_REQUEST( mx_in ) == REQ_CONNECT ) {
+            if( ((connect_ret *)mx_out->ptr)->max_msg_size > MAX_MSG_SIZE ) {
+                ((connect_ret *)mx_out->ptr)->max_msg_size = MAX_MSG_SIZE;
+            }
         }
     }
-    return( callstruct->retlen );
+    return( callstruct->retval );
 }
 
 digld_error LoadTrap( const char *parms, char *buff, trap_version *trap_ver )
 {
     FILE                *fp;
-    trap_file_header    __far *head;
+    dos_trap_header     __far *head;
     char                filename[_MAX_PATH];
     const char          *base_name;
     digld_error         err;
@@ -517,10 +520,10 @@ digld_error LoadTrap( const char *parms, char *buff, trap_version *trap_ver )
       && (err = CopyEnv()) == DIGS_OK ) {
         err = DIGS_ERR_BAD_MODULE_FILE;
         head = EXTENDER_RM2PM( TrapDOSMem.rm, 0 );
-        if( head->sig == TRAP_SIGNATURE ) {
-            PMData->initfunc.s.offset = head->init;
-            PMData->reqfunc.s.offset  = head->req;
-            PMData->finifunc.s.offset = head->fini;
+        if( head->signature == TRAP_SIGNATURE ) {
+            PMData->initfunc.s.offset = head->init_off;
+            PMData->reqfunc.s.offset  = head->req_off;
+            PMData->finifunc.s.offset = head->fini_off;
             PMData->initfunc.s.segment = TrapDOSMem.rm;
             PMData->reqfunc.s.segment  = TrapDOSMem.rm;
             PMData->finifunc.s.segment = TrapDOSMem.rm;

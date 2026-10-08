@@ -21,25 +21,34 @@ additional_clean = *.gh *.grh *.grc *.gc
 !include cproj.mif
 !include defrule.mif
 !include deftarg.mif
-!include trmem.mif
 !include $(wasm_dir)/client.mif
+
+!ifeq host_cpu i86
+!ifneq debug 0
+# this configuration overflow 64 kB _TEXT segment limit
+skip: .SYMBOLIC
+!endif
+!endif
 
 #
 # cflags
 #
 .c : ../c;$(fe_misc_dir)/c;$(trmem_dir);$(watcom_dir)/c
 
-inc_dirs  = -I. -I"../h" -I"$(fe_misc_dir)/h"
+inc_dirs  = -I. -I"../h" -I"$(fe_misc_dir)/h" -I"$(trmem_dir)"
 
 extra_cpp_flags =-D_STANDALONE_
 !ifeq debug 2
 extra_cpp_flags += -DDEBUG_OUT
 !endif
 
-extra_cpp_flags_f_asmalloc = $(trmem_cpp_flags)
-
-extra_c_flags_f_asmalloc = $(trmem_cover_cflags)
-extra_c_flags_f_cmdlnprs = $(incl_file_opts)fesupp.h
+!ifeq trmem 1
+! ifdef __WATCOM_TOOLS__
+!  if $(__WATCOM_TOOLS__) < 1300
+extra_c_flags_f_asmalloc = -of+
+!  endif
+! endif
+!endif
 
 #
 # lflags
@@ -62,7 +71,6 @@ exetarg_objs = &
     cmdlnprs.obj &
     cmdscan.obj &
     write.obj &
-    fatal.obj &
     direct.obj &
     posndir.obj &
     asmeval.obj &
@@ -88,7 +96,6 @@ exetarg_objs = &
     asmdata.obj &
     asmjump.obj &
     autodept.obj &
-    dostimet.obj &
     queues.obj &
     pathlist.obj &
     omfcarve.obj &
@@ -97,8 +104,7 @@ exetarg_objs = &
     omffixup.obj &
     omflifix.obj &
     omfgen.obj &
-    omfgenio.obj &
-    $(trmem_objs)
+    omfgenio.obj $(trmem_objs)
 
 !ifdef bootstrap
 exetarg_name       = bwasm

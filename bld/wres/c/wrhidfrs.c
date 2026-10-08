@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -36,29 +37,29 @@
 #include "reserr.h"
 #include "wresrtns.h"
 
-WResHelpID * WResHelpIDFromStr( const char * newstr )
-/***************************************************/
-/* allocate a Help ID and fill it in */
-{
-    WResHelpID *newid;
-    size_t     strsize;
 
-    strsize = strlen( newstr );
+WResHelpID *WResHelpIDFromStr( const char *str )
+/***********************************************
+ * allocate a Help ID and fill it in
+ */
+{
+    WResHelpID      *help_id;
+    size_t          len;
+
+    len = strlen( str );
     /* check the size of the string:  can it fit in one byte? */
-    if( strsize > 0xff ) {
+    if( len > 255 ) {
         WRES_ERROR( WRS_BAD_PARAMETER );
         return( NULL );
     }
     /* allocate the new Help ID */
-    // if strsize is non-zero then the memory allocated is larger
-    // than required by 1 byte
-    newid = WRESALLOC( sizeof( WResHelpID ) + strsize );
-    if( newid == NULL ) {
+    help_id = AllocWResIDName( offsetof( WResHelpID, ID.Name ), len );
+    if( help_id == NULL ) {
         WRES_ERROR( WRS_MALLOC_FAILED );
     } else {
-        newid->IsName = true;
-        newid->ID.Name.NumChars = strsize;
-        memcpy( newid->ID.Name.Name, newstr, strsize );
+        help_id->IsName = true;
+        help_id->ID.Name.NumChars = len;
+        memcpy( help_id->ID.Name.Name, str, len );
     }
-    return( newid );
+    return( help_id );
 } /* WResHelpIDFromStr */

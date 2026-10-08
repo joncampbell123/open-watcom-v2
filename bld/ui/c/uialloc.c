@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2019 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,34 +35,35 @@
 #include <stdio.h>
 #include <string.h>
 #include "uidef.h"
-#ifdef TRMEM
+#include "memfuncs.h"
 #include "trmem.h"
 
 #include "clibext.h"
-#endif
 
 
 #ifdef TRMEM
-static _trmem_hdl  UIMemHandle;
 
-static FILE *UIMemFileHandle = NULL;    /* stream to put output on */
+static _trmem_hdl  TrHdl = _TRMEM_HDL_NONE;
+
+static FILE *TrFile = NULL;    /* stream to put output on */
 static int  UIMemOpened = 0;
 
 static void UIMemPrintLine( void *parm, const char *buff, size_t len )
 {
     /* unused parameters */ (void)parm; (void)len;
 
-    if( UIMemFileHandle != NULL ) {
-        fprintf( UIMemFileHandle, "%s\n", buff );
+    if( TrFile != NULL ) {
+        fprintf( TrFile, "%s\n", buff );
     }
 }
-#endif
+
+#endif  /* TRMEM */
 
 #if 0
 void UIMemRedirect( FILE *fp )
 {
 #ifdef TRMEM
-    UIMemFileHandle = fp;
+    TrFile = fp;
 #else
     /* unused parameters */ (void)fp;
 #endif
@@ -75,15 +76,13 @@ void UIAPI UIMemOpen( void )
     const char      *tmpdir;
 
     if( !UIMemOpened ) {
-        UIMemFileHandle = stderr;
-        UIMemHandle = _trmem_open( malloc, free, realloc, NULL,
-            UIMemFileHandle, UIMemPrintLine,
-            _TRMEM_ALLOC_SIZE_0 | _TRMEM_REALLOC_SIZE_0 |
-            _TRMEM_OUT_OF_MEMORY | _TRMEM_CLOSE_CHECK_FREE );
+        TrFile = stderr;
+        TrHdl = _trmem_open( malloc, free, realloc, _TRMEM_NO_STRDUP,
+            TrFile, UIMemPrintLine, _TRMEM_DEF );
 
         tmpdir = getenv( "TRMEMFILE" );
         if( tmpdir != NULL ) {
-            UIMemFileHandle = fopen( tmpdir, "w" );
+            TrFile = fopen( tmpdir, "w" );
         }
         UIMemOpened = 1;
     }
@@ -93,11 +92,11 @@ void UIAPI UIMemOpen( void )
 void UIAPI UIMemClose( void )
 {
 #ifdef TRMEM
-    _trmem_prt_list( UIMemHandle );
-    _trmem_close( UIMemHandle );
-    if( UIMemFileHandle != stderr ) {
-        fclose( UIMemFileHandle );
-        UIMemFileHandle = NULL;
+    _trmem_prt_list( TrHdl );
+    _trmem_close( TrHdl );
+    if( TrFile != stderr ) {
+        fclose( TrFile );
+        TrFile = NULL;
     }
 #endif
 }
@@ -106,35 +105,65 @@ void UIAPI UIMemClose( void )
 void UIMemPrtUsage( void )
 {
 #ifdef TRMEM
-    _trmem_prt_usage( UIMemHandle );
+    _trmem_prt_usage( TrHdl );
 #endif
 }
 #endif
 
+static void *check_nomem( void *ptr )
+{
+    if( ptr == NULL ) {
+        exit( 1 );
+    }
+    return( ptr );
+}
 
-void * UIAPI uimalloc( size_t size )
+TRMEMAPI( MemAlloc )
+void * MemAlloc( size_t size )
 {
 #ifdef TRMEM
-    return( _trmem_alloc( size, _trmem_guess_who(), UIMemHandle ) );
+    return( _trmem_alloc( size, _TRMEM_WHO( 1 ), TrHdl ) );
 #else
     return( malloc( size ) );
 #endif
 }
 
-void UIAPI uifree( void *ptr )
+TRMEMAPI( MemAllocSafe )
+void * MemAllocSafe( size_t size )
 {
 #ifdef TRMEM
-    _trmem_free( ptr, _trmem_guess_who(), UIMemHandle );
+    return( check_nomem( _trmem_alloc( size, _TRMEM_WHO( 2 ), TrHdl ) ) );
+#else
+    return( check_nomem( malloc( size ) ) );
+#endif
+}
+
+TRMEMAPI( MemFree )
+void MemFree( void *ptr )
+{
+#ifdef TRMEM
+    _trmem_free( ptr, _TRMEM_WHO( 3 ), TrHdl );
 #else
     free( ptr );
 #endif
 }
 
-void * UIAPI uirealloc( void *old, size_t size )
+TRMEMAPI( MemRealloc )
+void * MemRealloc( void *old, size_t size )
 {
 #ifdef TRMEM
-    return( _trmem_realloc( old, size, _trmem_guess_who(), UIMemHandle ) );
+    return( _trmem_realloc( old, size, _TRMEM_WHO( 4 ), TrHdl ) );
 #else
     return( realloc( old, size ) );
+#endif
+}
+
+TRMEMAPI( MemStrdupSafe )
+char *MemStrdupSafe( const char *str )
+{
+#ifdef TRMEM
+    return( check_nomem( _trmem_strdup( str, _TRMEM_WHO( 5 ), TrHdl ) ) );
+#else
+    return( check_nomem( strdup( str ) ) );
 #endif
 }

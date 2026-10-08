@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -33,11 +33,17 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <stdarg.h>
 #include <errno.h>
+#ifndef __UNIX__
+    #include <share.h>
+#endif
+#include "bool.h"
 #include "wio.h"
 #include "watcom.h"
-#include "bldutils.h"
-#include "memutils.h"
+//#include "memutils.h"
+#include "trmem.h"
 #include "iopath.h"
 #include "pathgrp2.h"
 
@@ -46,6 +52,9 @@
 
 #define DEFCTLNAME      "files.dat"
 #define DEFCTLENV       "FILES_DAT"
+
+#define DRIVE_NUM(x)    ((x)[1] == ':' ? (char)toupper((unsigned char)(x)[0]) - 'A' + 1 : 0)
+#define MAX_LINE        (4096 + 1)
 
 typedef struct ctl_file {
     struct ctl_file     *next;
@@ -62,8 +71,8 @@ typedef struct include {
     char                cwd[_MAX_PATH];
 } include;
 
-bool                Quiet;
-FILE                *LogFile;
+static bool         Quiet;
+static FILE         *LogFile;
 static ctl_file     *CtlList = NULL;
 static include      *IncludeStk;
 static char         Line[MAX_LINE];
@@ -91,6 +100,113 @@ static const char   *DefKeys   = NULL;
 static const char   * const blank = "";
 
 
+#ifdef TRMEM
+
+static _trmem_hdl   TrHdl = _TRMEM_HDL_NONE;
+
+static void     TRPrintLine( void *parm, const char *buff, size_t len )
+{
+    /* unused parameters */ (void)parm; (void)len;
+
+    printf( "%s\n", buff );
+}
+
+#endif  /* TRMEM */
+
+static void MemOpen( void )
+/*************************/
+{
+#ifdef TRMEM
+    TrHdl = _trmem_open( malloc, free, _TRMEM_NO_REALLOC, strdup,
+                               NULL, TRPrintLine, _TRMEM_DEF );
+#endif
+}
+
+static void MemClose( void )
+/**************************/
+{
+#ifdef TRMEM
+    _trmem_prt_list( TrHdl );
+    _trmem_close( TrHdl );
+#endif
+}
+
+static void LogFlush( void )
+{
+    fflush( stderr );
+    if( LogFile != NULL ) {
+        fflush( LogFile );
+    }
+}
+
+static void CloseLog( void )
+{
+    LogFlush();
+    if( LogFile != NULL ) {
+        fclose( LogFile );
+        LogFile = NULL;
+    }
+}
+
+static void Fatal( const char *str, ... )
+{
+    va_list     args;
+
+    va_start( args, str );
+    vfprintf( stderr, str, args );
+    va_end( args );
+    if( LogFile != NULL ) {
+        va_start( args, str );
+        vfprintf( LogFile, str, args );
+        va_end( args );
+    }
+    CloseLog();
+    MemClose();
+    exit( 1 );
+}
+
+TRMEMAPI( MemAllocSafe )
+static void *MemAllocSafe( size_t size )
+{
+    void        *p;
+
+#ifdef TRMEM
+    p = _trmem_alloc( size, _TRMEM_WHO( 1 ), TrHdl );
+#else
+    p = malloc( size );
+#endif
+    if( p == NULL ) {
+        Fatal( "Out of memory!\n" );
+    }
+    return( p );
+}
+
+TRMEMAPI( MemStrdupSafe )
+static char *MemStrdupSafe( const char *s )
+{
+    void        *p;
+
+#ifdef TRMEM
+    p = _trmem_strdup( s, _TRMEM_WHO( 2 ), TrHdl );
+#else
+    p = strdup( s );
+#endif
+    if( p == NULL ) {
+        Fatal( "Out of memory!\n" );
+    }
+    return( p );
+}
+
+TRMEMAPI( MemFree )
+static void MemFree( void *p )
+{
+#ifdef TRMEM
+    _trmem_free( p, _TRMEM_WHO( 3 ), TrHdl );
+#else
+    free( p );
+#endif
+}
+
 static void AddToList( const char *name, ctl_file **owner )
 {
     ctl_file    *curr;
@@ -101,7 +217,7 @@ static void AddToList( const char *name, ctl_file **owner )
             break;
         owner = &curr->next;
     }
-    curr = MAlloc( sizeof( *curr ) );
+    curr = MemAllocSafe( sizeof( *curr ) );
     curr->next = NULL;
     strcpy( curr->name, name );
     *owner = curr;
@@ -125,6 +241,35 @@ static void Usage( void )
     exit( 0 );
 }
 
+static void Log( bool quiet, const char *str, ... )
+{
+    va_list     args;
+
+    if( !quiet ) {
+        va_start( args, str );
+        vfprintf( stderr, str, args );
+        va_end( args );
+    }
+    if( LogFile != NULL ) {
+        va_start( args, str );
+        vfprintf( LogFile, str, args );
+        va_end( args );
+    }
+}
+
+static void OpenLog( const char *name )
+{
+#ifdef __UNIX__
+    LogFile = fopen( name, "w" );
+#else
+    LogFile = _fsopen( name, "w", SH_DENYWR );
+#endif
+    if( LogFile == NULL ) {
+        Fatal( "Can not open '%s': %s\n", name, strerror( errno ) );
+    }
+    setvbuf( LogFile, NULL, _IOLBF, BUFSIZ );
+}
+
 static void ProcessOptions( char *argv[] )
 {
     char        parm_buff[_MAX_PATH];
@@ -134,7 +279,7 @@ static void ProcessOptions( char *argv[] )
     while( argv[0] != NULL ) {
         if( !opt_end
           && argv[0][0] == '-' ) {
-            switch( tolower( argv[0][1] ) ) {
+            switch( (char)tolower( ((unsigned char **)argv)[0][1] ) ) {
             case 'c':
                 argv = getvalue( argv, parm_buff );
                 AddToList( parm_buff, &CtlList );
@@ -190,36 +335,39 @@ static void ProcessOptions( char *argv[] )
 static int sysChdir( const char *dir )
 {
     size_t      len;
+    char        tmp_buf[_MAX_PATH];
 #ifndef __UNIX__
     int         drive;
 #endif
-    char        tmp_buf[_MAX_PATH];
 
     if( dir[0] == '\0' )
         return( 0 );
-#ifndef __UNIX__
-    drive = ( dir[1] == ':' ) ? toupper( (unsigned char)dir[0] ) - 'A' + 1 : 0;
-#endif
     if( dir[1] != '\0' ) {
         len = strlen( dir );
 #ifdef __UNIX__
         if( dir[len - 1] == '/' ) {
-#else
-        if( ( dir[len - 1] == '\\' )
-          && ( len > 3
-          || drive == 0 ) ) {
-#endif
             len--;
             memcpy( tmp_buf, dir, len );
             tmp_buf[len] = '\0';
             dir = tmp_buf;
         }
-    }
-#ifndef __UNIX__
-    if( drive ) {
-        _chdrive( drive );
-    }
+#else
+        if( dir[len - 1] == '\\'
+          || dir[len - 1] == '/' ) {
+            if( len > 3
+              || dir[1] != ':' ) {
+                len--;
+                memcpy( tmp_buf, dir, len );
+                tmp_buf[len] = '\0';
+                dir = tmp_buf;
+            }
+        }
+        drive = DRIVE_NUM( dir );
+        if( drive ) {
+            _chdrive( drive );
+        }
 #endif
+    }
     return( chdir( dir ) );
 }
 
@@ -230,7 +378,7 @@ static void PushInclude( const char *name )
     char        *dir;
     char        dir_name[_MAX_PATH];
 
-    new = MAlloc( sizeof( *new ) );
+    new = MemAllocSafe( sizeof( *new ) );
     new->prev = IncludeStk;
     new->skipping = 0;
     new->ifdefskipping = 0;
@@ -265,7 +413,7 @@ static bool PopInclude( void )
     curr = IncludeStk;
     fclose( curr->fp );
     IncludeStk = curr->prev;
-    MFree( curr );
+    MemFree( curr );
     if( IncludeStk == NULL ) {
         return( false );
     }
@@ -284,6 +432,7 @@ static bool GetALine( char *line, int max_len )
         }
         if( !feof( IncludeStk->fp ) ) {
             IncludeStk->lineno++;
+            line[strcspn( line, "\r\n" )] = '\0';
             break;
         }
         if( !PopInclude() ) {
@@ -310,7 +459,7 @@ static char *SubstOne( const char **inp, char *out )
             // If the parameter is a number (n) followed by an asterisk,
             // copy from parameter n to the end to out. E.g. <2*>
             parm = 1;
-            for( starpos = out; isdigit( *starpos ); starpos++ )
+            for( starpos = out; isdigit( *(unsigned char *)starpos ); starpos++ )
                 ;
             if( stricmp( starpos, "*" ) == 0 ) {
                 rep = NULL;
@@ -359,15 +508,15 @@ static void SubstLine( const char *in, char *out )
     bool        first;
 
     first = true;
-    SKIP_BLANKS( in );
+    while( isspace( *(unsigned char *)in ) )
+        in++;
     for( ;; ) {
         switch( *in ) {
         case '^':
             ++in;
             switch( *in ) {
-            case '\r':
-            case '\n':
             case '\0':
+            case '\x1A':
                 break;
             default:
                 *out++ = *in++;
@@ -387,9 +536,8 @@ static void SubstLine( const char *in, char *out )
             ++in;
             out = SubstOne( &in, out );
             break;
-        case '\r':
-        case '\n':
         case '\0':
+        case '\x1A':
             *out = '\0';
             return;
         default:
@@ -403,7 +551,8 @@ static char *FirstWord( char *p )
 {
     char        *start;
 
-    SKIP_BLANKS( p );
+    while( isspace( *(unsigned char *)p ) )
+        p++;
     if( *p == '\0' )
         return( NULL );
     start = p;
@@ -433,7 +582,8 @@ static char *GetNextPathOrFile( char *p )
     char        *start;
 
     p += strlen( p ) + 1;
-    SKIP_BLANKS( p );
+    while( isspace( *(unsigned char *)p ) )
+        p++;
     if( *p == '\0' )
         return( NULL );
     quotechar = ( *p == '"' ) ? *p++ : ' ';
@@ -459,7 +609,7 @@ static char *GetNextPathOrFile( char *p )
     return( start );
 }
 
-bool checkWord( char *p, ctl_file *word_list )
+static bool checkWord( char *p, ctl_file *word_list )
 {
     ctl_file    *w;
     bool        not_op;
@@ -483,7 +633,7 @@ static bool ContainsWord( const char *str, ctl_file *word_list, bool and_op )
     bool        found;
 
     len = strlen( str ) + 1;
-    s_copy = MAlloc( len + 1 ); // extra 1 byte is required for processing by First/NextWord
+    s_copy = MemAllocSafe( len + 1 ); // extra 1 byte is required for processing by First/NextWord
     memcpy( s_copy, str, len );
     for( p = FirstWord( s_copy ); p != NULL; p = NextWord( p ) ) {
         found = checkWord( p, word_list );
@@ -491,11 +641,11 @@ static bool ContainsWord( const char *str, ctl_file *word_list, bool and_op )
           && !and_op
           || !found
           && and_op ) {
-            MFree( s_copy );
+            MemFree( s_copy );
             return( !and_op );
         }
     }
-    MFree( s_copy );
+    MemFree( s_copy );
     return( and_op );
 }
 
@@ -525,17 +675,17 @@ static char *item_def( const char *old, const char *new, const char *item )
     if( old != NULL ) {
         printf( "langdat warning: default item '%s' already defined\n", item );
         printf( "(in file %s line %d)\n", IncludeStk->name, IncludeStk->lineno );
-        MFree( (void *)old );
+        MemFree( (void *)old );
     }
-    return( MStrdup( new ) );
+    return( MemStrdupSafe( new ) );
 }
 
 static char *item_redef( const char *old, const char *new )
 {
     if( old != NULL ) {
-        MFree( (void *)old );
+        MemFree( (void *)old );
     }
-    return( MStrdup( new ) );
+    return( MemStrdupSafe( new ) );
 }
 
 static char *item_append( const char *old, const char *new )
@@ -546,29 +696,29 @@ static char *item_append( const char *old, const char *new )
         p = (char *)old;
     } else {
         if( old == NULL ) {
-            p = MStrdup( new );
+            p = MemStrdupSafe( new );
         } else {
             if( *old == '\0' ) {
-                p = MStrdup( new );
+                p = MemStrdupSafe( new );
             } else {
                 size_t  len;
 
                 len = strlen( old ) + strlen( new ) + 1 + 1;
-                p = MAlloc( len );
+                p = MemAllocSafe( len );
                 strcpy( p, old );
                 strcat( p, " " );
                 strcat( p, new );
             }
-            MFree( (void *)old );
+            MemFree( (void *)old );
         }
     }
     return( p );
 }
 
-#define FREE_ITEM(x) if( x != NULL && x != blank ) { MFree( (void *)x ); } x = NULL
+#define FREE_ITEM(x) if( x != NULL && x != blank ) { MemFree( (void *)x ); } x = NULL
 
 #define DEFVAL(x)   ((x==NULL)?blank:x)
-#define DEFVALA(x)  ((x==NULL)?NULL:MStrdup(x))
+#define DEFVALA(x)  ((x==NULL)?NULL:MemStrdupSafe(x))
 
 static void ProcessLine( const char *line )
 {
@@ -600,8 +750,9 @@ static void ProcessLine( const char *line )
     dstvar = DEFVAL( DefDstvar );
     keys = DEFVALA( DefKeys );
 
-    p = line_copy = MStrdup( line );
-    SKIP_BLANKS( p );
+    p = line_copy = MemStrdupSafe( line );
+    while( isspace( *(unsigned char *)p ) )
+        p++;
     cmd = strtok( p, "=" );
     do {
         str = strtok( NULL, "\"" );
@@ -667,7 +818,7 @@ static void ProcessLine( const char *line )
     FREE_ITEM( cond );
     FREE_ITEM( where );
     FREE_ITEM( keys );
-    MFree( line_copy );
+    MemFree( line_copy );
 }
 
 static void FreeDefault( void )
@@ -694,11 +845,12 @@ static void ProcessDefault( const char *line )
     FreeDefault();
 
     /* Process new defaults (if provided) */
-    p = line_copy = MStrdup( line );
-    SKIP_BLANKS( p );
+    p = line_copy = MemStrdupSafe( line );
+    while( isspace( *(unsigned char *)p ) )
+        p++;
     q = strtok( p, "]" );
     q += strlen( q ) - 1;
-    while( (q >= p) && IS_BLANK( *q ) )
+    while( (q >= p) && isspace( *(unsigned char *)q ) )
         --q;
     if( *q == '\"' )
         ++q;
@@ -707,7 +859,8 @@ static void ProcessDefault( const char *line )
     if( cmd != NULL ) {
         do {
             str = strtok( NULL, "\"" );
-            SKIP_BLANKS( str );
+            while( isspace( *(unsigned char *)str ) )
+                str++;
             if( stricmp( cmd, "type" ) == 0 ) {
                 DefType = item_def( DefType, str, cmd );
             } else if( stricmp( cmd, "redist" ) == 0 ) {
@@ -737,7 +890,7 @@ static void ProcessDefault( const char *line )
             cmd = strtok( NULL, " \t=" );
         } while( cmd != NULL );
     }
-    MFree( line_copy );
+    MemFree( line_copy );
 }
 
 /****************************************************************************
@@ -859,7 +1012,8 @@ static void ProcessCtlFile( const char *name )
             logit = ( VerbLevel > 0 );
             if( *p == '@' ) {
                 p++;
-                SKIP_BLANKS( p );
+                while( isspace( *(unsigned char *)p ) )
+                    p++;
                 logit = false;
             }
             if( IncludeStk->skipping == 0
@@ -923,7 +1077,7 @@ int main( int argc, char *argv[] )
 
     /* unused parameters */ (void)argc;
 
-    MOpen();
+    MemOpen();
     Product_ver[0] = '\0';
     ProcessOptions( argv + 1 );
     if( Product == NULL ) {
@@ -935,7 +1089,7 @@ int main( int argc, char *argv[] )
             p = DEFCTLNAME;
         fn = SearchUpDirs( p );
         if( fn == NULL ) {
-            MClose();
+            MemClose();
             Fatal( "Can not find '%s'\n", p );
         }
         AddToList( fn, &CtlList );
@@ -943,12 +1097,12 @@ int main( int argc, char *argv[] )
     while( CtlList != NULL ) {
         ProcessCtlFile( CtlList->name );
         next = CtlList->next;
-        MFree( CtlList );
+        MemFree( CtlList );
         CtlList = next;
     }
     FreeDefault();
     CloseLog();
-    MClose();
+    MemClose();
     return( 0 );
 }
 

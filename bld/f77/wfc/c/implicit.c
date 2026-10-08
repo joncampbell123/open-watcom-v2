@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -42,6 +42,7 @@
 #include "global.h"
 #include "segsw.h"
 #include "csetinfo.h"
+#include "namecod.h"
 #include "recog.h"
 #include "types.h"
 #include "ferror.h"
@@ -59,7 +60,7 @@ static  bool    ReqChar( void )
 //=============================
 // Recognize one character operand.
 {
-    if( RecName() && (CITNode->opnd_size == 1) && !CharSetInfo.is_foreign( *CITNode->opnd ) )
+    if( RecNameOpn() && (CITNode->opnd_size == 1) && !CharSetInfo.is_foreign( *CITNode->opnd ) )
         return( true );
     Error( IM_ILLEGAL_RANGE );
     return( false );
@@ -71,17 +72,17 @@ static  bool            StarStar( TYPE typ ) {
 
     if( typ != FT_CHAR )
         return( false );
-    if( !RecNOpn() )
+    if( !RecNoOpn() )
         return( false );
     if( !RecNextOpr( OPR_LBR ) )
         return( false );
     AdvanceITPtr();
-    if( !RecNOpn() )
+    if( !RecNoOpn() )
         return( false );
     if( !RecNextOpr( OPR_MUL ) )
         return( false );
     AdvanceITPtr();
-    if( !RecNOpn() )
+    if( !RecNoOpn() )
         return( false );
     if( !RecNextOpr( OPR_RBR ) )
         return( false );
@@ -160,11 +161,13 @@ bool    LenSpec( TYPE typ, size_t *size_ptr )
     intstar4    ivalue;
 
     len_spec = false;
-    if( RecMul() ) {
+    save_itptr = NULL;
+    ivalue = 0;
+    if( RecMulOpr() ) {
         save_itptr = CITNode;
         if( StarStar( typ ) ) {
             AdvanceITPtr();
-            if( RecNOpn() ) {
+            if( RecNoOpn() ) {
                 AdvanceITPtr();
             }
             *size_ptr = 0;
@@ -177,17 +180,17 @@ bool    LenSpec( TYPE typ, size_t *size_ptr )
             len_spec = true;
         } else {
             CITNode = save_itptr;
-            if( RecNOpn() && RecNextOpr( OPR_LBR ) ) {
+            if( RecNoOpn() && RecNextOpr( OPR_LBR ) ) {
                 AdvanceITPtr();
                 CIntExpr();
                 ivalue = ITIntValue( CITNode );
                 AdvanceITPtr();
-                ReqCloseParen();
-                if( RecNOpn() ) {
+                ReqCloseParenOpr();
+                if( RecNoOpn() ) {
                     AdvanceITPtr();
                 }
                 len_spec = !AError;
-            } else if( RecNumber() ) {
+            } else if( RecNumberOpn() ) {
                 FmtS2I( CITNode->opnd, CITNode->opnd_size, false, &ivalue, false, NULL );
                 AdvanceITPtr();
                 len_spec = true;
@@ -222,7 +225,7 @@ static  TYPE    RecTypeKW( void ) {
 
     TYPE    typ;
 
-    if( RecName() ) {
+    if( RecNameOpn() ) {
         for( typ = FT_LOGICAL_1; typ <= FT_CHAR; typ++ ) {
             if( CmpNode2Str( CITNode, TypeKW( typ ) ) ) {
                 return( typ );
@@ -260,12 +263,12 @@ void    CpImplicit( void ) {
             if( ( typ != FT_NO_TYPE ) && !LenSpec( typ, &size ) ) {
                 size = StorageSize( typ );
             }
-            ReqOpenParen();
+            ReqOpenParenOpr();
             for( ;; ) {
                 valid_range = ReqChar();
                 chr1 = *CITNode->opnd;
                 AdvanceITPtr();
-                if( RecMin() ) {
+                if( RecMinOpr() ) {
                     valid_range = valid_range && ReqChar();
                     chr2 = *CITNode->opnd;
                     if( valid_range ) {
@@ -283,14 +286,14 @@ void    CpImplicit( void ) {
                         Error( IM_PREV_IMPLICIT );
                     }
                 }
-                if( !RecComma() ) {
+                if( !RecCommaOpr() ) {
                     break;
                 }
             }
-            ReqCloseParen();
-            ReqNOpn();
+            ReqCloseParenOpr();
+            ReqNoOpn();
             AdvanceITPtr();
-            if( !RecComma() ) {
+            if( !RecCommaOpr() ) {
                 break;
             }
         }
@@ -299,5 +302,5 @@ void    CpImplicit( void ) {
         }
         SgmtSw |= SG_IMPLICIT_STMT;
     }
-    ReqEOS();
+    ReqEOSOpr();
 }

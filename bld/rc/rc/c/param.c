@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -49,6 +49,7 @@
 #include "param.h"
 #include "banner.h"
 #include "usage.h"
+#include "memfuncs.h"
 
 #include "clibext.h"
 
@@ -214,8 +215,8 @@ static void SetNativeLeadBytes( void )
     }
 }
 
-static size_t NativeDBStringToUnicode( size_t len, const char *str, char *buf )
-/*****************************************************************************/
+static size_t NativeDBStringToUnicode( const char *str, size_t len, char *buf, size_t size )
+/******************************************************************************************/
 {
     size_t      ret;
     size_t      outlen;
@@ -224,18 +225,19 @@ static size_t NativeDBStringToUnicode( size_t len, const char *str, char *buf )
         if( buf == NULL ) {
             outlen = 0;
         } else {
-            outlen = len * 2;
+            outlen = size / 2;
         }
         ret = (unsigned)MultiByteToWideChar( CP_ACP, 0, str, (int)len, (LPWSTR)buf, (int)outlen );
+        ret *= 2;
     } else {
         ret = 0;
     }
-    return( ret * 2 );
+    return( ret );
 }
 
 #endif
 
-static void LoadCodePageFile( const char *cpfile )
+static void LoadCodepageFile( const char *cpfile )
 {
     RcStatus            ret;
     char                path[_MAX_PATH];
@@ -244,20 +246,20 @@ static void LoadCodePageFile( const char *cpfile )
     switch( ret ) {
     case RS_FILE_NOT_FOUND:
         RcFatalError( ERR_CANT_FIND_CHAR_FILE, cpfile );
-        break;
+        /* never return */
     case RS_READ_ERROR:
         RcFatalError( ERR_READING_CHAR_FILE, path, strerror( errno ) );
-        break;
+        /* never return */
     case RS_READ_INCMPLT:
     case RS_BAD_FILE_FMT:
         RcFatalError( ERR_BAD_CHAR_FILE, path );
-        break;
+        /* never return */
     case RS_WRONG_VER:
         RcFatalError( ERR_WRONG_CHAR_FILE_VER, path );
-        break;
+        /* never return */
     case RS_OPEN_ERROR:
         RcFatalError( ERR_CANT_OPEN_CHAR_FILE, path, strerror( errno ) );
-        break;
+        /* never return */
     case RS_OK:
         SetMBChars( GetLeadBytes() );
         ConvToUnicode = DBStringToUnicode;
@@ -265,7 +267,7 @@ static void LoadCodePageFile( const char *cpfile )
     }
 }
 
-static void initMBCodePage( void )
+static void initMBCodepage( void )
 /********************************/
 {
     /*
@@ -302,24 +304,24 @@ static void initMBCodePage( void )
     switch( CmdLineParms.MBCharSupport ) {
     case DB_TRADITIONAL_CHINESE:
         SetMBRange( 0x81, 0xfe, 1 );
-        if( CmdLineParms.TargetOS == RC_TARGET_OS_WIN32 )
-            LoadCodePageFile( "950.uni" );
+        if( CmdLineParms.iswin32 )
+            LoadCodepageFile( "950.uni" );
         break;
     case DB_WANSUNG_KOREAN:
         SetMBRange( 0x81, 0xfe, 1 );
-        if( CmdLineParms.TargetOS == RC_TARGET_OS_WIN32 )
-            LoadCodePageFile( "949.uni" );
+        if( CmdLineParms.iswin32 )
+            LoadCodepageFile( "949.uni" );
         break;
     case DB_SIMPLIFIED_CHINESE:
         SetMBRange( 0xA1, 0xfe, 1 );
-        if( CmdLineParms.TargetOS == RC_TARGET_OS_WIN32 )
-            LoadCodePageFile( "936.uni" );
+        if( CmdLineParms.iswin32 )
+            LoadCodepageFile( "936.uni" );
         break;
     case DB_KANJI:
         SetMBRange( 0x81, 0x9f, 1 );
         SetMBRange( 0xe0, 0xfc, 1 );
-        if( CmdLineParms.TargetOS == RC_TARGET_OS_WIN32 )
-            LoadCodePageFile( "kanji.uni" );
+        if( CmdLineParms.iswin32 )
+            LoadCodepageFile( "kanji.uni" );
         break;
     case MB_UTF8:
     case MB_UTF8_KANJI:
@@ -336,8 +338,8 @@ static void initMBCodePage( void )
         }
         break;
     case MB_NONE:
-        if( CmdLineParms.CodePageFile != NULL ) {
-            LoadCodePageFile( CmdLineParms.CodePageFile );
+        if( CmdLineParms.CodepageFile != NULL ) {
+            LoadCodepageFile( CmdLineParms.CodepageFile );
 #ifdef __NT__
         } else {
             SetNativeLeadBytes();
@@ -359,11 +361,11 @@ static char *MakeFileName( const char *infilename, const char *ext )
 
     len = strlen( infilename ) + 1;
     if( ext == NULL ) {
-        out = RcMemAlloc( len );
+        out = MemAllocSafe( len );
         strcpy( out, infilename );
     } else {
         _splitpath2( infilename, pg.buffer, &pg.drive, &pg.dir, &pg.fname, &pg.ext );
-        out = RcMemAlloc( len + ( 1 + strlen( ext ) - strlen( pg.ext ) ) );
+        out = MemAllocSafe( len + ( 1 + strlen( ext ) - strlen( pg.ext ) ) );
         _makepath( out, pg.drive, pg.dir, pg.fname, ext );
     }
     return( out );
@@ -378,8 +380,8 @@ static void CheckExtension( char **filename, const char *defext )
     _splitpath2( *filename, pg.buffer, &pg.drive, &pg.dir, &pg.fname, &pg.ext );
     if( pg.ext[0] == '\0' ) {
         len = strlen( *filename ) + ( 1 + strlen( defext ) ) + 1;
-        RcMemFree( *filename );
-        *filename = RcMemAlloc( len );
+        MemFree( *filename );
+        *filename = MemAllocSafe( len );
         _makepath( *filename, pg.drive, pg.dir, pg.fname, defext );
     }
 } /* CheckExtension */
@@ -513,27 +515,27 @@ void ScanParamFini( void )
 
     while( (tmpres = CmdLineParms.ExtraResFiles) != NULL ) {
         CmdLineParms.ExtraResFiles = CmdLineParms.ExtraResFiles->next;
-        RcMemFree( tmpres );
+        MemFree( tmpres );
     }
-    RcMemFree( CmdLineParms.InFileName );
+    MemFree( CmdLineParms.InFileName );
     CmdLineParms.InFileName = NULL;
-    RcMemFree( CmdLineParms.InExeFileName );
+    MemFree( CmdLineParms.InExeFileName );
     CmdLineParms.InExeFileName = NULL;
-    RcMemFree( CmdLineParms.OutResFileName );
+    MemFree( CmdLineParms.OutResFileName );
     CmdLineParms.OutResFileName = NULL;
-    RcMemFree( CmdLineParms.OutExeFileName );
+    MemFree( CmdLineParms.OutExeFileName );
     CmdLineParms.OutExeFileName = NULL;
-    if( CmdLineParms.CodePageFile != NULL ) {
-        RcMemFree( CmdLineParms.CodePageFile );
-        CmdLineParms.CodePageFile = NULL;
+    if( CmdLineParms.CodepageFile != NULL ) {
+        MemFree( CmdLineParms.CodepageFile );
+        CmdLineParms.CodepageFile = NULL;
     }
 #ifndef NO_REPLACE
     while( (strings = CmdLineParms.FindReplaceStrings) != NULL ) {
         CmdLineParms.FindReplaceStrings = CmdLineParms.FindReplaceStrings->next;
-        RcMemFree( strings );
+        MemFree( strings );
     }
     if( CmdLineParms.PrependString != NULL ) {
-        RcMemFree( CmdLineParms.PrependString );
+        MemFree( CmdLineParms.PrependString );
         CmdLineParms.PrependString = NULL;
     }
 #endif
@@ -551,7 +553,9 @@ char *FindAndReplace( char *stringFromFile, FRStrings *frStrings )
     size_t              lenOfReplaceString;
     size_t              diffInLen;
     size_t              newMemSize;
-    size_t              i, j, k;
+    size_t              i;
+    size_t              j;
+    size_t              k;
     int                 noOfInstances; //this is the number of instances
                                        //of the find string in the string
                                        //from the file
@@ -572,7 +576,7 @@ char *FindAndReplace( char *stringFromFile, FRStrings *frStrings )
             /*
              * checking if a replacement is to be done, then allocating memory
              */
-            replacedString = RcMemAlloc( lenOfStringFromFile+1 );
+            replacedString = MemAllocSafe( lenOfStringFromFile+1 );
             for( k = 0; k < lenOfStringFromFile; k++ ) {
                 replacedString[k] = '\0';
             }
@@ -596,7 +600,7 @@ char *FindAndReplace( char *stringFromFile, FRStrings *frStrings )
                      * bigger than the string to find
                      */
                     newMemSize = lenOfStringFromFile + 1 + diffInLen * ( noOfInstances + 1 );
-                    replacedString = RcMemRealloc( replacedString, newMemSize );
+                    replacedString = MemReallocSafe( replacedString, newMemSize );
                 }
                 strcpy( &replacedString[j], frStrings->replaceString );
                 j = j + lenOfReplaceString;
@@ -606,18 +610,18 @@ char *FindAndReplace( char *stringFromFile, FRStrings *frStrings )
         }
         if( replacedString != NULL
           && frStrings->next != NULL ) {
-            stringFromFile = RcMemRealloc( stringFromFile, strlen( replacedString ) + 1 );
+            stringFromFile = MemReallocSafe( stringFromFile, strlen( replacedString ) + 1 );
             strcpy( stringFromFile, replacedString );
-            RcMemFree( replacedString );
+            MemFree( replacedString );
             replacedString = NULL;
         }
     }
 
     if( replacedString != NULL ) {
-        RcMemFree( stringFromFile );
+        MemFree( stringFromFile );
         return( replacedString );
     } else {
-        RcMemFree( replacedString );
+        MemFree( replacedString );
         return( stringFromFile );
     }
 }
@@ -633,22 +637,21 @@ void PrependToString( ScanValue *value, char *stringFromFile )
     if( CmdLineParms.Prepend ) {
         if( strcmp( stringFromFile, "" ) != 0 ) {
             lenOfPrependString =  strlen( CmdLineParms.PrependString );
-            value->string.string = RcMemAlloc( lenOfStringFromFile
-                                   + lenOfPrependString + 1);
+            value->string.string = MemAllocSafe( lenOfStringFromFile + lenOfPrependString + 1 );
             strcpy( value->string.string, CmdLineParms.PrependString );
         } else {
             // in this case the lenOfPrependString is zero, so the
             // strcpy will not fail.
-            value->string.string = RcMemAlloc( lenOfStringFromFile + 1 );
+            value->string.string = MemAllocSafe( lenOfStringFromFile + 1 );
         }
         strcpy( &value->string.string[ lenOfPrependString ], stringFromFile );
         value->string.length = lenOfStringFromFile + lenOfPrependString;
     } else {
-        value->string.string = RcMemAlloc( ( lenOfStringFromFile+1 ) );
+        value->string.string = MemAllocSafe( lenOfStringFromFile + 1 );
         strcpy( value->string.string, stringFromFile );
         value->string.length = lenOfStringFromFile;
     }
-    RcMemFree( stringFromFile );
+    MemFree( stringFromFile );
 }
 #endif
 
@@ -659,7 +662,7 @@ static char *ReadIndirectFile( char *name )
     char        *str;
     FILE        *fp;
     size_t      len;
-    char        ch;
+    int         ch;
 
     env = NULL;
     fp = fopen( name, "rb" );
@@ -667,22 +670,15 @@ static char *ReadIndirectFile( char *name )
         fseek( fp, 0, SEEK_END );
         len = ftell( fp );
         fseek( fp, 0, SEEK_SET );
-        env = RcMemAlloc( len + 1 );
+        env = MemAllocSafe( len + 1 );
         len = fread( env, 1, len, fp );
         env[len] = '\0';
         fclose( fp );
         // zip through characters changing \r, \n etc into ' '
-        for( str = env; *str != '\0'; ++str ) {
-            ch = *str;
+        for( str = env; (ch = *(unsigned char *)str) != '\0'; ++str ) {
             if( ch == '\r' || ch == '\n' ) {
                 *str = ' ';
             }
-#if !defined(__UNIX__)
-            if( ch == 0x1A ) {      // if end of file
-                *str = '\0';        // - mark end of str
-                break;
-            }
-#endif
         }
     }
     return( env );
@@ -699,7 +695,7 @@ static bool scanDefine( OPT_STRING **h )
         if( p != NULL ) {
             *p = ' ';
         } else {
-            *h = RcMemRealloc( *h, sizeof( **h ) + strlen( m ) + 2 );
+            *h = MemReallocSafe( *h, sizeof( **h ) + strlen( m ) + 2 );
             strcat( (*h)->data, " 1" );
         }
         return( true );
@@ -707,26 +703,30 @@ static bool scanDefine( OPT_STRING **h )
     return( false );
 }
 
-static bool scanTarget( unsigned *p )
+static bool scanTarget( unsigned *value )
 {
     const char  *str;
     size_t      len;
     char        buff[16];
+    char        *p;
+    int         c;
 
     CmdRecogEquals();
     len = CmdScanId( &str );
     if( len > sizeof( buff ) - 1 ) {
         len = sizeof( buff ) - 1;
     }
-    strncpy( buff, str, len );
+    p = strncpy( buff, str, len );
     buff[len] = '\0';
-    strupr( buff );
+    while( (c = *(unsigned char *)p) != '\0' ) {
+        *p++ = (char)toupper( c );
+    }
     if( strcmp( buff, "WINDOWS" ) == 0 || strcmp( buff, "WIN" ) == 0 ) {
-        *p = RC_TARGET_OS_WIN16;
+        *value = RC_TARGET_OS_WIN16;
     } else if( strcmp( buff, "NT" ) == 0 ) {
-        *p = RC_TARGET_OS_WIN32;
+        *value = RC_TARGET_OS_WIN32;
     } else if( strcmp( buff, "OS2" ) == 0 ) {
-        *p = RC_TARGET_OS_OS2;
+        *value = RC_TARGET_OS_OS2;
     } else {
         BadCmdLineId();
         return( false );
@@ -761,10 +761,10 @@ static void AddInpFileName( const char *infile )
     if( infile != NULL && *infile != '\0' ) {
         switch( nofilenames ) {
         case 0:
-            CmdLineParms.InFileName = RcMemStrDup( infile );
+            CmdLineParms.InFileName = MemStrdupSafe( infile );
             break;
         case 1:
-            CmdLineParms.InExeFileName = RcMemStrDup( infile );
+            CmdLineParms.InExeFileName = MemStrdupSafe( infile );
             break;
         case 2:
             /*
@@ -827,7 +827,7 @@ int ProcOptions( OPT_STORAGE *data, const char *str )
             if( ch == '\0' ) {
                 if( level < 0 )
                     break;
-                RcMemFree( buffers[level] );
+                MemFree( buffers[level] );
                 CmdScanLineInit( save[level] );
                 level--;
                 continue;
@@ -855,7 +855,7 @@ static void OptAddString( OPT_STRING **h, char const *s )
 {
     OPT_STRING *value;
 
-    value = RcMemAlloc( sizeof( *value ) + strlen( s ) );
+    value = MemAllocSafe( sizeof( *value ) + strlen( s ) );
     strcpy( value->data, s );
     value->next = *h;
     *h = value;
@@ -872,12 +872,12 @@ static char *SetStringOption( char **o, OPT_STRING **h )
     p = NULL;
     if( s != NULL ) {
         if( s->data[0] != '\0' ) {
-            p = RcMemStrDup( s->data );
+            p = MemStrdupSafe( s->data );
         }
         OPT_CLEAN_STRING( h );
     }
     if( o != NULL ) {
-        RcMemFree( *o );
+        MemFree( *o );
         *o = p;
     }
     return( p );
@@ -924,24 +924,31 @@ int SetOptions( OPT_STORAGE *data, const char *infile, const char *outfile )
 #endif
     switch( data->win16_ver ) {
     case OPT_ENUM_win16_ver__10:
-        CmdLineParms.Win16VerStamp = VERSION_10_STAMP;
+        CmdLineParms.winver = 10;
+        CmdLineParms.win16stamp = 0x0100;
         break;
     case OPT_ENUM_win16_ver__20:
-        CmdLineParms.Win16VerStamp = VERSION_20_STAMP;
+        CmdLineParms.winver = 20;
+        CmdLineParms.win16stamp = 0x0200;
         break;
     case OPT_ENUM_win16_ver__30:
-        CmdLineParms.Win16VerStamp = VERSION_30_STAMP;
+        CmdLineParms.winver = 30;
+        CmdLineParms.win16stamp = 0x0300;
         break;
     case OPT_ENUM_win16_ver__31:
     case OPT_ENUM_win16_ver_default:
-        CmdLineParms.Win16VerStamp = VERSION_31_STAMP;
+        CmdLineParms.winver = 31;
+        CmdLineParms.win16stamp = 0x030A;
         break;
     default:
         DbgNever();
         break;
     }
+    if( CmdLineParms.TargetOS != RC_TARGET_OS_WIN16 ) {
+        CmdLineParms.winver = 40; /* WIN32 */
+    }
     if( data->c ) {
-        SetStringOption( &CmdLineParms.CodePageFile, &(data->c_value) );
+        SetStringOption( &CmdLineParms.CodepageFile, &(data->c_value) );
     }
     if( data->d ) {
         OPT_STRING *s;
@@ -957,7 +964,7 @@ int SetOptions( OPT_STORAGE *data, const char *infile, const char *outfile )
     }
     if( *outfile != '\0'
       && data->r ) {
-        CmdLineParms.OutResFileName = RcMemStrDup( outfile );
+        CmdLineParms.OutResFileName = MemStrdupSafe( outfile );
         if( data->fo ) {
             OPT_CLEAN_STRING( &(data->fo_value) );
         }
@@ -974,7 +981,7 @@ int SetOptions( OPT_STORAGE *data, const char *infile, const char *outfile )
                 size_t len;
 
                 len = strlen( s->data );
-                resfile = RcMemAlloc( sizeof( ExtraRes ) + len + 1 );
+                resfile = MemAllocSafe( sizeof( ExtraRes ) + len + 1 );
                 strcpy( resfile->name, s->data );
                 resfile->next = CmdLineParms.ExtraResFiles;
                 CmdLineParms.ExtraResFiles = resfile;
@@ -984,7 +991,7 @@ int SetOptions( OPT_STORAGE *data, const char *infile, const char *outfile )
     }
     if( *outfile != '\0'
       && !data->r ) {
-        CmdLineParms.OutExeFileName = RcMemStrDup( outfile );
+        CmdLineParms.OutExeFileName = MemStrdupSafe( outfile );
         if( data->fe ) {
             OPT_CLEAN_STRING( &(data->fe_value) );
         }
@@ -997,20 +1004,20 @@ int SetOptions( OPT_STORAGE *data, const char *infile, const char *outfile )
 
         reverseList( &(data->g_value) );
         for( s = data->g_value; s != NULL; s = s->next ) {
-            frStrings = RcMemAlloc( sizeof( FRStrings ) + strlen( s->data ) + 1 );
+            frStrings = MemAllocSafe( sizeof( FRStrings ) + strlen( s->data ) + 1 );
             strcpy( frStrings->buf, s->data );
             frStrings->findString = strtok( frStrings->buf, "," );
             if( frStrings->findString == NULL ) {
                 PrintBanner();
                 RcError( ERR_SYNTAX_STR, "-g=" );
-                RcMemFree( frStrings );
+                MemFree( frStrings );
                 continue;
             }
             frStrings->replaceString = strtok( NULL, "," );
             if( frStrings->replaceString == NULL ) {
                 PrintBanner();
                 RcError( ERR_SYNTAX_STR, "-g=" );
-                RcMemFree( frStrings );
+                MemFree( frStrings );
                 continue;
             }
             frStrings->next = CmdLineParms.FindReplaceStrings;
@@ -1143,6 +1150,10 @@ int SetOptions( OPT_STORAGE *data, const char *infile, const char *outfile )
     }
 
     /*
+     * define WIN32 target flag
+     */
+    CmdLineParms.iswin32 = ( CmdLineParms.TargetOS == RC_TARGET_OS_WIN32 );
+    /*
      * define target macros
      */
     PP_Define_1( "RC_INVOKED" );
@@ -1179,7 +1190,7 @@ int SetOptions( OPT_STORAGE *data, const char *infile, const char *outfile )
     /*
      * initialize character input/output encoding
      */
-    initMBCodePage();
+    initMBCodepage();
 
     return( SetParms() );
 

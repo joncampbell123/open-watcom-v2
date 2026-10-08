@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,6 +34,7 @@
 #include "wstatdlg.hpp"
 #include "wcontrol.hpp"
 #include "wresdefn.h"
+#include "memfuncs.h"
 
 
 WEXPORT WStatDialog::WStatDialog( WWindow * prt, WResourceNameOrId dialog_name )
@@ -108,37 +109,37 @@ void WEXPORT WStatDialog::getCtrlText( WControlId id, WString & str ) {
 
     char *text = GUIGetText( handle(), id );
     WString t( text );
-    GUIMemFree( text );
+    MemFree( text );
     str = t;
 }
 
-void WEXPORT WStatDialog::getCtrlText( WControlId id, char *buff, size_t len ) {
-/******************************************************************************/
+void WEXPORT WStatDialog::getCtrlText( WControlId id, char *buff, std::size_t len ) {
+/***********************************************************************************/
 
-    char    *text;
-    size_t  text_len;
+    char        *text;
+    std::size_t text_len;
 
     text = GUIGetText( handle(), id );
     if( text == NULL ) {
         *buff = '\0';
     } else {
-        text_len = strlen( text );
+        text_len = std::strlen( text );
         if( text_len > len - 1 )
             text_len = len - 1;
-        memcpy( buff, text, text_len );
+        std::memcpy( buff, text, text_len );
         buff[text_len] = '\0';
-        GUIMemFree( text );
+        MemFree( text );
     }
 }
 
-size_t WEXPORT WStatDialog::getCtrlTextLength( WControlId id ) {
-/**************************************************************/
+std::size_t WEXPORT WStatDialog::getCtrlTextLength( WControlId id ) {
+/*******************************************************************/
 
     char *text = GUIGetText( handle(), id );
     if( text == NULL )
         return( 0 );
-    size_t len = strlen( text );
-    GUIMemFree( text );
+    std::size_t len = std::strlen( text );
+    MemFree( text );
     return( len );
 }
 

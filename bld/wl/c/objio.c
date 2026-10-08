@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2025      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2025-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -61,7 +61,7 @@ static infilelist *AllocEntry( const char *name, const path_entry *path )
 {
     infilelist  *infile;
 
-    _PermAlloc( infile, sizeof( infilelist ) );
+    infile = _PermAlloc( sizeof( infilelist ) );
     infile->name.u.ptr = AddStringStringTable( &PermStrings, name );
     infile->path_list = path;
     infile->prefix = NULL;
@@ -96,9 +96,9 @@ infilelist *AllocUniqueFileEntry( const char *name, const path_entry *path )
     infile = AllocEntry( name, path );   // didn't find one, so allocate a new 1
     if( CachedLibFiles == NULL ) {      // add libraries to the end of the
         CachedLibFiles = infile;         // regular cached files list.
-        LinkList( &CachedFiles, infile );
+        AppendList( (void **)&CachedFiles, infile );
     } else {
-        LinkList( &CachedLibFiles, infile );
+        AppendList( (void **)&CachedLibFiles, infile );
     }
     return( infile );
 }
@@ -109,7 +109,8 @@ bool CleanCachedHandles( void )
     infilelist *infile;
 
     for( infile = CachedFiles; infile != NULL; infile = infile->next ) {
-        if( (infile->status & INSTAT_IN_USE) == 0 && infile->handle != NIL_FHANDLE ) {
+        if( (infile->status & INSTAT_IN_USE) == 0
+          && infile->handle != NIL_FHANDLE ) {
             break;
         }
     }
@@ -127,7 +128,8 @@ char *MakePath( char *fullname, const char **path_list )
     char        c;
 
     p = fullname;
-    if( *path_list != NULL && (c = **path_list) != '\0' ) {
+    if( *path_list != NULL
+      && (c = **path_list) != '\0' ) {
         do {
             ++(*path_list);
             if( IS_PATH_LIST_SEP( c ) ) {
@@ -155,7 +157,8 @@ char *MakeFileName( infilelist *infile, char *fullname )
 bool MakeFileNameFromList( const char **path_list, char *name, char *fullname )
 /*****************************************************************************/
 {
-    if( *path_list != NULL && **path_list != '\0' ) {
+    if( *path_list != NULL
+      && **path_list != '\0' ) {
         strcpy( MakePath( fullname, path_list ), name );
         return( true );
     }
@@ -203,7 +206,8 @@ bool DoObjOpen( infilelist *infile )
         fp = QObjOpen( new_name );
     } else {                                // new, no searched path
         fp = NIL_FHANDLE;
-        if( (infile->status & INSTAT_LIB_SEARCH) || infile->path_list == NULL ) {
+        if( (infile->status & INSTAT_LIB_SEARCH)
+          || infile->path_list == NULL ) {
             /* try in current directory */
             fp = QObjOpen( name );
         }
@@ -214,7 +218,8 @@ bool DoObjOpen( infilelist *infile )
                     break;
                 }
             }
-            if( fp == NIL_FHANDLE && (infile->status & INSTAT_USE_LIBPATH) ) {
+            if( fp == NIL_FHANDLE
+              && (infile->status & INSTAT_USE_LIBPATH) ) {
                 if( LibPath != NULL ) {
                     fp = PathObjOpen( LibPath, name, new_name, infile );
                 }
@@ -240,14 +245,14 @@ void InitTokBuff( void )
 /*****************************/
 {
     TokSize = MAX_HEADROOM;
-    _ChkAlloc( TokBuff, MAX_HEADROOM );
+    TokBuff = MemAllocSafe( MAX_HEADROOM );
 }
 
 void FreeTokBuffs( void )
 /******************************/
 {
     if( TokBuff != NULL ) {
-        _LnkFree( TokBuff );
+        MemFree( TokBuff );
         TokBuff = NULL;
     }
 }
@@ -255,14 +260,14 @@ void FreeTokBuffs( void )
 void BadObject( void )
 /***************************/
 {
-    CurrMod->f.source->infile->status |= INSTAT_IOERR;
-    LnkMsg( LOC+ERR+MSG_OBJ_FILE_ATTR, NULL );
+    CurrMod->u1.source->infile->status |= INSTAT_IOERR;
+    LnkMsg( ERR+LOC+MSG_OBJ_FILE_ATTR, NULL );
 }
 
 void EarlyEOF( void )
 /**************************/
 {
-    CurrMod->f.source->infile->status |= INSTAT_IOERR;
-    Locator( CurrMod->f.source->infile->name.u.ptr, NULL, 0 );
+    CurrMod->u1.source->infile->status |= INSTAT_IOERR;
+    Locator( CurrMod->u1.source->infile->name.u.ptr, NULL, 0 );
     LnkMsg( ERR+MSG_EARLY_EOF, NULL );
 }

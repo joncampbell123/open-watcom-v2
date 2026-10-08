@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -30,9 +31,16 @@
 ****************************************************************************/
 
 
-#include <stdlib.h>
+#ifndef _ALLOC_H_
+#define _ALLOC_H_
 
-#define MALLOC(n,t)     ((t *)malloc((n) * sizeof(t)))
-#define REALLOC(p,n,t)  ((t *)realloc((char *)p,(n) * sizeof(t)))
-#define CALLOC(n,t)     ((t *)calloc((n),sizeof(t)))
-#define FREE(n)         free((n))
+#include <stdlib.h>
+#include "memfuncs.h"
+
+
+extern void     MemInit( void );
+extern void     MemFini( void );
+
+extern void     *MemCAllocSafe( size_t n, size_t size );
+
+#endif

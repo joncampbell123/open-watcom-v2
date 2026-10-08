@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2019 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -32,12 +32,12 @@
 
 #include <stdlib.h>
 #include "fcenable.h"
+#include "trmem.h"
+
 
 #ifdef TRMEM
 
-#include "trmem.h"
-
-static _trmem_hdl TrHdl;
+static _trmem_hdl TrHdl = _TRMEM_HDL_NONE;
 
 static void PrintLine( void *parm, const char *buff, size_t len )
 /***************************************************************/
@@ -47,15 +47,15 @@ static void PrintLine( void *parm, const char *buff, size_t len )
     printf( "%s\n", buff );
 }
 
-#endif
+#endif  /* TRMEM */
 
 
 void MemInit( void )
 /******************/
 {
 #ifdef TRMEM
-    TrHdl = _trmem_open( malloc, free, NULL, NULL, NULL, PrintLine,
-            _TRMEM_ALLOC_SIZE_0 | _TRMEM_FREE_NULL | _TRMEM_OUT_OF_MEMORY | _TRMEM_CLOSE_CHECK_FREE );
+    TrHdl = _trmem_open( malloc, free, _TRMEM_NO_REALLOC, _TRMEM_NO_STRDUP,
+                            NULL, PrintLine, _TRMEM_DEF );
 #endif
 }
 
@@ -69,29 +69,31 @@ void MemFini( void )
 #endif
 }
 
-void *MemAlloc( size_t size )
-/***************************/
+static void *check_nomem( void *ptr )
 {
-    void        *ptr;
-
-#ifdef TRMEM
-    ptr = _trmem_alloc( size, _trmem_guess_who(), TrHdl );
-#else
-    ptr = malloc( size );
-#endif
     if( ptr == NULL ) {
         Error( "Dynamic Memory Exhausted!!!" );
     }
     return( ptr );
 }
 
+TRMEMAPI( MemAllocSafe )
+void *MemAllocSafe( size_t size )
+/*******************************/
+{
+#ifdef TRMEM
+    return( check_nomem( _trmem_alloc( size, _TRMEM_WHO( 1 ), TrHdl ) ) );
+#else
+    return( check_nomem( malloc( size ) ) );
+#endif
+}
+
+TRMEMAPI( MemFree )
 void MemFree( void *p )
 /*********************/
 {
-    if( p == NULL )
-        return;
 #ifdef TRMEM
-    _trmem_free( p, _trmem_guess_who(), TrHdl );
+    _trmem_free( p, _TRMEM_WHO( 2 ), TrHdl );
 #else
     free( p );
 #endif

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -44,10 +44,9 @@
 #include "ioptypes.h"
 #include "stats.h"
 #include "module.h"
-#include "dumpapi.h"
+#include "dbg.h"
 #ifdef DEVBUILD
     #include "togglesd.h"
-    #include "dbg.h"
     #include "pragdefn.h"
 #endif
 
@@ -247,7 +246,7 @@ static CGFILE *initCGFILE(      // INITIALIZE A CG VIRTUAL FILE
     file_element->symbol = symbol;
     file_element->buffer = buff_element;
     file_element->offset = buff_element->free_offset;
-    file_element->cursor = (CGINTER*) (buff_element->data + buff_element->free_offset);
+    file_element->cursor = (CGINTER*) (buff_element->u.data + buff_element->free_offset);
     file_element->first = buff_element->disk_addr;
     file_element->u.s.delayed = false;
     file_element->u.s.refed = false;
@@ -302,7 +301,7 @@ void CgioWriteIC(               // WRITE IC RECORD TO VIRTUAL FILE
 {
 #ifdef DEVBUILD
     ExtraRptIncrementCtr( cgio_write_ins );
-    if( ICOpTypes[ins->opcode] == ICOT_NUL ) {
+    if( ICOpTypes[ins->u.opcode] == ICOT_NUL ) {
         ExtraRptIncrementCtr( cgio_write_nul );
     }
 #endif
@@ -346,7 +345,7 @@ void CgioOpenInput(             // OPEN VIRTUAL FILE FOR INPUT
     CGFILE *ctl )               // - control for file
 {
     ctl->buffer = CgioBuffRdOpen( ctl->first );
-    ctl->cursor = (CGINTER*) (( ctl->buffer->data + ctl->offset ) - sizeof( CGINTER ));
+    ctl->cursor = (CGINTER*) (( ctl->buffer->u.data + ctl->offset ) - sizeof( CGINTER ));
 }
 
 
@@ -547,8 +546,9 @@ CGFILE* CgioLocateAnyFile(      // LOCATE LIVE OR REMOVED FILE FOR A SYMBOL
 #define doWriteOpSRC    SrcFileGetIndex
 
 static CGIRELOCFN *relocWriteOperand[] = {
-#define ITYPE( typ )    ((CGIRELOCFN*) doWriteOp##typ)
-#include "itypes.h"
+    #define ITYPE( typ )    ((CGIRELOCFN*) doWriteOp##typ)
+    #include "itypes.h"
+    #undef ITYPE
 };
 
 
@@ -579,7 +579,7 @@ CGFILE *CGFileMapIndex( CGFILE *e )
 static void getCGFileLocn( CGIOBUFF *h, void *cursor, CGFILE_INS *p )
 {
     p->block = h->disk_addr;
-    p->offset = ((char*)cursor) - h->data;
+    p->offset = ((char*)cursor) - h->u.data;
 }
 
 static unsigned padOutICBlock( unsigned ics )
@@ -587,7 +587,7 @@ static unsigned padOutICBlock( unsigned ics )
     CGINTER pad_ic;
 
     if(( ics % CGINTER_BLOCKING ) != 0 ) {
-        pad_ic.opcode = IC_PCH_PAD;
+        pad_ic.u.opcode = IC_PCH_PAD;
         do {
             ++ics;
             pad_ic.value.pvalue = 0;
@@ -622,12 +622,12 @@ static void saveCGFILE( void *e, carve_walk_base *d )
     SymbolPCHWrite( file->opt_retn );
     PCHWriteUInt( file->u.flags );
     h = CgioBuffRdOpen( file->first );
-    cursor = (CGINTER *)( h->data + file->offset );
+    cursor = (CGINTER *)( h->u.data + file->offset );
     ics = 0;
     if( file->u.s.done ) {
         // CGFILE contains a finished function
         for(;;) {
-            opcode = cursor->opcode;
+            opcode = cursor->u.opcode;
             op_class = ICOpTypes[opcode];
             reloc = relocWriteOperand[op_class];
             if( reloc != NULL ) {
@@ -646,7 +646,7 @@ static void saveCGFILE( void *e, carve_walk_base *d )
     } else {
         // CGFILE contains a function in progress
         stop_buffer = file->buffer;
-        stop_cursor = (CGINTER *) ( stop_buffer->data + stop_buffer->free_offset );
+        stop_cursor = (CGINTER *) ( stop_buffer->u.data + stop_buffer->free_offset );
         // Ivan's bug fix simplified:
         // if stop_cursor randomly contains an IC_NEXT opcode, the final
         // CgioBuffRead may leap off into never-never land;
@@ -656,28 +656,28 @@ static void saveCGFILE( void *e, carve_walk_base *d )
         // Note: this is the only case where we are reading a CGFILE that
         // is not terminated by an IC_EOF but the same precaution must be
         // taken if we ever do it in some other case
-        stop_cursor->opcode = IC_NO_OP;
-        DbgAssert( stop_cursor->opcode != IC_NEXT );
+        stop_cursor->u.opcode = IC_NO_OP;
+        DbgAssert( stop_cursor->u.opcode != IC_NEXT );
         for(;;) {
             if( h == stop_buffer && cursor == stop_cursor )
                 break;
-            opcode = cursor->opcode;
+            opcode = cursor->u.opcode;
             // might be the destination of a CgioZap
-            zap_ref.opcode = IC_NO_OP;
+            zap_ref.u.opcode = IC_NO_OP;
             switch( opcode ) {
             case IC_BLOCK_OPEN:
             case IC_BLOCK_DEAD:
                 getCGFileLocn( h, cursor, &zap_locn );
                 zap_reloc = ModuleIsZap2( &zap_locn );
                 if( zap_reloc != NULL ) {
-                    zap_ref.opcode = IC_ZAP2_REF;
+                    zap_ref.u.opcode = IC_ZAP2_REF;
                     zap_ref.value.pvalue = zap_reloc;
                 }
                 break;
             case IC_NO_OP:
                 getCGFileLocn( h, cursor, &zap_locn );
                 if( ModuleIsZap1( &zap_locn ) ) {
-                    zap_ref.opcode = IC_ZAP1_REF;
+                    zap_ref.u.opcode = IC_ZAP1_REF;
                     zap_ref.value.pvalue = 0;
                 }
                 break;
@@ -693,14 +693,14 @@ static void saveCGFILE( void *e, carve_walk_base *d )
                 PCHWriteUnaligned( cursor, sizeof( *cursor ) );
             }
             ++ics;
-            if( zap_ref.opcode != IC_NO_OP ) {
+            if( zap_ref.u.opcode != IC_NO_OP ) {
                 PCHWriteUnaligned( &zap_ref, sizeof( zap_ref ) );
                 ++ics;
                 ics = padOutICBlock( ics );
             }
             h = CgioBuffReadIC( h, &cursor );
         }
-        terminator.opcode = IC_PCH_STOP;
+        terminator.u.opcode = IC_PCH_STOP;
         PCHWriteUnaligned( &terminator, sizeof( terminator ) );
         ++ics;
     }
@@ -746,7 +746,7 @@ pch_status PCHReadCGFiles( void )
             // The following comment is a trigger for the ICMASK program to
             // start scanning for case IC_* patterns.
             // ICMASK BEGIN PCHREAD (do not remove)
-            switch( last.opcode ) {
+            switch( last.u.opcode ) {
             case IC_EOF:
                 // this writes the IC_EOF into the buffer
                 CgioCloseOutputFile( curr );

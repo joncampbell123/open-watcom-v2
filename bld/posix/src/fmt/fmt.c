@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -201,7 +201,7 @@ static void formatParagraph( para *p, unsigned width, unsigned offset, int err )
     unsigned long   inicost = width;
     unsigned long   length  = p->offset;
 
-    r = (range *)MemAlloc( p->len * sizeof( range ) );
+    r = MemAlloc( p->len * sizeof( range ) );
 
     if( err ) {
         comp++;
@@ -309,8 +309,8 @@ static void resetWordlist( wordlist *list )
 static void trimParagraph( para *p )
 {
     if( p->size > p->len ) {
-        p->size  = p->len + 1;
-        p->words = (word *)MemRealloc( p->words, p->size * sizeof( word ) );
+        p->size = p->len + 1;
+        p->words = MemRealloc( p->words, p->size * sizeof( word ) );
     }
 }
 
@@ -318,9 +318,9 @@ static int expandParagraph( para *p, unsigned inc )
 {
     word        *tmp;
 
-    if( p->len >= p->size ) {
+    if( p->size <= p->len ) {
         p->size += inc;
-        tmp = (word *)MemRealloc( p->words, p->size * sizeof( word ) );
+        tmp = MemRealloc( p->words, p->size * sizeof( word ) );
         if( tmp != NULL ) {
             p->words = tmp;
             for( tmp += p->len; tmp < p->words + p->size; tmp++ ) {
@@ -379,7 +379,7 @@ static char *insertWord( wordlist **list, char *wtext, unsigned wlen )
     if( size < DEF_LIST_LEN )
         size = DEF_LIST_LEN;
     while( size > wlen ) {
-        temp = (wordlist *)MemRealloc( temp, sizeof( wordlist ) + size - sizeof( char ) );
+        temp = MemRealloc( temp, sizeof( wordlist ) + size - sizeof( char ) );
         if( temp != NULL ) {
             break;
         } else {
@@ -411,9 +411,9 @@ static int getWord( FILE *fp, wordlist **list, word *w, unsigned *os )
     if( w->len == 0  ||  w->len >= w_size ) {
         ret = 0;
         for( ;; ) {
-            if( w->len >= w_size ) {
+            if( w_size <= w->len ) {
                 w_size += MIN_WORD_LEN;
-                tmp  = (char *)MemRealloc( w_buff, w_size );
+                tmp  = MemRealloc( w_buff, w_size );
                 if( tmp == NULL ) {
                     w_size -= MIN_WORD_LEN;
                     return( OUT_OF_MEM );

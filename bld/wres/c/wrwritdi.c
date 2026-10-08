@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -37,52 +38,52 @@
 #include "reserr.h"
 #include "wresrtns.h"
 
-static bool writeLangList( FILE *fp, WResLangNode *curlang )
+static bool writeLangList( FILE *fp, WResLangNode *langnode )
 {
     bool        error;
 
     error = false;
-    for( ; curlang != NULL && !error; curlang = curlang->Next ) {
-        error = WResWriteLangRecord( &(curlang->Info), fp );
+    for( ; langnode != NULL && !error; langnode = langnode->Next ) {
+        error = WResWriteLangRecord( &(langnode->Info), fp );
     }
     return( error );
 }
 
-static bool writeResList( FILE *fp, WResResNode *currres )
+static bool writeResList( FILE *fp, WResResNode *resnode )
 {
     bool        error;
 
     error = false;
-    for( ; currres != NULL && !error; currres = currres->Next ) {
-        error = WResWriteResRecord( &(currres->Info), fp );
+    for( ; resnode != NULL && !error; resnode = resnode->Next ) {
+        error = WResWriteResRecord( &(resnode->Info), fp );
         if( !error ) {
-            error = writeLangList( fp, currres->Head );
+            error = writeLangList( fp, resnode->Head );
         }
     }
 
     return( error );
 }
 
-static bool writeTypeList( FILE *fp, WResTypeNode *currtype )
+static bool writeTypeList( FILE *fp, WResTypeNode *typenode )
 {
     bool        error;
 
     error = false;
-    for( ; currtype != NULL && !error; currtype = currtype->Next ) {
-        error = WResWriteTypeRecord( &(currtype->Info), fp );
+    for( ; typenode != NULL && !error; typenode = typenode->Next ) {
+        error = WResWriteTypeRecord( &(typenode->Info), fp );
         if( !error ) {
-            error = writeResList( fp, currtype->Head );
+            error = writeResList( fp, typenode->Head );
         }
     }
 
     return( error );
 }
 
-bool WResWriteDir( FILE *fp, WResDir currdir )
-/********************************************/
+bool WResWriteDir( FILE *fp, WResDir dir )
+/****************************************/
 {
-    WResHeader      head;
-    WResExtHeader   ext_head;
+    WResHeader      header;
+    WResExtHeader   extheader;
     bool            error;
     long            diroffset;
 
@@ -91,22 +92,27 @@ bool WResWriteDir( FILE *fp, WResDir currdir )
     if( diroffset == -1L ) {
         error = WRES_ERROR( WRS_TELL_FAILED );
     } else {
-        error = writeTypeList( fp, currdir->Head );
+        error = writeTypeList( fp, dir->Head );
+    }
+    if( !error ) {
+        if( WRESSEEK( fp, 0L, SEEK_SET ) ) {
+            error = WRES_ERROR( WRS_SEEK_FAILED );
+        }
     }
     /* write out the file header */
     if( !error ) {
-        head.Magic[0] = WRESMAGIC0;
-        head.Magic[1] = WRESMAGIC1;
-        head.DirOffset = diroffset;
-        head.NumResources = currdir->NumResources;
-        head.NumTypes = currdir->NumTypes;
-        head.WResVer = WRESVERSION;
-        error = WResWriteHeaderRecord( &head, fp );
+        header.Magic[0] = WRESMAGIC0;
+        header.Magic[1] = WRESMAGIC1;
+        header.DirOffset = diroffset;
+        header.NumResources = dir->NumResources;
+        header.NumTypes = dir->NumTypes;
+        header.WResVer = WRESVERSION;
+        error = WResWriteHeader( &header, fp );
     }
     if( !error ) {
-        memset( &ext_head, 0, sizeof( WResExtHeader ) );
-        WResSetTargetOS( &ext_head, WResGetTargetOS( currdir ) );
-        error = WResWriteExtHeader( &ext_head, fp );
+        memset( &extheader, 0, sizeof( WResExtHeader ) );
+        extheader.TargetOS = dir->TargetOS;
+        error = WResWriteExtHeader( &extheader, fp );
     }
 
     /* leave the handle at the start of the file */

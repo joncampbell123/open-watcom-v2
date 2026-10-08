@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2017 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -42,6 +42,7 @@
 #include "errcod.h"
 #include "ctrlflgs.h"
 #include "global.h"
+#include "namecod.h"
 #include "recog.h"
 #include "ferror.h"
 #include "insert.h"
@@ -81,9 +82,9 @@ static void CompGoto( void )
     caseptr = CSHead->cs_info.cases;
     caseptr->label.g_label = NextLabel(); // if expr is out of range 1-n
     AdvanceITPtr();
-    ReqOpenParen();
+    ReqOpenParenOpr();
     i = 1;
-    for(;;) {
+    for( ;; ) {
         caseptr->link = NewCase();
         caseptr = caseptr->link;
         caseptr->label.st_label = LkUpStmtNo();
@@ -91,16 +92,16 @@ static void CompGoto( void )
         caseptr->high = i;
         AdvanceITPtr();
         i++;
-        if( !RecComma() ) {
+        if( !RecCommaOpr() ) {
             break;
         }
     }
-    ReqCloseParen();
-    if( !RecEOS() ) {
-        if( RecNOpn() && RecNextOpr( OPR_COM ) ) {
+    ReqCloseParenOpr();
+    if( !RecEOSOpr() ) {
+        if( RecNoOpn() && RecNextOpr( OPR_COM ) ) {
             AdvanceITPtr();
         }
-        if( !RecEOS() ) {
+        if( !RecEOSOpr() ) {
             IntegerExpr();
             InitSelect();
             FiniSelect();
@@ -128,7 +129,7 @@ static void AsgnGoto( void )
 {
 // Process an assigned GOTO statement.
 
-    if( ReqIntVar() ) {
+    if( ReqIntVarOpn() ) {
         CkVarRef();
     }
     if( RecNextOpr( OPR_TRM ) ) {
@@ -138,20 +139,20 @@ static void AsgnGoto( void )
     } else {
         GAsgnGoTo( true );
         AdvanceITPtr();
-        if( RecComma() && RecNOpn() ) {
+        if( RecCommaOpr() && RecNoOpn() ) {
             AdvanceITPtr();
         }
-        ReqOpenParen();
-        for(;;) {
+        ReqOpenParenOpr();
+        for( ;; ) {
             GStmtAddr( LkUpStmtNo() );
             AdvanceITPtr();
-            if( !RecComma() ) {
+            if( !RecCommaOpr() ) {
                 break;
             }
         }
         GEndBrTab();
-        ReqCloseParen();
-        if( RecNOpn() ) {
+        ReqCloseParenOpr();
+        if( RecNoOpn() ) {
             AdvanceITPtr();
         }
     }
@@ -161,17 +162,17 @@ void CpGoto( void )
 {
 // Process a GOTO statement.
 
-    if( RecNumber() ) {
+    if( RecNumberOpn() ) {
         Remember.transfer = true;
         UnCondGoto();
-    } else if( RecNOpn() ) {
+    } else if( RecNoOpn() ) {
         CompGoto();
         CtrlFlgs &= ~CF_BAD_DO_ENDING;
     } else {
         Remember.transfer = true;
         AsgnGoto();
     }
-    ReqEOS();
+    ReqEOSOpr();
 }
 
 void CpArithIf( void )
@@ -184,27 +185,27 @@ void CpArithIf( void )
     itnode      *cit;
 
     Remember.transfer = true;
-    if( RecNOpn() ) {
+    if( RecNoOpn() ) {
         AdvanceITPtr();
     }
     cit = CITNode;
-    if( ReqOpenParen() ) {
+    if( ReqOpenParenOpr() ) {
         cit->opr = OPR_TRM; // so ScanExpr stops on ')'
         AdvanceITPtr();
         ScanExpr();  // scan ahead to line numbers
     }
-    if( ReqCloseParen() ) {
+    if( ReqCloseParenOpr() ) {
         lt_label = LkUpStmtNo();
         AdvanceITPtr();
     }
-    if( ReqComma() ) {
+    if( ReqCommaOpr() ) {
         eq_label = LkUpStmtNo();
         AdvanceITPtr();
     }
-    if( ReqComma() ) {
+    if( ReqCommaOpr() ) {
         gt_label = LkUpStmtNo();
         AdvanceITPtr();
-        ReqEOS();
+        ReqEOSOpr();
     }
     CITNode = cit;
     G3WayBranch( lt_label, eq_label, gt_label );
@@ -217,14 +218,14 @@ void CpAssign( void )
     char        *opnd;
     sym_id      label;
 
-    if( RecNOpn() && RecNextOpr( OPR_PHI ) ) {
+    if( RecNoOpn() && RecNextOpr( OPR_PHI ) ) {
         AdvanceITPtr();
     }
     label = LkUpAssign();
     AdvanceITPtr();
     opnd = CITNode->opnd;
-    if( RecNOpr() && RecName() && ( CITNode->opnd_size >= 2 ) &&
-        ( opnd[ 0 ] == 'T' ) && ( opnd[ 1 ] == 'O' ) ) {
+    if( RecNoOpr() && RecNameOpn() && ( CITNode->opnd_size >= 2 ) &&
+        ( opnd[0] == 'T' ) && ( opnd[1] == 'O' ) ) {
         CITNode->opnd += 2;
         CITNode->opnd_size -= 2;
         CITNode->opnpos += 2;
@@ -234,12 +235,12 @@ void CpAssign( void )
     } else {
         Error( GO_NO_TO );
     }
-    if( ReqIntVar() ) {
+    if( ReqIntVarOpn() ) {
         CkVarRef();
         CkSize4();
         CkAssignOk();
         GAssign( label );
     }
     AdvanceITPtr();
-    ReqEOS();
+    ReqEOSOpr();
 }

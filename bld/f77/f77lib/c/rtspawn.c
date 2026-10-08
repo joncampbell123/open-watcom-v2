@@ -41,23 +41,17 @@
 #elif defined( __OS2__ )
     #include <wos2.h>
 #endif
-#include "frtdata.h"
 #include "fthread.h"
 #include "thread.h"
 #include "rtspawn.h"
 
 
 #ifdef __MT__
-
-#define _SPAWNSTACK     (__FTHREADDATAPTR->__SpawnStack)
-
+    #define SPAWNSTACK  (__FTHREADDATAPTR->__SpawnStack)
 #else
-
-static  __jmp_buf       *SpawnStack = { NULL };
-#define _SPAWNSTACK     SpawnStack
-
+    static __jmp_buf    *SpawnStack = { NULL };
+    #define SPAWNSTACK  SpawnStack
 #endif
-
 
 int     RTSpawn( void (*fn)( void ) )
 //===================================
@@ -66,13 +60,13 @@ int     RTSpawn( void (*fn)( void ) )
     __jmp_buf   env;
     int         status;
 
-    save_env = _SPAWNSTACK;
-    _SPAWNSTACK = env;
+    save_env = SPAWNSTACK;
+    SPAWNSTACK = env;
     status = __setjmp( env );
     if( status == 0 ) {
         (*fn)();
     }
-    _SPAWNSTACK = save_env;
+    SPAWNSTACK = save_env;
     return( status );
 }
 
@@ -80,9 +74,9 @@ int     RTSpawn( void (*fn)( void ) )
 _WCNORETURN void    RTSuicide( void )
 //===================================
 {
-    if( _SPAWNSTACK == NULL )
+    if( SPAWNSTACK == NULL )
         exit( -1 );
         // never return
-    __longjmp( *_SPAWNSTACK, 1 );
+    __longjmp( *SPAWNSTACK, 1 );
     // never return
 }

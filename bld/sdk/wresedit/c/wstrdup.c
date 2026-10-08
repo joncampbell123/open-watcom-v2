@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,7 +35,7 @@
 #include "wstrdup.h"
 #include "wrdll.h"
 
-char *WStrDup( const char *src )
+char *WStrdup( const char *src )
 {
     char *dest;
 
@@ -42,7 +43,7 @@ char *WStrDup( const char *src )
         return( NULL );
     }
 
-    dest = WRMemAlloc( strlen( src ) + 1 );
+    dest = MemAlloc( strlen( src ) + 1 );
 
     if( dest != NULL ) {
         strcpy( dest, src );

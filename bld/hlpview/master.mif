@@ -9,7 +9,6 @@ whelp_trmem = 1
 !include cproj.mif
 !include defrule.mif
 !include deftarg.mif
-!include trmem.mif
 
 !include $(ui_dir)/client.mif
 !include $(hlpview_dir)/client.mif
@@ -19,12 +18,15 @@ whelp_trmem = 1
 #
 .c: ../c;$(trmem_dir)
 
-inc_dirs =  $(cli_hlpview_inc_dirs) $(cli_ui_inc_dirs)
+inc_dirs = $(cli_hlpview_inc_dirs) -I"$(trmem_dir)"
 
-extra_cpp_flags_f_helpmem  = $(trmem_cpp_flags)
-extra_cpp_flags_f_trmemcvr = $(trmem_cpp_flags)
-
-extra_c_flags_f_trmemcvr = $(trmem_cover_cflags)
+!ifeq trmem 1
+! ifdef __WATCOM_TOOLS__
+!  if $(__WATCOM_TOOLS__) < 1300
+extra_c_flags_f_helpmem = -of+
+!  endif
+! endif
+!endif
 
 # explicit rules
 #################
@@ -36,7 +38,6 @@ exetarg_objs = &
     main.obj &
     filelist.obj &
     $(cli_hlpview_objs) &
-    helpmem.obj &
-    $(trmem_objs) $(trmemcvr_objs)
+    helpmem.obj $(trmem_objs)
 exetarg_libs = $(cli_ui_libs)
 !include exetarg.mif

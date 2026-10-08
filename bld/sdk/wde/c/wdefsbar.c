@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -97,7 +97,9 @@ static bool     WdeSBarDefineHook( HWND, UINT, WPARAM, LPARAM, DialogStyle );
 /* static variables                                                         */
 /****************************************************************************/
 static HINSTANCE                WdeApplicationInstance;
+#ifdef __WINDOWS__
 static DISPATCH_FN              *WdeSBarDispatch;
+#endif
 static WdeDialogBoxControl      *WdeDefaultSBar = NULL;
 static int                      WdeSBarWndExtra;
 static WNDPROC                  WdeOriginalSBarProc;
@@ -175,7 +177,7 @@ OBJPTR WdeMakeSBar( OBJPTR parent, RECT *obj_rect, OBJPTR handle,
 
     new = WdeSBCreate( parent, obj_rect, handle, id, WdeDefaultSBar );
 
-    WRMemFree( GETCTL_TEXT( WdeDefaultSBar ) );
+    MemFree( GETCTL_TEXT( WdeDefaultSBar ) );
     SETCTL_TEXT( WdeDefaultSBar, NULL );
 
     return( new );
@@ -193,13 +195,17 @@ OBJPTR WdeSBCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle,
         return( NULL );
     }
 
-    new = (WdeSBarObject *)WRMemAlloc( sizeof( WdeSBarObject ) );
+    new = MemAlloc( sizeof( WdeSBarObject ) );
     if( new == NULL ) {
         WdeWriteTrail( "WdeSBarCreate: Object malloc failed" );
         return( NULL );
     }
 
+#ifdef __WINDOWS__
     OBJ_DISPATCHER_SET( new, WdeSBarDispatch );
+#else
+    OBJ_DISPATCHER_SET( new, WdeSBarDispatcher );
+#endif
 
     new->object_id = id;
 
@@ -213,21 +219,21 @@ OBJPTR WdeSBCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle,
 
     if( new->control == NULL ) {
         WdeWriteTrail( "WdeSBarCreate: CONTROL_OBJ not created!" );
-        WRMemFree( new );
+        MemFree( new );
         return( NULL );
     }
 
     if( !Forward( new->object_handle, SET_OBJECT_INFO, info, NULL ) ) {
         WdeWriteTrail( "WdeSBarCreate: SET_OBJECT_INFO failed!" );
         Destroy( new->control, false );
-        WRMemFree( new );
+        MemFree( new );
         return( NULL );
     }
 
     if( !Forward( new->object_handle, CREATE_WINDOW, NULL, NULL ) ) {
         WdeWriteTrail( "WdeSBarCreate: CREATE_WINDOW failed!" );
         Destroy( new->control, false );
-        WRMemFree( new );
+        MemFree( new );
         return( NULL );
     }
 
@@ -296,14 +302,18 @@ bool WdeSBarInit( bool first )
     SETCTL_TEXT( WdeDefaultSBar, NULL );
     SETCTL_CLASSID( WdeDefaultSBar, WdeStrToControlClass( WSTATUSCLASSNAME ) );
 
+#ifdef __WINDOWS__
     WdeSBarDispatch = MakeProcInstance_DISPATCHER( WdeSBarDispatcher, WdeGetAppInstance() );
+#endif
     return( true );
 }
 
 void WdeSBarFini( void )
 {
     WdeFreeDialogBoxControl( &WdeDefaultSBar );
+#ifdef __WINDOWS__
     FreeProcInstance_DISPATCHER( WdeSBarDispatch );
+#endif
 }
 
 bool WdeSBarDestroy( WdeSBarObject *obj, bool *flag, bool *p2 )
@@ -315,7 +325,7 @@ bool WdeSBarDestroy( WdeSBarObject *obj, bool *flag, bool *p2 )
         return( false );
     }
 
-    WRMemFree( obj );
+    MemFree( obj );
 
     return( true );
 }
@@ -352,7 +362,7 @@ bool WdeSBarCopyObject( WdeSBarObject *obj, WdeSBarObject **new, OBJPTR handle )
         return( false );
     }
 
-    *new = (WdeSBarObject *)WRMemAlloc( sizeof( WdeSBarObject ) );
+    *new = MemAlloc( sizeof( WdeSBarObject ) );
 
     if( *new == NULL ) {
         WdeWriteTrail( "WdeSBarCopyObject: Object malloc failed" );
@@ -370,7 +380,7 @@ bool WdeSBarCopyObject( WdeSBarObject *obj, WdeSBarObject **new, OBJPTR handle )
 
     if( !CopyObject( obj->control, &(*new)->control, (*new)->object_handle ) ) {
         WdeWriteTrail( "WdeSBarCopyObject: Control not created!" );
-        WRMemFree( *new );
+        MemFree( *new );
         return( false );
     }
 

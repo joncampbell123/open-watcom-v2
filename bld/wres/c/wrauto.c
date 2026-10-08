@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2025-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -30,36 +31,39 @@
 ****************************************************************************/
 
 
+#include <string.h>
 #include "wresall.h"
-#include "autodep.h"
+#include "wresauto.h"
 #include "reserr.h"
 #include "wresrtns.h"
 
-DepInfo *WResGetAutoDep( const char *fname )
+
+char *WResGetAutoDep( const char *fname )
 {
     FILE            *fp;
     WResDir         dir;
     bool            dup_discarded;
-    WResID          *name;
-    WResID          *type;
-    WResDirWindow   window;
+    WResID          *res_id;
+    WResID          *type_id;
+    WResDirWindow   wind;
     WResLangInfo    *info;
-    DepInfo         *ret;
+    char            *ret;
     size_t          numread;
 
     ret = NULL;
     fp = ResOpenFileRO( fname );
     if( fp != NULL ) {
-        if( WResIsWResFile( fp ) && (dir = WResInitDir()) != NULL ) {
-            if( !WResReadDir( fp, dir, &dup_discarded ) ) {
-                name = WResIDFromStr( DEP_LIST_NAME );
-                type = WResIDFromNum( DEP_LIST_TYPE );
-                if( name != NULL && type != NULL ) {
-                    window = WResFindResource( type, name, dir, NULL );
-                    if( WResIsEmptyWindow( window ) ) {
+        if( WResIsWResFile( fp ) ) {
+            if( !WResReadDir( fp, &dir, &dup_discarded ) ) {
+                res_id = WResIDFromStr( DEP_LIST_NAME );
+                type_id = WResIDFromNum( DEP_LIST_TYPE );
+                if( res_id != NULL
+                  && type_id != NULL ) {
+                    wind = WResFindResource( type_id, res_id, dir, NULL );
+                    if( WResIsEmptyWindow( wind ) ) {
                         WRES_ERROR( WRS_RES_NOT_FOUND );
                     } else {
-                        info = WResGetLangInfo( window );
+                        info = WResGetLangInfo( wind );
                         if( WRESSEEK( fp, info->Offset, SEEK_SET ) ) {
                             WRES_ERROR( WRS_SEEK_FAILED );
                         } else {
@@ -69,27 +73,28 @@ DepInfo *WResGetAutoDep( const char *fname )
                             } else {
                                 if( (numread = WRESREAD( fp, ret, info->Length )) != (size_t)info->Length ) {
                                     WRES_ERROR( WRESIOERR( fp, numread ) ? WRS_READ_FAILED : WRS_READ_INCOMPLETE );
+                                    WRESFREE( ret );
                                     ret = NULL;
                                 }
                             }
                         }
                     }
                 }
-                if( name != NULL ) {
-                    WResIDFree( name );
+                if( res_id != NULL ) {
+                    WResIDFree( res_id );
                 }
-                if( type != NULL ) {
-                    WResIDFree( type );
+                if( type_id != NULL ) {
+                    WResIDFree( type_id );
                 }
+                WResFreeDir( dir );
             }
-            WResFreeDir( dir );
         }
         ResCloseFile( fp );
     }
     return( ret );
 }
 
-void WResFreeAutoDep( DepInfo *ptr )
+void WResFreeAutoDep( char *ptr )
 {
     WRESFREE( ptr );
 }

@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -143,10 +144,18 @@ void intern finibios( void )
 void intern physupdate( SAREA *area )
 /***********************************/
 {
-    int i;
+    uisize      height;
+    uisize      incr;
+    uisize      offset;
+    uisize      count;
 
-    for( i = area->row; i < (area->row + area->height); i++ ) {
-        VioShowBuf( ( i * UIData->width + area->col ) * sizeof( PIXEL ), area->width * sizeof( PIXEL ), 0 );
+    incr = sizeof( *UIData->screen.origin ) * UIData->width;
+    offset = area->row * incr + sizeof( *UIData->screen.origin ) * area->col;
+    count = sizeof( *UIData->screen.origin ) * area->width;
+    height = area->height;
+    while( height-- > 0 ) {
+        VioShowBuf( offset, count, 0 );
+        offset += incr;
     }
 }
 

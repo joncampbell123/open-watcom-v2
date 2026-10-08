@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -32,6 +32,8 @@
 
 #include <stdio.h>
 #include "bool.h"
+#include "memfuncs.h"
+
 
 #define MAX_LINE (256)
 #define FNMAX  80                   /* maximum file name length. */
@@ -80,15 +82,16 @@ typedef enum {
 // structures used in MS2WLINK files.
 
 typedef struct cmdentry {
-    struct cmdentry     *next;
-    char                *command;
-    bool                asis;       // true iff entry should be printed "as is".
+    struct cmdentry *next;
+    char            *command;
+    bool            asis;       // true iff entry should be printed "as is".
 } cmdentry;
 
 extern bool         MapOption;
 extern format_type  FmtType;
 extern extra_type   FmtInfo;
 extern bool         DebugInfo;
+extern bool         NoIgnoreCase;
 
 extern cmdentry     *Commands[];
 extern bool         HaveDefFile;
@@ -97,58 +100,56 @@ extern format_type  FmtType;
 extern bool         MapOption;
 
 // mem.c
-extern void     MemInit( void );
-extern void     MemFini( void );
-extern void     MemFree( void * );
-extern void     *MemAlloc( size_t );
+extern void         MemInit( void );
+extern void         MemFini( void );
+extern char         *MemToStringSafe( const void *mem, size_t size );
 
 // fileio.h
-extern FILE     *QOpenR( const char *name );
-extern size_t   QRead( FILE *fp, void *buffer, size_t len, const char *name );
-extern size_t   QWrite( FILE *fp, const void *buffer, size_t len, const char *name );
-extern void     QWriteNL( FILE *fp, const char *name );
-extern void     QClose( FILE *fp, const char *name );
+extern FILE         *QOpenR( const char *name );
+extern size_t       QRead( FILE *fp, void *buffer, size_t len, const char *name );
+extern size_t       QWrite( FILE *fp, const void *buffer, size_t len, const char *name );
+extern void         QWriteNL( FILE *fp, const char *name );
+extern void         QClose( FILE *fp, const char *name );
 extern unsigned long QFileSize( FILE *fp );
-extern bool     QReadStr( FILE *fp, char *dest, size_t size, const char *name );
-extern bool     QIsConIn( FILE *fp );
-extern void     ErrorOut( const char *msg );
-extern void     ErrorExit( const char *msg );
-extern void     CommandOut( const char *command );
+extern bool         QReadStr( FILE *fp, char *dest, size_t size, const char *name );
+extern bool         QIsConIn( FILE *fp );
+extern void         ErrorOut( const char *msg );
+extern void         ErrorExit( const char *msg );
+extern void         CommandOut( const char *command );
 
 // keyword.c
-extern bool     GetNumber( unsigned long *val );
-extern void     ProcessDefCommand( void );
-extern void     ProcessOption( const char *opt );
+extern bool         GetNumber( unsigned long *val );
+extern void         ProcessDefCommand( void );
+extern void         ProcessOption( const char *opt );
 
 // ms2wlink.c
-extern void     WriteHelp( void );
+extern void         WriteHelp( void );
 
 // parsems.c
-extern void     EatWhite( void );
-extern bool     InitParsing( void );
-extern void     FreeParserMem( void );
-extern void     ParseDefFile( void );
-extern void     StartNewFile( char *fname );
-extern void     DirectiveError( void );
-extern char     *ToString( void );
-extern void     ParseMicrosoft( void );
+extern void         EatWhite( void );
+extern bool         InitParsing( void );
+extern void         FreeParserMem( void );
+extern void         ParseDefFile( void );
+extern void         StartNewFile( char *fname );
+extern void         DirectiveError( void );
+extern void         ParseMicrosoft( void );
 
 // utils.c
-extern void     UtilsInit( void );
-extern void     ImplyFormat( format_type typ );
-extern char     *FileName( const char *buff, prompt_slot slot, bool force );
-extern void     AddCommand( char *msg, prompt_slot slot, bool verbatim );
-extern void     Warning( const char *msg, prompt_slot slot );
-extern void     AddOption( const char *msg );
-extern void     AddNumOption( const char *msg, unsigned value );
-extern void     AddStringOption( const char *msg, const char *string, size_t len );
-extern void     NotSupported( const char *msg );
-extern void     NotNecessary( const char *msg );
-extern void     NotRecognized( const char *msg );
-extern char     *Msg2Splice( const char *msg1, const char *msg2 );
-extern char     *Msg3Splice( const char *msg1, const char *msg2, const char *msg3 );
-extern char     *FindNotAsIs( prompt_slot slot );
-extern char     *FindObjectName( void );
-extern void     OutPutPrompt( prompt_slot slot );
-extern int      Spawn( void (*fn)( void ) );
-extern void     Suicide( void );
+extern void         UtilsInit( void );
+extern void         ImplyFormat( format_type typ );
+extern char         *FileName( const char *buff, prompt_slot slot, bool force );
+extern void         AddCommand( char *msg, prompt_slot slot, bool verbatim );
+extern void         Warning( const char *msg, prompt_slot slot );
+extern void         AddOption( const char *msg );
+extern void         AddNumOption( const char *msg, unsigned value );
+extern void         AddStringOption( const char *msg, const char *string, size_t len );
+extern void         NotSupported( const char *msg );
+extern void         NotNecessary( const char *msg );
+extern void         NotRecognized( const char *msg );
+extern char         *Msg2Splice( const char *msg1, const char *msg2 );
+extern char         *Msg3Splice( const char *msg1, const char *msg2, const char *msg3 );
+extern char         *FindNotAsIs( prompt_slot slot );
+extern char         *FindObjectName( void );
+extern void         OutPutPrompt( prompt_slot slot );
+extern int          Spawn( void (*fn)( void ) );
+extern void         Suicide( void );

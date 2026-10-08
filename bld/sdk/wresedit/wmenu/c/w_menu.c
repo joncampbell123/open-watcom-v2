@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -68,7 +68,7 @@ static WMenuEntry   *WDummyMenuEntry = NULL;
 
 void WInitDummyMenuEntry( void )
 {
-    WDummyMenuEntry = (WMenuEntry *)WRMemAlloc( sizeof( WMenuEntry ) );
+    WDummyMenuEntry = MemAlloc( sizeof( WMenuEntry ) );
     memset( WDummyMenuEntry, 0, sizeof( WMenuEntry ) );
     WDummyMenuEntry->item = ResNewMenuItem();
     WDummyMenuEntry->item->Item.Normal.ItemText = AllocRCString( W_MENUITEM );
@@ -85,7 +85,7 @@ WMenuEditInfo *WAllocMenuEditInfo( void )
 {
     WMenuEditInfo *einfo;
 
-    einfo = (WMenuEditInfo *)WRMemAlloc( sizeof( WMenuEditInfo ) );
+    einfo = MemAlloc( sizeof( WMenuEditInfo ) );
 
     if( einfo != NULL ) {
         memset( einfo, 0, sizeof( WMenuEditInfo ) );
@@ -123,9 +123,9 @@ void WFreeMenuEditInfo( WMenuEditInfo *einfo )
             einfo->win = (HWND)NULL;
         }
         if( einfo->file_name != NULL ) {
-            WRMemFree( einfo->file_name );
+            MemFree( einfo->file_name );
         }
-        WRMemFree( einfo );
+        MemFree( einfo );
     }
 }
 
@@ -137,9 +137,9 @@ static char *WInitDataFromMenu( WMenuEntry *entry, char *data )
     for( ; entry != NULL; entry = entry->next ) {
         if( entry->item->IsPopup ) {
             /* menu item flags */
-            item_flags = entry->item->Item.Popup.ItemFlags & ~MENU_ENDMENU;
+            item_flags = entry->item->Item.Popup.ItemFlags & ~MENU_LAST_ITEM;
             if( entry->next == NULL ) {
-                item_flags |= MENU_ENDMENU;
+                item_flags |= MENU_LAST_ITEM;
             }
             VALU16( data ) = item_flags;
             INCU16( data );
@@ -149,10 +149,10 @@ static char *WInitDataFromMenu( WMenuEntry *entry, char *data )
             if( entry->item->Item.Normal.ItemFlags & MENU_SEPARATOR ) {
                 item_flags = 0;
             } else {
-                item_flags = (entry->item->Item.Normal.ItemFlags & ~MENU_ENDMENU) | MF_STRING;
+                item_flags = (entry->item->Item.Normal.ItemFlags & ~MENU_LAST_ITEM) | MF_STRING;
             }
             if( entry->next == NULL ) {
-                item_flags |= MENU_ENDMENU;
+                item_flags |= MENU_LAST_ITEM;
             }
             VALU16( data ) = item_flags;
             INCU16( data );
@@ -220,7 +220,7 @@ void WMakeDataFromMenu( WMenu *menu, char **pdata, size_t *dsize )
     if( pdata != NULL && dsize != NULL ) {
         *dsize = SIZEU16 + SIZEU16 + WCalcMenuSize( menu->first_entry );
         if( *dsize != 0 ) {
-            *pdata = data = WRMemAlloc( *dsize );
+            *pdata = data = MemAlloc( *dsize );
             if( data != NULL ) {
                 /* menu resource header */
                 VALU16( data ) = 0;
@@ -260,7 +260,7 @@ static bool WMakeMenuItemFromData( const char **pdata, size_t *dsize, MenuItem *
     if( !item->IsPopup ) {
         item_id = VALU16( data );
         INCU16( data );
-        if( (item_flags & ~MENU_ENDMENU) == 0 && item_id == 0 ) {
+        if( (item_flags & ~MENU_LAST_ITEM) == 0 && item_id == 0 ) {
             item_flags |= MENU_SEPARATOR;
         }
         item->Item.Normal.ItemID = item_id;
@@ -295,7 +295,7 @@ static bool WAllocMenuEntryFromData( const char **data, size_t *dsize, WMenuEntr
     ok = (data != NULL && *data != NULL && dsize != NULL && *dsize != 0 && pentry != NULL);
 
     if( ok ) {
-        *pentry = entry = (WMenuEntry *)WRMemAlloc( sizeof( WMenuEntry ) );
+        *pentry = entry = MemAlloc( sizeof( WMenuEntry ) );
         ok = (entry != NULL);
     }
 
@@ -344,7 +344,7 @@ static bool WMakeMenuEntryFromData( const char **data, size_t *dsize, WMenuEntry
             if( (*current)->item->IsPopup ) {
                 ok = WMakeMenuEntryFromData( data, dsize, *current, &(*current)->child, is32bit );
             }
-            if( (*current)->item->Item.Normal.ItemFlags & MENU_ENDMENU ) {
+            if( (*current)->item->Item.Normal.ItemFlags & MENU_LAST_ITEM ) {
                 break;
             }
             prev = *current;
@@ -374,7 +374,7 @@ WMenu *WMakeMenuFromInfo( WMenuInfo *info )
     ok = (info != NULL);
 
     if( ok ) {
-        menu = (WMenu *)WRMemAlloc( sizeof( WMenu ) );
+        menu = MemAlloc( sizeof( WMenu ) );
         ok = ( menu != NULL );
     }
 
@@ -414,7 +414,7 @@ void WFreeMenu( WMenu *menu )
 {
     if( menu != NULL ) {
         WFreeMenuEntries( menu->first_entry );
-        WRMemFree( menu );
+        MemFree( menu );
     }
 }
 
@@ -438,9 +438,9 @@ void WFreeMenuEntry( WMenuEntry *entry )
             ResFreeMenuItem( entry->item );
         }
         if( entry->symbol != NULL ) {
-            WRMemFree( entry->symbol );
+            MemFree( entry->symbol );
         }
-        WRMemFree( entry );
+        MemFree( entry );
     }
 }
 
@@ -476,7 +476,7 @@ static bool WAddItemAtPos( HMENU hparent, int pos, WMenuEntry *entry )
 
     if( ok ) {
         flags = entry->item->Item.Normal.ItemFlags;
-        flags &= ~MENU_ENDMENU;
+        flags &= ~MENU_LAST_ITEM;
         if( flags & MENU_POPUP ) {
             entry->preview_popup = CreatePopupMenu();
             if( entry->preview_popup == (HMENU)NULL ) {
@@ -659,7 +659,7 @@ static bool WModifyItemAtPos( HMENU hparent, int pos, WMenuEntry *entry )
 
     if( ok ) {
         flags = entry->item->Item.Normal.ItemFlags;
-        flags &= ~MENU_ENDMENU;
+        flags &= ~MENU_LAST_ITEM;
         if( flags & MENU_POPUP ) {
             ok = ModifyMenu( hparent, pos, MF_BYPOSITION | flags,
                              (UINT_PTR)entry->preview_popup,
@@ -923,9 +923,9 @@ bool WResolveEntrySymbol( WMenuEntry *entry, WRHashTable *symbol_table )
 
     if( ok ) {
         if( entry->symbol != NULL ) {
-            WRMemFree( entry->symbol );
+            MemFree( entry->symbol );
         }
-        entry->symbol = WStrDup( vlist->entry->name );
+        entry->symbol = WStrdup( vlist->entry->name );
         ok = (entry->symbol != NULL);
     }
 

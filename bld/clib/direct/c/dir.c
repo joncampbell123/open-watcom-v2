@@ -32,6 +32,7 @@
 
 #include "variety.h"
 #include "widechar.h"
+#include "seterrno.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stddef.h>
@@ -41,7 +42,6 @@
 #include "strdup.h"
 #include "liballoc.h"
 #include "tinyio.h"
-#include "seterrno.h"
 #include "msdos.h"
 #include "_direct.h"
 #include "rtdata.h"
@@ -50,8 +50,8 @@
 #define SEEK_ATTRIB (TIO_HIDDEN | TIO_SYSTEM | TIO_SUBDIRECTORY)
 
 
-static int is_directory( const CHAR_TYPE *name )
-/**********************************************/
+static int _WCNEAR is_directory( const CHAR_TYPE *name )
+/******************************************************/
 {
     UINT_WC_TYPE    curr_ch;
     UINT_WC_TYPE    prev_ch;
@@ -91,8 +91,8 @@ static int is_directory( const CHAR_TYPE *name )
     return( -1 );
 }
 
-static void copy_find_data( DIR_TYPE *dirp, struct find_t *findp )
-/****************************************************************/
+static void _WCNEAR copy_find_data( DIR_TYPE *dirp, struct find_t *findp )
+/************************************************************************/
 {
     memcpy( dirp->d_dta, findp, sizeof( dirp->d_dta ) );
     dirp->d_attr = findp->attrib;
@@ -106,8 +106,8 @@ static void copy_find_data( DIR_TYPE *dirp, struct find_t *findp )
 #endif
 }
 
-static DIR_TYPE *__F_NAME(___opendir,___wopendir)( const CHAR_TYPE *dirname, DIR_TYPE *dirp )
-/*******************************************************************************************/
+static DIR_TYPE * _WCNEAR __F_NAME(___opendir,___wopendir)( const CHAR_TYPE *dirname, DIR_TYPE *dirp )
+/****************************************************************************************************/
 {
     struct find_t   fdta;
 #ifdef __WIDECHAR__
@@ -132,8 +132,8 @@ static DIR_TYPE *__F_NAME(___opendir,___wopendir)( const CHAR_TYPE *dirname, DIR
     return( dirp );
 }
 
-static DIR_TYPE *__F_NAME(__opendir,__wopendir)( const CHAR_TYPE *dirname )
-/*************************************************************************/
+static DIR_TYPE * _WCNEAR __F_NAME(__opendir,__wopendir)( const CHAR_TYPE *dirname )
+/**********************************************************************************/
 {
     DIR_TYPE        tmp;
     DIR_TYPE        *dirp;

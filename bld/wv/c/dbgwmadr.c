@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -37,7 +37,7 @@
 #include "strutil.h"
 #include "dbgscan.h"
 #include "dbgmad.h"
-#include "madinter.h"
+#include "wvmadcli.h"
 #include "madcli.h"
 #include "dbgstk.h"
 #include "dbgexpr.h"
@@ -125,8 +125,8 @@ static bool RegResize( a_window wnd )
         reg->count++;
     }
 
-    WndFree( reg->info );
-    reg->info = WndMustAlloc( reg->count * sizeof( *reg->info ) );
+    MemFree( reg->info );
+    reg->info = MemAllocSafe( reg->count * sizeof( *reg->info ) );
     space = WndAvgCharX( wnd );
 
     max_extent = 0;
@@ -167,8 +167,8 @@ static bool RegResize( a_window wnd )
 
     // calculate the indents
 
-    WndFree( reg->indents );
-    reg->indents = WndMustAlloc( reg->count * sizeof( *reg->indents ) );
+    MemFree( reg->indents );
+    reg->indents = MemAllocSafe( reg->count * sizeof( *reg->indents ) );
 
     // For each column
     for( i = 0; i < reg->up; ++i ) {
@@ -246,9 +246,9 @@ static int GetRegIdx( reg_window *reg, wnd_row row, wnd_piece piece )
 }
 
 
-static const char * GUICALLBACK RegValueName( const void *data_handle, int item )
+static const char * GUICALLBACK RegValueName( data_handle data, int item )
 {
-    mad_modify_list const *possible = (mad_modify_list const *)data_handle + item;
+    mad_modify_list const *possible = (const mad_modify_list *)data + item;
     size_t          buff_len;
 
     buff_len = TXT_LEN;
@@ -308,7 +308,7 @@ static  void    WNDCALLBACK RegModify( a_window wnd, wnd_row row, wnd_piece piec
             }
             RegNewValue( disp.reginfo, possible[i].data, possible[i].mth );
         } else {  //MJC const cast
-            if( DlgPickWithRtn( TxtBuff, possible, i, RegValueName, num_possible, &i ) ) {
+            if( DlgPickWithRtn( TxtBuff, (data_handle)possible, i, RegValueName, num_possible, &i ) ) {
                 RegNewValue( disp.reginfo, possible[i].data, possible[i].mth );
             }
         }
@@ -463,9 +463,9 @@ static bool WNDCALLBACK RegWndEventProc( a_window wnd, gui_event gui_ev, void *p
         return( true );
     case GUI_DESTROY :
         WndDeleteToggles( reg->popup, ArraySize( RegMenu ), reg->num_toggles );
-        WndFree( reg->info );
-        WndFree( reg->indents );
-        WndFree( reg );
+        MemFree( reg->info );
+        MemFree( reg->indents );
+        MemFree( reg );
         return( true );
     }
     return( false );
@@ -489,7 +489,7 @@ wnd_info MadRegInfo = {
     NoNextRow,
     NoNotify,
     ChkUpdate,
-    PopUp( RegMenu )
+    GUI_MENU_ARRAY( RegMenu )
 };
 
 void MadRegChangeOptions( a_window wnd )
@@ -503,7 +503,7 @@ a_window WndMadRegOpen( mad_type_kind kind, wnd_class_wv wndclass, gui_resource 
     reg_window  *reg;
     a_window    wnd;
 
-    reg = WndMustAlloc( sizeof( reg_window ) );
+    reg = MemAllocSafe( sizeof( *reg ) );
     reg->kind = kind;
     wnd = DbgWndCreate( LIT_ENG( Empty ), &MadRegInfo, wndclass, reg, icon );
     return( wnd );

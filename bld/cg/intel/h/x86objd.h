@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -30,6 +30,9 @@
 *
 ****************************************************************************/
 
+
+#ifndef X86_OBJD_INCLUDED
+#define X86_OBJD_INCLUDED
 
 /* aligned */
 //#include "objrep.h"
@@ -74,7 +77,7 @@
 #define DEBUG_MAJOR_VERSION     1
 #define DEBUG_MINOR_VERSION     3
 /* various COMENT records to use */
-#define VERSION_COMMENT     ((CMT_LANGUAGE_TRANS << 8)|0x00 )
+#define VERSION_COMMENT     CMT_P( LANGUAGE_TRANS )
 #define SOURCE_COMMENT      CMT_NP( COMPILER_OPTIONS )
 #define LINKER_COMMENT      CMT_NP( LINKER_DIRECTIVE )
 #define DISASM_COMMENT      CMT_NP( DISASM_DIRECTIVE )
@@ -179,3 +182,5 @@ typedef struct abs_patch {
     long_offset             value;
     abspatch_flags          flags;
 } abs_patch;
+
+#endif

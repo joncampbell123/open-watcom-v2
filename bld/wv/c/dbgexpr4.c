@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2024      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2024-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,12 +35,12 @@
 #include "liteng.h"
 #include "dbgstk.h"
 #include "dbgerr.h"
-#include "dbgmem.h"
+#include "memfuncs.h"
 #include "dbgitem.h"
 #include "dbgtback.h"
 #include "dbgri.h"
 #include "ldsupp.h"
-#include "madinter.h"
+#include "wvmadcli.h"
 #include "i64.h"
 #include "dbgutil.h"
 #include "dbgmemor.h"
@@ -54,7 +54,7 @@
 #include "dbg_dbg.h"
 #include "dbgprog.h"
 #include "dipimp.h"
-#include "dipinter.h"
+#include "wvdipcli.h"
 #include "dbgreg.h"
 #include "addarith.h"
 
@@ -88,7 +88,7 @@ void DoPlus( void )
     case TK_ENUM:
     case TK_CHAR:
     case TK_INTEGER:
-        U64Add( &left->v.uint, &ExprSP->v.uint, &left->v.uint );
+        U64AddEq( &left->v.uint, &ExprSP->v.uint );
         break;
     case TK_POINTER:
     case TK_ADDRESS:
@@ -141,7 +141,7 @@ void DoMinus( void )
     case TK_ENUM:
     case TK_CHAR:
     case TK_INTEGER:
-        U64Sub( &left->v.uint, &ExprSP->v.uint, &left->v.uint );
+        U64SubEq( &left->v.uint, &ExprSP->v.uint );
         left->ti.modifier = TM_SIGNED;
         break;
     case TK_POINTER:
@@ -156,7 +156,7 @@ void DoMinus( void )
             break;
         case TK_POINTER:
         case TK_ADDRESS:
-            I32ToI64( AddrDiff( left->v.addr, ExprSP->v.addr ), &left->v.sint );
+            Set64ValI32( left->v.sint, AddrDiff( left->v.addr, ExprSP->v.addr ) );
             left->ti.kind = TK_INTEGER;
             left->ti.modifier = TM_SIGNED;
             left->ti.size = sizeof( signed_64 );
@@ -197,7 +197,7 @@ void DoMul( void )
     case TK_ENUM:
     case TK_CHAR:
     case TK_INTEGER:
-        U64Mul( &left->v.uint, &ExprSP->v.uint, &left->v.uint );
+        U64MulEq( &left->v.uint, &ExprSP->v.uint );
         break;
     case TK_REAL:
         LDMul( &left->v.real, &ExprSP->v.real, &left->v.real );
@@ -237,7 +237,7 @@ void DoDiv( void )
     case TK_ENUM:
     case TK_CHAR:
     case TK_INTEGER:
-        if( U64Test( &ExprSP->v.uint ) == 0 ) {
+        if( U64isZero( ExprSP->v.uint ) ) {
             Error( ERR_NONE, LIT_ENG( ERR_ZERO_DIV ) );
         }
         if( left->ti.modifier == TM_UNSIGNED ) {
@@ -302,7 +302,7 @@ void DoMod( void )
     case TK_ENUM:
     case TK_CHAR:
     case TK_INTEGER:
-        if( U64Test( &ExprSP->v.uint ) == 0 ) {
+        if( U64isZero( ExprSP->v.uint ) ) {
             Error( ERR_NONE, LIT_ENG( ERR_ZERO_MOD ) );
         }
         if( left->ti.modifier == TM_UNSIGNED ) {
@@ -334,7 +334,7 @@ void DoAnd( void )
     case TK_ENUM:
     case TK_CHAR:
     case TK_INTEGER:
-        U64And( &left->v.uint, &ExprSP->v.uint, &left->v.uint );
+        U64AndEq( left->v.uint, ExprSP->v.uint );
         break;
     default:
         Error( ERR_NONE, LIT_ENG( ERR_ILL_TYPE ) );
@@ -359,7 +359,7 @@ void DoOr( void )
     case TK_ENUM:
     case TK_CHAR:
     case TK_INTEGER:
-        U64Or( &left->v.uint, &ExprSP->v.uint, &left->v.uint );
+        U64OrEq( left->v.uint, ExprSP->v.uint );
         break;
     default:
         Error( ERR_NONE, LIT_ENG( ERR_ILL_TYPE ) );
@@ -384,7 +384,7 @@ void DoXor( void )
     case TK_ENUM:
     case TK_CHAR:
     case TK_INTEGER:
-        U64Xor( &left->v.uint, &ExprSP->v.uint, &left->v.uint );
+        U64XorEq( left->v.uint, ExprSP->v.uint );
         break;
     default:
         Error( ERR_NONE, LIT_ENG( ERR_ILL_TYPE ) );
@@ -414,11 +414,11 @@ void DoShift( void )
     case TK_CHAR:
     case TK_INTEGER:
         if( shift >= 0 ) {
-            U64ShiftL( &left->v.uint, shift, &left->v.uint );
+            U64ShiftLEq( &left->v.uint, shift );
         } else if( left->ti.modifier == TM_UNSIGNED ) {
-            U64ShiftR( &left->v.uint, -shift, &left->v.uint );
+            U64ShiftREq( &left->v.uint, -shift );
         } else {
-            I64ShiftR( &left->v.sint, -shift, &left->v.sint );
+            I64ShiftREq( &left->v.sint, -shift );
         }
         break;
     default:
@@ -669,14 +669,18 @@ void DoStringConcat( void )
     ExprSP->ti.kind = TK_STRING;
     ExprSP->ti.modifier = TM_NONE;
     ExprSP->ti.size = left->ti.size + rite->ti.size;
-    _ChkAlloc( ExprSP->v.string.allocated, ExprSP->ti.size, LIT_ENG( ERR_NO_MEMORY_FOR_EXPR ) );
-    LocationCreate( &ExprSP->v.string.loc, LT_INTERNAL, ExprSP->v.string.allocated );
-    LocationAssign( &ExprSP->v.string.loc, &left->v.string.loc, left->ti.size, false );
-    ExprSP->v.string.loc.e[0].u.p = left->ti.size +
-                (byte *)ExprSP->v.string.loc.e[0].u.p;
-    LocationAssign( &ExprSP->v.string.loc, &rite->v.string.loc, rite->ti.size, false );
-    ExprSP->v.string.loc.e[0].u.p = ExprSP->v.string.allocated;
-    CombineEntries( ExprSP, left, rite );
+    ExprSP->v.string.allocated = MemAlloc( ExprSP->ti.size );
+    if( ExprSP->v.string.allocated == NULL ) {
+        Error( ERR_NONE, LIT_ENG( ERR_NO_MEMORY_FOR_EXPR ) );
+    } else {
+        LocationCreate( &ExprSP->v.string.loc, LT_INTERNAL, ExprSP->v.string.allocated );
+        LocationAssign( &ExprSP->v.string.loc, &left->v.string.loc, left->ti.size, false );
+        ExprSP->v.string.loc.e[0].u.p = left->ti.size +
+                    (byte *)ExprSP->v.string.loc.e[0].u.p;
+        LocationAssign( &ExprSP->v.string.loc, &rite->v.string.loc, rite->ti.size, false );
+        ExprSP->v.string.loc.e[0].u.p = ExprSP->v.string.allocated;
+        CombineEntries( ExprSP, left, rite );
+    }
 }
 
 

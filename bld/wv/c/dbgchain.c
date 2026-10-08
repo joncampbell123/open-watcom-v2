@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2024      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2024-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,7 +35,7 @@
 #include "dbgdefn.h"
 #include "dbgdata.h"
 #include "dbgtback.h"
-#include "dbgmem.h"
+#include "memfuncs.h"
 #include "dbgchain.h"
 #include "dui.h"
 #include "mad.h"
@@ -43,7 +43,7 @@
 #include "dbgutil.h"
 #include "dbgbrk.h"
 #include "dipimp.h"
-#include "dipinter.h"
+#include "wvdipcli.h"
 #include "dbgreg.h"
 #include "addarith.h"
 #include "dlgbreak.h"
@@ -70,8 +70,8 @@ static void FreeChainInfo( traceback *curr, int start, int end )
     int         i;
 
     for( i = start; i < end; ++i ) {
-        DbgFree( curr->chain[i].source_line );
-        DbgFree( curr->chain[i].symbol );
+        MemFree( curr->chain[i].source_line );
+        MemFree( curr->chain[i].symbol );
         curr->chain[i].source_line = NULL;
         curr->chain[i].symbol = NULL;
     }
@@ -86,12 +86,12 @@ static bool ReallocChain( traceback *curr, int new_size )
     chain = curr->chain;
     if( new_size >= (UINT_MAX / sizeof(call_chain)) )
         return( false );
-    new_chain = DbgAlloc( new_size * sizeof(call_chain) );
+    new_chain = MemAlloc( new_size * sizeof( *new_chain ) );
     if( new_chain == NULL )
         return( false );
-    memset( new_chain, 0, new_size*sizeof( call_chain ) );
-    memcpy( new_chain, chain, curr->current_depth * sizeof(call_chain) );
-    DbgFree( chain );
+    memset( new_chain, 0, new_size * sizeof( *new_chain ) );
+    memcpy( new_chain, chain, curr->current_depth * sizeof( *new_chain ) );
+    MemFree( chain );
     curr->chain = new_chain;
     curr->allocated_size = new_size;
     return( true );
@@ -170,8 +170,8 @@ static bool RecordTraceBackInfo( call_chain_entry *entry, void *_tb )
         chain->source_line = CopySourceLine( cueh );
     }
     CnvNearestAddr( chain->lc.execution, TxtBuff, TXT_LEN );
-    DbgFree( chain->symbol );
-    chain->symbol = DupStr( TxtBuff );
+    MemFree( chain->symbol );
+    chain->symbol = MemStrdupSafe( TxtBuff );
     chain->sym_len = 0;
     curr->current_depth++;
     return( true );
@@ -179,8 +179,8 @@ static bool RecordTraceBackInfo( call_chain_entry *entry, void *_tb )
 
 static traceback *DoInitTraceBack( traceback *curr )
 {
-    curr->chain = DbgMustAlloc( MODEST_CALL_LEVEL * sizeof( call_chain ) );
-    memset( curr->chain, 0, MODEST_CALL_LEVEL * sizeof( call_chain ) );
+    curr->chain = MemAllocSafe( MODEST_CALL_LEVEL * sizeof( *curr->chain ) );
+    memset( curr->chain, 0, MODEST_CALL_LEVEL * sizeof( *curr->chain ) );
     curr->allocated_size = MODEST_CALL_LEVEL;
     curr->total_depth = 0;
     return( curr );
@@ -196,8 +196,8 @@ void FiniTraceBack( cached_traceback *tb )
 {
     FreeChainInfo( tb->curr, 0, tb->curr->total_depth );
     FreeChainInfo( tb->prev, 0, tb->prev->total_depth );
-    DbgFree( tb->curr->chain );
-    DbgFree( tb->prev->chain );
+    MemFree( tb->curr->chain );
+    MemFree( tb->prev->chain );
 }
 
 void UpdateTraceBack( cached_traceback *tb )

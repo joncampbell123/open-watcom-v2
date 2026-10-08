@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,114 +36,69 @@
 #include "reserr.h"
 #include "wresrtns.h"
 
-M32ResResourceHeader *M32ResReadResourceHeader( FILE *fp )
-/********************************************************/
+
+MResResourceHeader *MResReadResourceHeader( FILE *fp, bool iswin32 )
+/******************************************************************/
 {
-    M32ResResourceHeader    *newhead;
+    MResResourceHeader      *msheader;
     bool                    error;
-    uint_16                 tmp16;
-    uint_32                 tmp32;
 
-    error = false;
-    newhead = WRESALLOC( sizeof( M32ResResourceHeader ) );
-    if( newhead == NULL ) {
-        error = WRES_ERROR( WRS_MALLOC_FAILED );
+    msheader = WRESALLOC( sizeof( MResResourceHeader ) );
+    if( msheader == NULL ) {
+        WRES_ERROR( WRS_MALLOC_FAILED );
+        return( NULL );
     }
-    if( !error ) {
-        newhead->head16 = WRESALLOC( sizeof( MResResourceHeader ) );
-        if( newhead->head16 == NULL ) {
-            error = WRES_ERROR( WRS_MALLOC_FAILED );
-        }
-    }
-    if( !error ) {
+    if( iswin32 ) {
         error = ResReadPadDWord( fp );
-    }
-    if( !error ) {
-        error = ResReadUint32( &tmp32, fp );
-        newhead->head16->Size = tmp32;
-    }
-    if( !error ) {
-        error = ResReadUint32( &tmp32, fp );
-        newhead->Size = tmp32;
-    }
-    if( !error ) {
-        newhead->head16->Type = ResRead32NameOrOrdinal( fp );
-        error = (newhead->head16->Type == NULL );
-    }
-    if( !error ) {
-        newhead->head16->Name = ResRead32NameOrOrdinal( fp );
-        error = (newhead->head16->Name == NULL );
-    }
-    if( !error ) {
-        error = ResReadPadDWord( fp );
-    }
-    if( !error ) {
-        error = ResReadUint32( &tmp32, fp );
-        newhead->head16->DataVersion = tmp32;
-    }
-    if( !error ) {
-        error = ResReadUint16( &tmp16, fp );
-        newhead->head16->MemoryFlags = tmp16;
-    }
-    if( !error ) {
-        error = ResReadUint16( &tmp16, fp );
-        newhead->head16->LanguageId = tmp16;
-    }
-    if( !error ) {
-        error = ResReadUint32( &tmp32, fp );
-        newhead->head16->Version = tmp32;
-    }
-    if( !error ) {
-        error = ResReadUint32( &tmp32, fp );
-        newhead->head16->Characteristics = tmp32;
-    }
-    if( error && newhead != NULL ) {
-        if( newhead->head16 != NULL ) {
-            WRESFREE( newhead->head16 );
+        if( !error ) {
+            msheader->Size = ResReadUint32( &error, fp );
         }
-        WRESFREE( newhead );
-        newhead = NULL;
-    }
-
-    return( newhead );
-}
-
-MResResourceHeader *MResReadResourceHeader( FILE *fp )
-/****************************************************/
-{
-    MResResourceHeader     *newhead;
-    bool                    error;
-    uint_16                 tmp16;
-    uint_32                 tmp32;
-
-    newhead = WRESALLOC( sizeof( MResResourceHeader ) );
-    if( newhead == NULL ) {
-        error = WRES_ERROR( WRS_MALLOC_FAILED );
+        if( !error ) {
+            msheader->HdrSize = ResReadUint32( &error, fp );
+        }
+        if( !error ) {
+            msheader->Type = ResRead32NameOrOrdinal( fp );
+            error = ( msheader->Type == NULL );
+        }
+        if( !error ) {
+            msheader->Name = ResRead32NameOrOrdinal( fp );
+            error = ( msheader->Name == NULL );
+        }
+        if( !error ) {
+            error = ResReadPadDWord( fp );
+        }
+        if( !error ) {
+            msheader->DataVersion = ResReadUint32( &error, fp );
+        }
+        if( !error ) {
+            msheader->res_flags = ResReadUint16( &error, fp );
+        }
+        if( !error ) {
+            msheader->LanguageId = ResReadUint16( &error, fp );
+        }
+        if( !error ) {
+            msheader->Version = ResReadUint32( &error, fp );
+        }
+        if( !error ) {
+            msheader->Characteristics = ResReadUint32( &error, fp );
+        }
     } else {
-        error = false;
+        msheader->Type = ResReadNameOrOrdinal( fp );
+        error = ( msheader->Type == NULL );
+        if( !error ) {
+            msheader->Name = ResReadNameOrOrdinal( fp );
+            error = ( msheader->Name == NULL );
+        }
+        if( !error ) {
+            msheader->res_flags = ResReadUint16( &error, fp );
+        }
+        if( !error ) {
+            msheader->Size = ResReadUint32( &error, fp );
+        }
     }
-
-    if( !error ) {
-        newhead->Type = ResReadNameOrOrdinal( fp );
-        error = (newhead->Type == NULL);
+    if( error ) {
+        WRESFREE( msheader );
+        msheader = NULL;
     }
-    if( !error ) {
-        newhead->Name = ResReadNameOrOrdinal( fp );
-        error = (newhead->Name == NULL);
-    }
-    if( !error ) {
-        error = ResReadUint16( &tmp16, fp );
-        newhead->MemoryFlags = tmp16;
-    }
-    if( !error ) {
-        error = ResReadUint32( &tmp32, fp );
-        newhead->Size = tmp32;
-    }
-
-    if( error && newhead != NULL ) {
-        WRESFREE( newhead );
-        newhead = NULL;
-    }
-
-    return( newhead );
-} /* MResReadResourceHeader */
+    return( msheader );
+}

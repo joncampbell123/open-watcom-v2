@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2025-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -46,21 +47,21 @@ class int64 {
         }
         int64( unsigned long hi, long lo )
         {
-            _d.u._32[I64HI32] = hi;
-            _d.u._32[I64LO32] = lo;
+            U64High( _d ) = hi;
+            U64Low( _d ) = lo;
         }
 
         int64 operator=( const int64 & a )
         {
-            this->_d.u._32[0] = a._d.u._32[0];
-            this->_d.u._32[1] = a._d.u._32[1];
+            U64Low( this->_d ) = U64Low( a._d );
+            U64High( this->_d ) = U64High( a._d );
             return( *this );
         }
 
         int64 operator+( const int64 & a ) const
         {
             int64 res;
-            U64Add( &this->_d, &a._d, &res._d );
+            U64Add( &res._d, &this->_d, &a._d );
             return( res );
         }
         int64 operator+=( const int64 & a )
@@ -71,7 +72,7 @@ class int64 {
         int64 operator-( const int64 & a ) const
         {
             int64 res;
-            U64Sub( &this->_d, &a._d, &res._d );
+            U64Sub( &res._d, &this->_d, &a._d );
             return( res );
         }
         int64 operator-=( const int64 & a )
@@ -82,14 +83,14 @@ class int64 {
         int64 operator-() const
         {
             int64 neg;
-            U64Neg( &this->_d, &neg._d );
+            U64Neg( &neg._d, &this->_d );
             return( neg );
         }
 
         int64 operator*( const int64 & a ) const
         {
             int64 result;
-            U64Mul( &this->_d, &a._d, &result._d );
+            U64Mul( &result._d, &this->_d, &a._d );
             return( result );
         }
         int64 operator*=( const int64 & a )
@@ -125,7 +126,7 @@ class int64 {
         int64 operator&( const int64 & a ) const
         {
             int64 result;
-            U64And( &this->_d, &a._d, &result._d );
+            U64And( &result._d, &this->_d, &a._d );
             return( result );
         }
         int64 operator&=( const int64 & a )
@@ -137,7 +138,7 @@ class int64 {
         int64 operator|( const int64 & a ) const
         {
             int64 result;
-            U64Or( &this->_d, &a._d, &result._d );
+            U64Or( &result._d, &this->_d, &a._d );
             return( result );
         }
         int64 operator|=( const int64 & a )
@@ -149,7 +150,7 @@ class int64 {
         int64 operator^( const int64 & a ) const
         {
             int64 result;
-            U64Xor( &this->_d, &a._d, &result._d );
+            U64Xor( &result._d, &this->_d, &a._d );
             return( result );
         }
         int64 operator^=( const int64 & a )
@@ -161,14 +162,14 @@ class int64 {
         int64 operator~() const
         {
             int64 not;
-            U64Not( &this->_d, &not._d );
+            U64Not( &not._d, &this->_d );
             return( not );
         }
 
         int64 operator<<( unsigned a ) const
         {
             int64 result;
-            U64ShiftL( &this->_d, a, &result._d );
+            U64ShiftL( &result._d, &this->_d, a );
             return( result );
         }
         int64 operator<<=( unsigned a )
@@ -180,7 +181,7 @@ class int64 {
         int64 operator>>( unsigned a ) const
         {
             int64 result;
-            I64ShiftR( &this->_d, a, &result._d );
+            I64ShiftR( &result._d, &this->_d, a );
             return( result );
         }
         int64 operator>>=( unsigned a )

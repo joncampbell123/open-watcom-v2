@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,6 +35,7 @@
 #include "global.h"
 #include "opr.h"
 #include "fmemmgr.h"
+#include "namecod.h"
 #include "recog.h"
 #include "types.h"
 #include "ferror.h"
@@ -55,7 +56,7 @@ case_entry *NewCase( void )
 {
     case_entry  *ptr;
 
-    ptr = FMemAlloc( sizeof( case_entry ) );
+    ptr = MemAllocSafe( sizeof( case_entry ) );
     ptr->label.g_label = 0;
     ptr->low = 0;
     ptr->high = 0;
@@ -74,14 +75,14 @@ void CpSelect( void )
     CSHead->branch = NextLabel();
     CSHead->bottom = NextLabel();
     CSHead->cs_info.cases = NewCase();
-    if( RecKeyWord( "CASE" ) ) {
+    if( RecKeyWordOpn( "CASE" ) ) {
         AdvanceITPtr();
     } else {
-        ReqNOpn();
+        ReqNoOpn();
         AdvanceITPtr();
     }
-    ReqOpenParen();
-    if( !RecEOS() ) { // consider: SELECT
+    ReqOpenParenOpr();
+    if( !RecEOSOpr() ) { // consider: SELECT
         SelectExpr();
         CSHead->cs_info.cases->sel_type = CITNode->typ;
     } else {
@@ -89,9 +90,9 @@ void CpSelect( void )
     }
     InitSelect();
     AdvanceITPtr();
-    ReqCloseParen();
-    if( !RecKeyWord( "FROM" ) ) {
-        ReqNOpn();
+    ReqCloseParenOpr();
+    if( !RecKeyWordOpn( "FROM" ) ) {
+        ReqNoOpn();
     }
     AdvanceITPtr();
     ColonLabel();
@@ -101,7 +102,7 @@ void CpCase( void )
 {
 // Compile a CASE statement.
 
-    if( RecKeyWord( "DEFAULT" ) ) {
+    if( RecKeyWordOpn( "DEFAULT" ) ) {
         AdvanceITPtr();
         CpOtherwise();
     } else {
@@ -151,7 +152,7 @@ static intstar4 CaseValue( void )
     } else if( _IsTypeLogical( CITNode->typ  ) ) {
         return( _LogValue( CITNode->value.logstar1 ) );
     } else { // if( CITNode->typ = FT_CHAR ) {
-        return( *CITNode->value.cstring.strptr );
+        return( (byte)*CITNode->value.string.ptr );
     }
 }
 
@@ -159,7 +160,7 @@ static void CaseHandler( void )
 {
     label_id    label;
     case_entry  *link;
-    case_entry  *kase;
+    case_entry  *currcase;
     intstar4    low = 0;
     intstar4    high = 0;
     bool        case_ok;
@@ -168,11 +169,11 @@ static void CaseHandler( void )
     CSHead->typ = CS_CASE;
     label = NextLabel();
     GLabel( label );
-    if( ReqNOpn() ) { // consider: CASE 10
+    if( ReqNoOpn() ) { // consider: CASE 10
         AdvanceITPtr();
     }
     multi_case = false;
-    ReqOpenParen();
+    ReqOpenParenOpr();
     for( ;; ) {
         if( _IsTypeLogical( CSHead->cs_info.cases->sel_type ) ) {
             // no range allowed for LOGICAL select expressions
@@ -183,7 +184,7 @@ static void CaseHandler( void )
             }
             AdvanceITPtr();
         } else {
-            if( RecNOpn() && RecNextOpr( OPR_COL ) ) {
+            if( RecNoOpn() && RecNextOpr( OPR_COL ) ) {
                 low = MinCaseValue( CSHead->cs_info.cases->sel_type );
                 AdvanceITPtr();
                 case_ok = ConstExpr( CSHead->cs_info.cases->sel_type );
@@ -198,8 +199,8 @@ static void CaseHandler( void )
                     high = low;
                 }
                 AdvanceITPtr();
-                if( RecColon() ) {
-                    if( RecNOpn() &&
+                if( RecColonOpr() ) {
+                    if( RecNoOpn() &&
                         ( RecNextOpr( OPR_RBR ) || RecNextOpr( OPR_COM ) ) ) {
                         high = MaxCaseValue( CSHead->cs_info.cases->sel_type );
                     } else {
@@ -216,35 +217,35 @@ static void CaseHandler( void )
             if( high < low ) {
                 Error( SP_NEVER_CASE );
             } else {
-                for( kase = CSHead->cs_info.cases; kase->link != NULL; kase = kase->link ) {
-                    if( kase->link->low > high ) {
+                for( currcase = CSHead->cs_info.cases; currcase->link != NULL; currcase = currcase->link ) {
+                    if( currcase->link->low > high ) {
                         break;
                     }
                 }
-                if( ( kase != CSHead->cs_info.cases ) && ( kase->high >= low ) ) {
+                if( ( currcase != CSHead->cs_info.cases ) && ( currcase->high >= low ) ) {
                     Error( SP_CASE_OVERLAP );
                 } else {
-                    link = kase->link;
-                    kase->link = NewCase();
-                    kase = kase->link;
-                    kase->link = link;
-                    kase->label.g_label = label;
-                    kase->high = high;
-                    kase->low = low;
-                    kase->multi_case = multi_case;
+                    link = currcase->link;
+                    currcase->link = NewCase();
+                    currcase = currcase->link;
+                    currcase->link = link;
+                    currcase->label.g_label = label;
+                    currcase->high = high;
+                    currcase->low = low;
+                    currcase->multi_case = multi_case;
                     multi_case = true;
                 }
             }
         }
-        if( !RecComma() ) {
+        if( !RecCommaOpr() ) {
             break;
         }
     }
-    ReqCloseParen();
-    ReqNOpn();
+    ReqCloseParenOpr();
+    ReqNoOpn();
     AdvanceITPtr();
-    ReqEOS();
-    CSHead->block = ++BlockNum;
+    ReqEOSOpr();
+    CSHead->block = NextBlock();
 }
 
 void CpOtherwise( void )
@@ -257,7 +258,7 @@ void CpOtherwise( void )
         CSHead->cs_info.cases->label.g_label = NextLabel();
         CSHead->cs_info.cases->multi_case = false;
         GLabel( CSHead->cs_info.cases->label.g_label );
-        CSHead->block = ++BlockNum;
+        CSHead->block = NextBlock();
     } else if( CSHead->typ == CS_OTHERWISE ) {
         Error( SP_OTHERWISE_LAST );
     } else {

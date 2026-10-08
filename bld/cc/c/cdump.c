@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -74,7 +74,7 @@ static char *ChunkToStr( STRCHUNK *pch )
     }
     ret = pch->data;
     if( ret == NULL ) {
-        ret = CMemStrDup( "" );
+        ret = CMemStrdup( "" );
     }
     return( ret );
 }
@@ -122,8 +122,6 @@ static void ChunkSaveStrWord( STRCHUNK *pch, const char *str )
 #ifdef FDEBUG
 void DumpToken( void )
 {
-    int     value;
-
     if( DebugFlag >= 3 ) {
         printf( "%2d: ", CurToken );
         if( CurToken == T_ID ) {
@@ -131,10 +129,9 @@ void DumpToken( void )
         } else if( CurToken == T_STRING ) {
             printf( "\"%s\"\n", Buffer );
         } else if( CurToken == T_CONSTANT ) {
-            value = Constant;
-            printf( "%d\n", value );
+            printf( "%lld\n", Constant64.u._64[0] );
         } else {
-            printf( "'%s'\n", Tokens[CurToken] );
+            printf( "'%s'\n", TokenString[CurToken] );
         }
     }
 }
@@ -192,7 +189,7 @@ static TYPEPTR Object( TYPEPTR typ )
 
 static void put_keyword( int keyword, STRCHUNK *pch )
 {
-    ChunkSaveStrWord( pch, Tokens[keyword] );
+    ChunkSaveStrWord( pch, TokenString[keyword] );
 }
 
 

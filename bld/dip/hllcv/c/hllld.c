@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -174,8 +174,8 @@ static bool IsHllSignature( hll_trailer *hdr )
          || !memcmp( hdr, HLL_NB00, HLL_SIG_SIZE ) );
 }
 
-static dip_status FoundHLLSignature( imp_image_handle *iih, unsigned long off, unsigned long size )
-/**************************************************************************************************
+static dip_status FoundHLLSignature( imp_image_handle *iih, unsigned long ne_header_off, unsigned long size )
+/************************************************************************************************************
  * Validates the signatures of a HLL debug info block, determining
  * the length if necessary.
  */
@@ -187,7 +187,7 @@ static dip_status FoundHLLSignature( imp_image_handle *iih, unsigned long off, u
     /*
      * read the header.
      */
-    ds = DCReadAt( iih->sym_fp, &hdr, sizeof( hdr ), off );
+    ds = DCReadAt( iih->sym_fp, &hdr, sizeof( hdr ), ne_header_off );
     if( ds & DS_ERR) {
         return( ds );
     }
@@ -197,7 +197,7 @@ static dip_status FoundHLLSignature( imp_image_handle *iih, unsigned long off, u
     /*
      * Read the directory info - both to verify it and to find the trailer.
      */
-    off_dirent = off + hdr.offset;
+    off_dirent = ne_header_off + hdr.offset;
     if( !memcmp( hdr.signature, HLL_NB04, HLL_SIG_SIZE ) ) {
         hll_dirinfo     dir_hdr;
 
@@ -243,8 +243,8 @@ static dip_status FoundHLLSignature( imp_image_handle *iih, unsigned long off, u
          */
         DCSeek( iih->sym_fp, 0, DIG_SEEK_END );
         cur = DCTell( iih->sym_fp );
-        if( cur > size + off && size + off > size ) {
-            cur = off + size;
+        if( cur > ( size + ne_header_off ) && ( size + ne_header_off ) > size ) {
+            cur = ne_header_off + size;
         }
 
         hdr.signature[0] = 0;
@@ -288,15 +288,15 @@ static dip_status FoundHLLSignature( imp_image_handle *iih, unsigned long off, u
     /*
      * Validate the trailer offset (=size).
      */
-    if( off_trailer == off
-     || hdr.offset != off_trailer - off + sizeof( hdr ) ) {
+    if( off_trailer == ne_header_off
+     || hdr.offset != ( off_trailer - ne_header_off + sizeof( hdr ) ) ) {
         return( DS_FAIL );
     }
     /*
      * We're good.
      */
-    iih->bias = off;
-    iih->size = off_trailer - off + sizeof( hdr );
+    iih->bias = ne_header_off;
+    iih->size = off_trailer - ne_header_off + sizeof( hdr );
     if( !memcmp( hdr.signature, HLL_NB04, HLL_SIG_SIZE ) ) {
         iih->format_lvl = HLL_LVL_NB04;
     } else if( !memcmp( hdr.signature, HLL_NB02, HLL_SIG_SIZE ) ) {
@@ -468,8 +468,8 @@ static dip_status FindHLLInLXImage( imp_image_handle *iih, unsigned long ne_head
                 if( DCRead( iih->sym_fp, &buf.obj, sizeof( buf.obj ) ) != sizeof( buf.obj )) {
                     return( DS_ERR | DS_FREAD_FAILED );
                 }
-                iih->segments[i].is_executable = !!( buf.obj.flags & OBJ_EXECUTABLE );
-                iih->segments[i].is_16bit = !( buf.obj.flags & OBJ_BIG );
+                iih->segments[i].is_executable = !!( buf.obj.flags & OSF_OBJ_EXECUTABLE );
+                iih->segments[i].is_16bit = !( buf.obj.flags & OSF_OBJ_BIG );
                 iih->segments[i].ovl = 0;
                 iih->segments[i].map.offset = 0;
                 iih->segments[i].map.segment = i + 1;

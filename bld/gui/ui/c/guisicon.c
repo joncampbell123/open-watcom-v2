@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -40,17 +40,12 @@
 
 bool GUIAPI GUISetIcon( gui_window * wnd, gui_resource *res )
 {
-    bool    ok;
-
     if( ( res != NULL ) && ( res->chars != NULL ) ) {
         if( wnd->icon_name != NULL ) {
-            GUIMemFree( wnd->icon_name );
+            MemFree( wnd->icon_name );
+            wnd->icon_name = NULL;
         }
-        wnd->icon_name = GUIStrDupOK( res->chars, &ok );
-        if( !ok ) {
-            return( false );
-        }
+        wnd->icon_name = MemStrdup( res->chars );
     }
-
     return( wnd->icon_name != NULL );
 }

@@ -476,6 +476,21 @@
 :usage.  emit routine names in the code segment
 :jusage. ルーチン名をコードセグメントに出力します
 
+:option. eoc
+:target. 386 axp ppc mps
+:usage.  emit COFF object files
+:jusage.
+
+:option. eoe
+:target. 386 axp ppc mps
+:usage.  emit ELF object files
+:jusage.
+
+:option. eoo
+:target. i86 386
+:usage.  emit OMF object files
+:jusage.
+
 :option. ep
 :target. any
 :number. checkPrologSize 0
@@ -987,6 +1002,13 @@
 :usage.  preprocessor ignores #line directives
 :jusage. preprocessor ignores #line directives
 
+:option. pm
+:target. any
+:nochain.
+:usagenochain.
+:usage.  dump predefined macros to output
+:jusage.
+
 :option. p
 :target. any
 :usage. preprocess source file
@@ -1139,7 +1161,7 @@
 :target. any
 :usagenochain.
 :internal.
-:usage.  internal experimental option, check prototypes defined already
+:usage.  internal - checks if prototypes are defined
 :jusage.
 
 :option. wx

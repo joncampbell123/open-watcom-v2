@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2016 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,6 +34,7 @@
 #include "drwatcom.h"
 #include "watcom.h"
 #include "memwnd.h"
+#include "segmem.h"
 
 
 /* Local Window callback functions prototypes */
@@ -54,6 +55,27 @@ static HWND                     curWalkHwnd;
 #define MEM_ALLOC_INCR          200
 #define MEM_LIMIT               0x80000000
 #define MEM_WALKER_CLASS        "Dr_WATCOM_NT_mem_Walker"
+
+
+static HANDLE   memviewProcessHdl;
+
+/*
+ * ReadMem
+ */
+ULONG_PTR ReadMem( WORD sel, ULONG_PTR off, void *buff, ULONG_PTR size )
+{
+    ULONG_PTR   bytesread;
+
+    sel = sel;
+    bytesread = 0;
+    size++;
+    while( bytesread != size && size != 0 ) {
+        size--;
+        ReadProcessMemory( memviewProcessHdl, (LPCSTR)(pointer_uint)off, buff, size, &bytesread );
+    }
+    return( bytesread );
+
+} /* ReadMem */
 
 
 void FormatMemListEntry( char *buf, MemListItem *item ) {
@@ -131,7 +153,7 @@ static MemListItem *createMemListItem( char *objname, char *modname,
     DWORD               namelen;
 
     namelen = strlen( modname ) + 1;
-    new = MemAlloc( sizeof( MemListItem ) + namelen + strlen( objname ) + 1 );
+    new = MemAlloc( sizeof( *new ) + namelen + strlen( objname ) + 1 );
     strcpy( new->data, modname );
     strcpy( new->data + namelen, objname );
     new->mbi = *mbi;
@@ -231,7 +253,7 @@ static void addMemListItem( ProcNode *pnode, MemListData *info,
     char                        *objname;
     MEMORY_BASIC_INFORMATION    topass;
 
-    if( info->used >= info->allocated ) {
+    if( info->allocated <= info->used ) {
         info->allocated += MEM_ALLOC_INCR;
         info->data = MemRealloc( info->data, info->allocated * sizeof( void * ) );
     }
@@ -326,6 +348,7 @@ static void viewMem( MemWalkerInfo *info ) {
     MEMORY_BASIC_INFORMATION    *mbi;
     char                        buf[100];
     BOOL                        ret;
+    HWND                        handle;
 
     index = (int)SendMessage( GetListBoxHwnd( info->lbox ), LB_GETCURSEL, 0, 0 );
     mbi = &info->listdata.data[index]->mbi;
@@ -347,9 +370,10 @@ static void viewMem( MemWalkerInfo *info ) {
                     (DWORD)mbi->BaseAddress + mbi->RegionSize - 1,
                     info->procid );
             }
-            DispNTMem( GetListBoxHwnd( info->lbox ), Instance,
-                info->prochdl, (DWORD)mbi->BaseAddress,
-                (DWORD)mbi->BaseAddress + mbi->RegionSize, buf );
+            memviewProcessHdl = info->prochdl;
+            handle = DispMem( Instance, GetListBoxHwnd( info->lbox ), 0, false, 
+                (DWORD)mbi->BaseAddress, (DWORD)mbi->BaseAddress + mbi->RegionSize );
+            SetWindowText( handle, buf );
         } else {
             RCsprintf( buf, STR_CANT_READ_MEM_AT_X, (DWORD)mbi->BaseAddress );
             MessageBox( GetListBoxHwnd( info->lbox ), buf, AppName,
@@ -398,7 +422,7 @@ LONG CALLBACK MemWalkerProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam )
         redrawMemList( info->lbox, &info->listdata );
         SendMessage( GetListBoxHwnd( info->lbox ), LB_SETCURSEL, 0, 0 );
         SetFocus( GetListBoxHwnd( info->lbox ) );
-        info->stats = MemAlloc( sizeof( ProcStats ) );
+        info->stats = MemAlloc( sizeof( *info->stats ) );
         if( GetProcessInfo( info->procid, info->stats ) ) {
             RCsprintf( buf, STR_MEM_WLK_NAMED_PROC, info->procid,
                         info->stats->name );
@@ -474,7 +498,7 @@ void WalkMemory( HWND parent, HANDLE hdl, DWORD procid ) {
             return;
         }
     }
-    info = MemAlloc( sizeof( MemWalkerInfo ) );
+    info = MemAlloc( sizeof( *info ) );
     info->prochdl = hdl;
     info->procid = procid;
     title = AllocRCString( STR_MEMORY_WALKER_TITLE );

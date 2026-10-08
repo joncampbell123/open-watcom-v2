@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -102,24 +102,24 @@ static bool WriteOS2DialogBoxHeader( DialogHeaderOS2 *header, FILE *fp )
 {
     bool    error;
 
-    error = ResWriteUint16( header->Size, fp );
+    error = ResWriteUint16( fp, header->Size );
     if( !error ) {
-        error = ResWriteUint16( header->Type, fp );
+        error = ResWriteUint16( fp, header->Type );
     }
     if( !error ) {
-        error = ResWriteUint16( header->Codepage, fp );
+        error = ResWriteUint16( fp, header->Codepage );
     }
     if( !error ) {
-        error = ResWriteUint16( header->OffsetFirstTmpl, fp );
+        error = ResWriteUint16( fp, header->OffsetFirstTmpl );
     }
     if( !error ) {
-        error = ResWriteUint16( header->TemplateStatus, fp );
+        error = ResWriteUint16( fp, header->TemplateStatus );
     }
     if( !error ) {
-        error = ResWriteUint16( header->ItemFocus, fp );
+        error = ResWriteUint16( fp, header->ItemFocus );
     }
     if( !error ) {
-        error = ResWriteUint16( header->OffsetPresParams, fp );
+        error = ResWriteUint16( fp, header->OffsetPresParams );
     }
     return( error );
 }
@@ -129,21 +129,11 @@ static FullDiagCtrlListOS2 *SemOS2EmptyDiagCtrlList( void )
 {
     FullDiagCtrlListOS2     *newlist;
 
-    newlist = RESALLOC( sizeof( FullDiagCtrlListOS2 ) );
+    newlist = MemAllocSafe( sizeof( FullDiagCtrlListOS2 ) );
     newlist->head = NULL;
     newlist->tail = NULL;
     newlist->numctrls = 0;
     return( newlist );
-}
-
-FullDiagCtrlListOS2 *SemOS2NewDiagCtrlList( FullDialogBoxControlOS2 *ctrl,
-                               DataElemList *list, PresParamListOS2 *presparams )
-/*******************************************************************************/
-{
-    FullDiagCtrlListOS2     *newlist;
-
-    newlist = SemOS2EmptyDiagCtrlList();
-    return( SemOS2AddDiagCtrlList( newlist, ctrl, list, presparams ) );
 }
 
 FullDiagCtrlListOS2 *SemOS2AddDiagCtrlList( FullDiagCtrlListOS2 *list,
@@ -153,6 +143,9 @@ FullDiagCtrlListOS2 *SemOS2AddDiagCtrlList( FullDiagCtrlListOS2 *list,
 {
     /* unused parameters */ (void)presparams;
 
+    if( list == NULL ) {
+        list = SemOS2EmptyDiagCtrlList();
+    }
     if( ctrl != NULL ) {
         ctrl->dataListHead = dataList;
 //        ctrl->presParams   = presparams;
@@ -167,7 +160,7 @@ static FullDialogBoxControlOS2 *SemOS2InitDiagCtrl( void )
 {
     FullDialogBoxControlOS2     *newctrl;
 
-    newctrl = RESALLOC( sizeof( FullDialogBoxControlOS2 ) );
+    newctrl = MemAllocSafe( sizeof( FullDialogBoxControlOS2 ) );
     newctrl->next = NULL;
     newctrl->prev = NULL;
     newctrl->children = NULL;
@@ -334,11 +327,11 @@ static void SemOS2FreePresParamList( PresParamListOS2 *list )
 
     for( currparam = list->head; currparam != NULL; currparam = nextparam ) {
         nextparam = currparam->next;
-        RESFREE( currparam->Name );
+        MemFree( currparam->Name );
         SemFreeDataElemList( currparam->dataList );
-        RESFREE( currparam );
+        MemFree( currparam );
     }
-    RESFREE( list );
+    MemFree( list );
 }
 
 static void SemOS2FreeDiagCtrlList( FullDiagCtrlListOS2 *list )
@@ -353,20 +346,20 @@ static void SemOS2FreeDiagCtrlList( FullDiagCtrlListOS2 *list )
          * free the contents of pointers within the structure
          */
         if( ctrl->ctrl.ClassID != NULL ) {
-            RESFREE( ctrl->ctrl.ClassID );
+            MemFree( ctrl->ctrl.ClassID );
         }
         if( ctrl->ctrl.Text != NULL ) {
-            RESFREE( ctrl->ctrl.Text );
+            MemFree( ctrl->ctrl.Text );
         }
         if( ctrl->children != NULL )
             SemOS2FreeDiagCtrlList( ctrl->children );
 
         SemFreeDataElemList( ctrl->dataListHead );
         SemOS2FreePresParamList( ctrl->presParams );
-        RESFREE( ctrl );
+        MemFree( ctrl );
     }
 
-    RESFREE( list );
+    MemFree( list );
 } /* SemOS2FreeDiagCtrlList */
 
 static size_t SemOS2CountBytes( DataElemList *list )
@@ -405,7 +398,7 @@ static size_t SemOS2CountPresParams( PresParamListOS2 *list )
         size_t  parmsize;
 
         bytes += 4; // Presparam ID or name length
-        if( !(presparams->Name->ord.fFlag == 0xFF) )         // Presparam has name
+        if( presparams->Name->ord.fFlag != 0xFF )         // Presparam has name
             bytes += strlen( presparams->Name->name ) + 1 + 8;
 
         bytes += 4; // Size of presparams data that follow
@@ -433,7 +426,6 @@ static size_t SemOS2DumpPresParams( char *ptr, PresParamListOS2 *list )
     PresParamsOS2       *presparams;
     DataElemList        *travptr;
     size_t              bytes;
-    uint_32             *data;
     unsigned            i;
     size_t              len;
 
@@ -442,35 +434,31 @@ static size_t SemOS2DumpPresParams( char *ptr, PresParamListOS2 *list )
         return( 0 );
 
     // Total size of presparams
-    data  = (uint_32 *)ptr;
-    *data = list->size;
+    MPUT_32_UN( ptr, list->size );
     bytes = 4;
     ptr  += 4;
 
     for( presparams = list->head; presparams != NULL; presparams = presparams->next ) {
         // Presparam ID or name length
-        if( !(presparams->Name->ord.fFlag == 0xFF) ) {       // Presparam has name
+        if( presparams->Name->ord.fFlag != 0xFF ) {       // Presparam has name
             len     = strlen( presparams->Name->name ) + 1;
-            data    = (uint_32 *)ptr;
-            *data++ = 0;            // First ULONG is 0 to indicate this isn't numeric ID
-            *data   = (uint_32)len; // Next is string len
-            ptr    += 8;
+            MPUT_32_UN( ptr, 0 );           // First ULONG is 0 to indicate this isn't numeric ID
+            ptr += 4;
+            MPUT_32_UN( ptr, len );         // Next is string len
+            ptr += 4;
             strcpy( ptr, presparams->Name->name );
-            ptr    += len;
-            data    = (uint_32 *)ptr;
-            *data   = (uint_32)-1;           // Not sure what this is
+            ptr += len;
+            MPUT_32_UN( ptr, 0xffffffff );  // Not sure what this is
             ptr    += 4;
             bytes  += len + 12;
         } else {
-            data    = (uint_32 *)ptr;
-            *data   = presparams->Name->ord.wOrdinalID;
+            MPUT_32_UN( ptr, presparams->Name->ord.wOrdinalID );
             ptr    += 4;
             bytes  += 4;
         }
 
         // Following is the size of presparam data
-        data   = (uint_32 *)ptr;
-        *data  = presparams->size;
+        MPUT_32_UN( ptr, presparams->size );
         ptr   += 4;
         bytes += 4;
 
@@ -482,8 +470,7 @@ static size_t SemOS2DumpPresParams( char *ptr, PresParamListOS2 *list )
                     ptr   += len;
                     bytes += len;
                 } else {
-                    data   = (uint_32 *)ptr;
-                    *data  = travptr->data[i].Item.Num;
+                    MPUT_32_UN( ptr, travptr->data[i].Item.Num );
                     ptr   += 4;
                     bytes += 4;         // Data elements are ULONGs
                 }
@@ -690,7 +677,7 @@ static char *SemOS2DumpTemplateItemsData( char *base, char *ptr,
  * resource (the size must be < 64K) and then dump the entire resource
  * into the file - which certainly shouldn't hurt performance either.
  */
-void SemOS2WriteDialogTemplate( WResID *name, ResMemFlags flags,
+void SemOS2WriteDialogTemplate( WResID *res_id, ResMemFlags res_flags,
                                        uint_32 codepage,
                                        FullDiagCtrlListOS2 *ctrls )
 /*********************************************************************/
@@ -704,15 +691,13 @@ void SemOS2WriteDialogTemplate( WResID *name, ResMemFlags flags,
     char                     *ptr;
 
     size = SemOS2CalcControlSize( ctrls );
-#if !defined( _M_I86 )
     if( size + DialogHeaderOS2_FILESIZE > 65536 ) {
         // TODO: Error, template is too big
     }
-#endif
     InitOS2DialogBoxHeader( &head, codepage, size );
 
     // Create the DLGTITEM array in memory
-    ptr = tmpl = RESALLOC( size );
+    ptr = tmpl = MemAllocSafe( size );
 
     ptr = SemOS2BuildTemplateItemsArray( ptr, ctrls );
 
@@ -728,13 +713,13 @@ void SemOS2WriteDialogTemplate( WResID *name, ResMemFlags flags,
     }
     if( error ) {
         err_code = LastWresErr();
-        RcError( ERR_WRITTING_RES_FILE, CurrResFile.filename, strerror( err_code )  );
+        RcError( ERR_WRITTING_RES, CurrResFile.filename, strerror( err_code )  );
         ErrorHasOccured = true;
     } else {
         loc.len = SemEndResource( loc.start );
-        SemAddResourceAndFree( name, WResIDFromNum( OS2_RT_DIALOG ), flags, loc );
+        SemAddResourceAndFree( res_id, WResIDFromNum( OS2_RT_DIALOG ), res_flags, loc );
     }
-    RESFREE( tmpl );
+    MemFree( tmpl );
     SemOS2FreeDiagCtrlList( ctrls );
 
 } /* SemOS2WriteDialogTemplate */
@@ -758,7 +743,7 @@ FullDialogBoxControlOS2 *SemOS2SetControlData( ResNameOrOrdinal *name,
     control->children        = childctls;
     control->ctrl.ExtraBytes = 0;
     control->presParams      = presparams;
-    RESFREE( ctlclassname );
+    MemFree( ctlclassname );
 
     return( control );
 }
@@ -782,7 +767,7 @@ FullDialogBoxControlOS2 *SemOS2SetWndData( ResNameOrOrdinal *name,
     control->ctrl.ExtraBytes = 4;
     control->framectl        = framectl.Value;
     control->presParams      = presparams;
-    RESFREE( ctlclassname );
+    MemFree( ctlclassname );
 
     return( control );
 }
@@ -830,8 +815,8 @@ FullDialogBoxControlOS2 *SemOS2SetWindowData( FullDiagCtrlOptionsOS2 opts,
     return( control );
 }
 
-void SemOS2AddDlgincResource( WResID *name, char *filename )
-/**********************************************************/
+void SemOS2AddDlgincResource( WResID *res_id, char *filename )
+/************************************************************/
 {
     ResLocation loc;
     bool        error;
@@ -841,25 +826,13 @@ void SemOS2AddDlgincResource( WResID *name, char *filename )
     error = ResWriteString( filename, false, CurrResFile.fp );
     if( error ) {
         err_code = LastWresErr();
-        RcError( ERR_WRITTING_RES_FILE, CurrResFile.filename, strerror( err_code ) );
+        RcError( ERR_WRITTING_RES, CurrResFile.filename, strerror( err_code ) );
         ErrorHasOccured = true;
     } else {
         loc.len = SemEndResource( loc.start );
-        SemAddResourceAndFree( name, WResIDFromNum( OS2_RT_DLGINCLUDE ),
-                        MEMFLAG_DISCARDABLE | MEMFLAG_MOVEABLE | MEMFLAG_PURE, loc );
+        SemAddResourceAndFree( res_id, WResIDFromNum( OS2_RT_DLGINCLUDE ), DEFAULT_FLAGS_MDP, loc );
     }
-    RESFREE( filename );
-}
-
-PresParamListOS2 *SemOS2NewPresParamList( PresParamsOS2 presparams )
-/******************************************************************/
-{
-    PresParamListOS2    *newlist;
-
-    newlist = RESALLOC( sizeof( PresParamListOS2 ) );
-    newlist->head = NULL;
-    newlist->tail = NULL;
-    return( SemOS2AppendPresParam( newlist, presparams ) );
+    MemFree( filename );
 }
 
 PresParamListOS2 *SemOS2AppendPresParam( PresParamListOS2 *list, PresParamsOS2 presparams )
@@ -867,7 +840,12 @@ PresParamListOS2 *SemOS2AppendPresParam( PresParamListOS2 *list, PresParamsOS2 p
 {
     PresParamsOS2       *params;
 
-    params = RESALLOC( sizeof( PresParamsOS2 ) );
+    if( list == NULL ) {
+        list = MemAllocSafe( sizeof( PresParamListOS2 ) );
+        list->head = NULL;
+        list->tail = NULL;
+    }
+    params = MemAllocSafe( sizeof( PresParamsOS2 ) );
     *params = presparams;
     ResAddLLItemAtEnd( (void **)&(list->head), (void **)&(list->tail), params );
     return( list );

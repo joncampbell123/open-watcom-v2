@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -63,9 +63,9 @@ void CmdSysInit( void )
     GenSwitches = DEF_CGSW_GEN_SWITCHES | DEF_CGSW_GEN_SWITCHES_ALL;
     TargetSwitches = DEF_CGSW_RSC_SWITCHES;
     CodeClassName = NULL;
-    TextSegName = CMemStrDup( "" );
-    DataSegName = CMemStrDup( "" );
-    GenCodeGroup = CMemStrDup( "" );
+    TextSegName = CMemStrdup( "" );
+    DataSegName = CMemStrdup( "" );
+    GenCodeGroup = CMemStrdup( "" );
     CompFlags.make_enums_an_int = true;
     CompFlags.original_enum_setting = true;
 }
@@ -99,9 +99,7 @@ static char *setTargetSystem( OPT_STORAGE *data )
      * right now, the only targeted system is NT
      */
     if( data->bt ) {
-        char *target = SetStringOption( NULL, &(data->bt_value) );
-        SetTargetLiteral( &target_name, strupr( target ) );
-        CMemFree( target );
+        SetTargetNameBT( &target_name, &(data->bt_value) );
     }
     if( target_name == NULL ) {
         SetTargetLiteral( &target_name, "NT" );
@@ -377,6 +375,12 @@ void CmdSysAnalyse( OPT_STORAGE *data )
     }
     if( data->om ) {
         GenSwitches |= CGSW_GEN_I_MATH_INLINE;
+    }
+    if( data->eoe ) {
+        GenSwitches = (GenSwitches & ~CGSW_GEN_OBJ_COFF) | CGSW_GEN_OBJ_ELF;
+    }
+    if( data->eoc ) {
+        GenSwitches = (GenSwitches & ~CGSW_GEN_OBJ_ELF) | CGSW_GEN_OBJ_COFF;
     }
     if( data->nm ) {
         SetStringOption( &ModuleName, &(data->nm_value) );

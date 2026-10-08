@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2025      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2025-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -55,13 +55,17 @@
 #define CLIAlloc( x, __size )          (x)->funcs.cli_alloc( __size )
 #define CLIFree( x, __ptr )            (x)->funcs.cli_free( __ptr )
 
+#define GET_FLAG_PTR_TYPE(f)    ((uint_8)(((f) & DW_FLAG_PTR_TYPE_MASK) >> DW_FLAG_PTR_TYPE_SHIFT))
+#define GET_FLAG_INLINE(f)      ((uint_8)(((f) & DW_FLAG_INLINE_MASK) >> DW_FLAG_INLINE_SHIFT))
+#define GET_FLAG_VIRTUAL(f)     ((uint_8)(((f) & DW_FLAG_VIRTUAL_MASK) >> DW_FLAG_VIRTUAL_SHIFT))
+
 
 struct handles_private {
     uint_32             num_handles;
     uint_32             forward;  // number of forward refs out
-    struct handle_blk * block_head[MAX_HANDLE_HEIGHT];
-    struct handle_blk **block_tail[MAX_HANDLE_HEIGHT];
-    union handle_extra *extra_list;
+    struct handle_blk   *block_head[MAX_HANDLE_HEIGHT];
+    struct handle_blk   **block_tail[MAX_HANDLE_HEIGHT];
+    union handle_extra  *extra_list;
     carve_t             extra_carver;
     carve_t             chain_carver;
     uint_8              max_height;
@@ -69,9 +73,9 @@ struct handles_private {
 
 
 struct debug_line_private {
+    dw_include_stack    *include_stack;
+    dw_include          *files;
     dw_addr_offset      addr;
-    dw_include_stack *  include_stack;
-    dw_include *        files;
     dw_linenum          line;
     dw_column           column;
     uint_8              is_stmt : 1;
@@ -88,7 +92,7 @@ struct types_private {
 };
 
 struct die_private {
-    die_tree *          tree;
+    die_tree            *tree;
 };
 
 struct debug_loc_private {
@@ -112,28 +116,27 @@ struct references_private {
     dw_column           column;
 };
 
-#include "pushpck4.h"
 struct dw_client {
     jmp_buf                     exception_handler;
     dw_funcs                    funcs;
     char                        *producer_name;
-    uint_8                      compiler_options;
-    dw_langnum                  language;
-    dw_out_offset               section_base[DW_DEBUG_MAX];
     struct handles_private      handles;
     struct debug_line_private   debug_line;
-    struct debug_abbrev_private debug_abbrev;
     struct types_private        types;
     struct die_private          die;
     struct debug_loc_private    debug_loc;
-    struct decl_private         decl;
     struct references_private   references;
-    uint_8                      offset_size;
-    uint_8                      segment_size;
+    dw_out_offset               section_base[DW_DEBUG_MAX];
+    struct decl_private         decl;
+    dw_langnum                  language;
     dw_handle                   defset;
     dw_sym_handle               abbrev_sym;
     dw_sym_handle               dbg_pch;
+    struct debug_abbrev_private debug_abbrev;
+    uint_8                      compiler_options;
+    uint_8                      offset_size;
+    uint_8                      segment_size;
+    bool                        big_endian;
 };
-#include "poppck.h"
 
 #endif

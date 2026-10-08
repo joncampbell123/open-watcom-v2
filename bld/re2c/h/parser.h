@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,24 +34,17 @@
 #ifndef _parser_h
 #define _parser_h
 
-#include "scanner.h"
 #include "re.h"
 
 
-#if defined( _M_I86 )
-#define YYFAR           __far
-#else
-#define YYFAR
-#endif
-
 typedef struct Symbol {
-    struct Symbol   *first;
     struct Symbol   *next;
     Str             name;
     RegExp          *re;
 } Symbol;
 
 extern Symbol   *Symbol_find( SubStr );
+extern void     Symbol_delete( void );
 extern void     parse( FILE *, FILE * );
 
 #endif

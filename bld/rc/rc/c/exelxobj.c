@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -46,29 +46,20 @@ static bool readObjectAndPageTable( ExeFileInfo *src )
     size_t      table_size;
 
     table_size = src->u.LXInfo.OS2Head.num_objects * sizeof( object_record );
-    src->u.LXInfo.Objects = RESALLOC( table_size );
+    src->u.LXInfo.Objects = MemAllocSafe( table_size );
     ret = SeekRead( src->fp, src->WinHeadOffset + src->u.LXInfo.OS2Head.objtab_off,
                 src->u.LXInfo.Objects, table_size );
 
     if( ret == RS_OK ) {
         table_size = src->u.LXInfo.OS2Head.num_pages * sizeof( lx_map_entry );
-        src->u.LXInfo.Pages = RESALLOC( table_size );
+        src->u.LXInfo.Pages = MemAllocSafe( table_size );
         ret = SeekRead( src->fp, src->WinHeadOffset + src->u.LXInfo.OS2Head.objmap_off,
                     src->u.LXInfo.Pages, table_size );
     }
-    switch( ret ) {
-    case RS_OK:
-        break;
-    case RS_READ_ERROR:
-        RcError( ERR_READING_EXE, src->name, strerror( errno ) );
-        break;
-    case RS_READ_INCMPLT:
-        RcError( ERR_UNEXPECTED_EOF, src->name );
-        break;
-    default:
-        RcError( ERR_INTERNAL, INTERR_UNKNOWN_RCSTATUS );
-        break;
+    if( ret == RS_READ_ERROR ) {
+        ret = RS_READ_ERROR_EXE;
     }
+    RcIOError( ret, src->name, "", errno );
     CheckDebugOffset( src );
     return( ret != RS_OK );
 }
@@ -105,7 +96,7 @@ static int copyObjectAndPageTable( ExeFileInfo *src, ExeFileInfo *dst )
         /*
          * Simply skip any existing resource objects
          */
-        if( (src_obj[obj_index].flags & OBJ_RESOURCE) == 0 ) {
+        if( (src_obj[obj_index].flags & OSF_OBJ_RESOURCE) == 0 ) {
             ++src_num_objects;
             src_num_pages += src_obj[obj_index].mapsize;
         }
@@ -139,8 +130,8 @@ static int copyObjectAndPageTable( ExeFileInfo *src, ExeFileInfo *dst )
     /*
      * Allocate dst object/page table
      */
-    dst_obj  = RESALLOC( dst_obj_size );
-    dst_page = RESALLOC( dst_page_size );
+    dst_obj  = MemAllocSafe( dst_obj_size );
+    dst_page = MemAllocSafe( dst_page_size );
     dst->u.LXInfo.Objects = dst_obj;
     dst->u.LXInfo.Pages   = dst_page;
 
@@ -149,7 +140,7 @@ static int copyObjectAndPageTable( ExeFileInfo *src, ExeFileInfo *dst )
      * Copy object and page records from src executable to dst
      */
     for( obj_index = 0; obj_index < src->u.LXInfo.OS2Head.num_objects; obj_index++ ) {
-        if( (src_obj[obj_index].flags & OBJ_RESOURCE) == 0 ) {
+        if( (src_obj[obj_index].flags & OSF_OBJ_RESOURCE) == 0 ) {
             dst_obj[obj_index] = src_obj[src_obj_index];
             dst_obj[obj_index].mapidx = page_index + 1;
             for( i = 0; i < src_obj[src_obj_index].mapsize; ++i ) {
@@ -401,19 +392,10 @@ bool CopyLXExeObjects( ExeFileInfo *src, ExeFileInfo *dst )
     dst_obj = dst->u.LXInfo.Objects;
     for( ; num_objs > 0; num_objs--, src_obj++, dst_obj++ ) {
         ret = copyOneObject( src, src_obj, dst, dst_obj );
-        switch( ret ) {
-        case RS_WRITE_ERROR:
-            RcError( ERR_WRITTING_FILE, dst->name, strerror( errno ) );
-            return( true );
-        case RS_READ_ERROR:
-            RcError( ERR_READING_EXE, src->name, strerror( errno ) );
-            return( true );
-        case RS_READ_INCMPLT:
-            RcError( ERR_UNEXPECTED_EOF, src->name );
-            return( true );
-        default:
-            break;
+        if( ret == RS_READ_ERROR ) {
+            ret = RS_READ_ERROR_EXE;
         }
+        RcIOError( ret, src->name, dst->name, errno );
     }
     CheckDebugOffset( src );
     CheckDebugOffset( dst );

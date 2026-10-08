@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -61,13 +61,13 @@ extern void             CmdError( void );
  * error - output error message
  */
 
-static int error( dbg_err_flags flg, char *fmt, va_list args )
+static int error( dbg_err_flags flg, const char *fmt, va_list args )
 {
     char            buff[TXT_LEN];
     char            *ptr;
     invokes         *inv;
     input_stack     *inp;
-    char            *where;
+    const char      *where;
     bool            cmderror;
 
     ptr = buff;
@@ -106,6 +106,7 @@ static int error( dbg_err_flags flg, char *fmt, va_list args )
     _SwitchOff( SW_CALL_FATAL );
     if( _IsOn( SW_ERROR_STARTUP ) ) {
         StartupErr( buff );
+        /* never return */
     }
     if( _IsOn( SW_ERR_IN_TXTBUFF ) ) {
         PurgeInpStack();
@@ -152,8 +153,10 @@ static int error( dbg_err_flags flg, char *fmt, va_list args )
  * Error - output error message and suicide
  */
 
-void Error( dbg_err_flags flg, char *fmt, ... )
-/* this function never return to the caller */
+void Error( dbg_err_flags flg, const char *fmt, ... )
+/****************************************************
+ * this function never return to the caller
+ */
 {
     va_list args;
 
@@ -168,17 +171,25 @@ void Error( dbg_err_flags flg, char *fmt, ... )
  * ErrorRet - output error message
  */
 
-void ErrorRet( dbg_err_flags flg, char *fmt, ... )
-/* this function return to the caller */
+void ErrorRet( dbg_err_flags flg, const char *fmt, ... )
+/*******************************************************
+ * this function return to the caller
+ */
 {
     va_list args;
     int     rc;
+    bool    ret_off;
 
-    _SwitchOn( SW_ERROR_RETURNS );
+    ret_off = _IsOff( SW_ERROR_RETURNS );
+    if( ret_off ) {
+        _SwitchOn( SW_ERROR_RETURNS );
+    }
     va_start( args, fmt );
     rc = error( flg, fmt, args );
     va_end( args );
-    _SwitchOff( SW_ERROR_RETURNS );
+    if( ret_off ) {
+        _SwitchOff( SW_ERROR_RETURNS );
+    }
     if( rc ) {
         DUIArrowCursor();
         Suicide();
@@ -198,5 +209,5 @@ void StartupErr( const char *err )
 {
     PopErrBox( err );
     KillDebugger(1);
-    // never return
+    /* never return */
 }

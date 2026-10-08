@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -31,6 +31,7 @@
 
 
 #include "srcmgt.h"
+#include "liteng.h"
 #include "dbgdata.h"
 #include "dbgwind.h"
 #include "gadgets.h"
@@ -38,7 +39,7 @@
 #include "dbgitem.h"
 #include "strutil.h"
 #include "dbgscan.h"
-#include "madinter.h"
+#include "wvmadcli.h"
 #include "dbgutil.h"
 #include "dbgsrc.h"
 #include "dbgstk.h"
@@ -52,7 +53,7 @@
 #include "remcore.h"
 #include "dbgmisc.h"
 #include "dipimp.h"
-#include "dipinter.h"
+#include "wvdipcli.h"
 #include "dbgreg.h"
 #include "addarith.h"
 #include "dbginsty.h"
@@ -212,13 +213,13 @@ static  void    AsmResize( a_window wnd )
     if( size <= 0 )
         size = 1;
     first = asw->ins[0].addr;
-    new_ins = WndAlloc( size * sizeof( *new_ins ) );
+    new_ins = MemAllocSafe( size * sizeof( *new_ins ) );
     memset( new_ins, 0, size * sizeof( *new_ins ) );
     if( new_ins == NULL ) {
         WndClose( wnd );
-        WndNoMemory();
+        Error( ERR_NONE, LIT_ENG( ERR_NO_MEMORY_FOR_WINDOW ) );
     }
-    WndFree( asw->ins );
+    MemFree( asw->ins );
     asw->ins = new_ins;
     asw->ins_size = size;
     AsmSetFirst( wnd, first, asw->ins[0].line != 0 );
@@ -911,8 +912,7 @@ static void     WNDCALLBACK AsmRefresh( a_window wnd )
         WndZapped( wnd );
         new_size = MADDisasmDataSize();
         if( new_size > asw->ddsize ) {
-            new = asw->cache_dd;
-            _Realloc( new, new_size );
+            new = MemRealloc( asw->cache_dd, new_size );
             if( new == NULL ) {
                 ReportMADFailure( MS_NO_MEM );
             } else {
@@ -955,9 +955,9 @@ static void     WNDCALLBACK AsmRefresh( a_window wnd )
 static  void    AsmFini( asm_window *asw )
 {
     AsmNewSource( asw, NULL );
-    _Free( asw->cache_dd );
-    WndFree( asw->ins );
-    WndFree( asw );
+    MemFree( asw->cache_dd );
+    MemFree( asw->ins );
+    MemFree( asw );
 }
 
 static  void    AsmInit( a_window wnd )
@@ -969,12 +969,12 @@ static  void    AsmInit( a_window wnd )
     size = WndRows( wnd );
     if( size <= 0 )
         size = 1;
-    asw->ins = WndAlloc( size * sizeof( *asw->ins ) );
+    asw->ins = MemAllocSafe( size * sizeof( *asw->ins ) );
     memset( asw->ins, 0, size * sizeof( *asw->ins ) );
     asw->ins_size = size;
     if( asw->ins == NULL ) {
         WndClose( wnd );
-        WndNoMemory();
+        Error( ERR_NONE, LIT_ENG( ERR_NO_MEMORY_FOR_WINDOW ) );
     }
     asw->num_toggles = 0;
     asw->source = _IsOn( SW_ASM_SOURCE );
@@ -1064,7 +1064,7 @@ wnd_info AsmInfo = {
     NoNextRow,
     AsmNotify,
     ChkUpdate,
-    PopUp( AsmMenu )
+    GUI_MENU_ARRAY( AsmMenu )
 };
 
 
@@ -1073,11 +1073,11 @@ a_window DoWndAsmOpen( address addr, bool track )
     asm_window  *asw;
     a_window    wnd;
 
-    asw = WndMustAlloc( sizeof( asm_window ) );
+    asw = MemAllocSafe( sizeof( *asw ) );
     asw->ddsize = MADDisasmDataSize();
-    _Alloc( asw->cache_dd, asw->ddsize );
+    asw->cache_dd = MemAlloc( asw->ddsize );
     if( asw->cache_dd == NULL ) {
-        WndFree( asw );
+        MemFree( asw );
         return( NULL );
     }
     asw->active = addr;

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2019 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -30,6 +30,8 @@
 ****************************************************************************/
 
 
+#include "memfuncs.h"
+
 /* Several char foo[MAX_CMD] arrays are defined. Overflow goes undetected */
 #if defined(__OS2__) || defined(__NT__) || defined(__UNIX__)
 #define MAX_CMD 10240
@@ -50,25 +52,24 @@
 #endif
 
 #ifdef __UNIX__
-#define OBJ_EXT             "o"
-#define OBJ_EXT_SECONDARY   "obj"
-#define TOOL_EXE_EXT        ""
+#define FEXT_OBJ            "o"
+#define FEXT_OBJ_SECONDARY  "obj"
+#define TOOL_FEXT_EXE       ""
 #else
-#define OBJ_EXT             "obj"
-#define OBJ_EXT_SECONDARY   "o"
-#define TOOL_EXE_EXT        ".exe"
+#define FEXT_OBJ            "obj"
+#define FEXT_OBJ_SECONDARY  "o"
+#define TOOL_FEXT_EXE       ".exe"
 #endif
-#define LIB_EXT             "lib"
-#define LIB_EXT_SECONDARY   "a"
+#define FEXT_LIB            "lib"
+#define FEXT_LIB_SECONDARY  "a"
 
-#define ASM_EXT             "asm"
-#define ASMS_EXT            "s"
+#define FEXT_ASM            "asm"
+#define FEXT_ASMS           "s"
 
-#define RES_EXT             "res"
+#define FEXT_RES            "res"
 
-#define TOOL_LNK_EXT        ".lnk"
-
-#define IS_OBJ(x)           (HasFileExtension( x, OBJ_EXT ) || HasFileExtension( x, OBJ_EXT_SECONDARY ))
+#define TOOL_FEXT_LNK       ".lnk"
+#define IS_OBJ(x)           (HasFileExtension( x, FEXT_OBJ ) || HasFileExtension( x, FEXT_OBJ_SECONDARY ))
 
 typedef enum tool_type {
     TYPE_LINK,
@@ -155,11 +156,6 @@ extern void     ListFree( list * );
 extern void     Fputnl( const char *, FILE * );
 extern void     MemInit( void );
 extern void     MemFini( void );
-extern void     *MemAlloc( size_t );
-extern char     *MemStrDup( const char * );
-extern char     *MemStrLenDup( const char *str, size_t len );
-extern void     *MemRealloc( void *, size_t );
-extern void     MemFree( void * );
 extern char     *MakePath( const char * );
 extern char     *GetName( const char *, char * );
 extern char     *DoQuoted( char *buffer, const char *name, char quote );
@@ -169,3 +165,6 @@ extern void     AddDirectivePath( const char *directive, const char *path );
 extern char     *RemoveExt( char * );
 extern int      HasFileExtension( const char *p, const char *ext );
 extern void     MakeName( char *name, const char *ext );
+extern int      UseCPlusPlus( const char *p );
+
+extern char     *MemStrLenDup( const char *str, size_t len );

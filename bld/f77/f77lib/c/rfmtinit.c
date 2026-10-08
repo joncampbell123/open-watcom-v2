@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -38,18 +38,18 @@
 #include "rtenv.h"
 #include "rfmtemit.h"
 #include "fmtscan.h"
+#include "setfmt.h"
 #include "setiocb.h"
 
 
 static  void    FInit( string *fmt ) {
 //====================================
 
-    SetFmt( &FmtBuff[ 0 ] );
+    SetFmt( FmtBuff );
     IOCB->fmtlen = SCAN_STORAGE_SIZE;
     Fmt_charptr = fmt->strptr;
     Fmt_end = Fmt_charptr + fmt->len;
     Fmt_paren_level = 0;
-    Fmt_revert.rt = &FmtBuff[ 0 ];
     Fmt_delimited = NO_DELIM;
     R_FEmInit();
 }
@@ -59,7 +59,7 @@ static  void    FFinish( void ) {
 //=========================
 
     R_FEmEnd();
-    SetFmt( &FmtBuff[ 0 ] );
+    SetFmt( FmtBuff );
 }
 
 
@@ -76,7 +76,7 @@ void    FmtScan( string *fmt, uint extend_format ) {
 }
 
 
-void    FmtAScan( char PGM *array, long num_elts, int elt_size,
+void    FmtAScan( char PGM *array, long num_elems, int elt_size,
                   uint extend_format ) {
 //=================================================================
 
@@ -86,7 +86,7 @@ void    FmtAScan( char PGM *array, long num_elts, int elt_size,
 
     _SetIOCB();
     scb.strptr = array;
-    scb.len = num_elts * elt_size;
+    scb.len = num_elems * elt_size;
     FmtScan( &scb, extend_format );
 }
 

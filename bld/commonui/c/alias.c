@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -42,13 +42,21 @@
 #endif
 #include "ldstr.h"
 #include "uistr.grh"
-#include "wclbproc.h"
+#ifdef __WINDOWS__
+    #include "wclbproc.h"
+#endif
 
+
+#define CONST_LEN       15
+
+typedef struct AliasList {
+    AnAlias             *data;
+    void                (*updatefn)( ULONG_PTR, char *, char *, void * );
+    void                *userdata;
+} AliasList;
 
 /* Window callback functions prototypes */
 WINEXPORT INT_PTR CALLBACK AliasDlgProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam );
-
-#define CONST_LEN       15
 
 static AliasHdl         CurHdl;         /* used for dialog box processing */
 
@@ -79,7 +87,7 @@ void InitAliasHdl( AliasHdl *hdl,
                    void (*updatefn)( ULONG_PTR, char *, char *, void * ),
                    void *userdata )
 {
-    *hdl = CUIMemAlloc( sizeof( AliasList ) );
+    *hdl = MemAlloc( sizeof( **hdl ) );
     (*hdl)->data = NULL;
     (*hdl)->userdata = userdata;
     (*hdl)->updatefn = updatefn;
@@ -113,11 +121,10 @@ static void insertAlias( AliasHdl hdl, AnAlias *alias )
 void AddAlias( AliasHdl hdl, char *text, ULONG_PTR id )
 {
     AnAlias     *cur;
-    size_t      len;
 
     cur = findAlias( hdl, id );
     if( cur == NULL ) {
-        cur = CUIMemAlloc( sizeof( AnAlias ) );
+        cur = MemAlloc( sizeof( *cur ) );
         cur->id = id;
         insertAlias( hdl, cur );
         if( hdl->updatefn != NULL ) {
@@ -127,11 +134,9 @@ void AddAlias( AliasHdl hdl, char *text, ULONG_PTR id )
         if( hdl->updatefn != NULL ) {
             hdl->updatefn( id, text, cur->name, hdl->userdata );
         }
-        CUIMemFree( cur->name );
+        MemFree( cur->name );
     }
-    len = strlen( text ) + 1;
-    cur->name = CUIMemAlloc( len );
-    strcpy( cur->name, text );
+    cur->name = MemStrdupSafe( text );
 
 } /* AddAlias */
 
@@ -148,10 +153,10 @@ void FreeAlias( AliasHdl hdl )
 
     for( cur = hdl->data; cur != NULL; cur = next ) {
         next = cur->next;
-        CUIMemFree( cur->name );
-        CUIMemFree( cur );
+        MemFree( cur->name );
+        MemFree( cur );
     }
-    CUIMemFree( hdl );
+    MemFree( hdl );
 
 } /* FreeAlias */
 
@@ -258,7 +263,7 @@ INT_PTR CALLBACK AliasDlgProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam
                     break;
                 }
                 len = SendDlgItemMessage( hwnd, ALIAS_TEXT, WM_GETTEXTLENGTH, 0, 0 );
-                alias = CUIMemAlloc( len + 1 );
+                alias = MemAlloc( len + 1 );
                 len = SendDlgItemMessage( hwnd, ALIAS_TEXT, WM_GETTEXT, len + 1, (LPARAM)(LPSTR)alias );
                 /* check for spaces */
                 endptr = alias;
@@ -271,7 +276,7 @@ INT_PTR CALLBACK AliasDlgProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam
                 }
                 if( *endptr != '\0' ) {
                     RCMessageBox( hwnd, ALIAS_NO_SPACES_ALLOWED, "", MB_OK );
-                    CUIMemFree( alias );
+                    MemFree( alias );
                     break;
                 }
                 realend = '\0'; /* truncate trailing spaces */
@@ -281,10 +286,10 @@ INT_PTR CALLBACK AliasDlgProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam
                 } else {
                     RCsprintf( msgbuf, ALIAS_NO_DUPLICATES_ALLOWED, alias, cur->id );
                     MessageBox( hwnd, msgbuf, "", MB_OK );
-                    CUIMemFree( alias );
+                    MemFree( alias );
                     break;
                 }
-                CUIMemFree( alias );
+                MemFree( alias );
                 EndDialog( hwnd, cmd );
                 break;
             case IDCANCEL:
@@ -313,18 +318,24 @@ INT_PTR CALLBACK AliasDlgProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam
  */
 void Query4Aliases( AliasHdl hdl, HANDLE instance, HWND hwnd, char *title )
 {
-    DLGPROC     dlgproc;
-    INT_PTR     ret;
-
     CurHdl = hdl;
-    dlgproc = MakeProcInstance_DLG( AliasDlgProc, instance );
+#ifdef __WINDOWS__
+    {
+        DLGPROC dlgproc = MakeProcInstance_DLG( AliasDlgProc, instance );
+        for( ;; ) {
+            if( DialogBoxParam( instance, "ALIAS_DLG", hwnd, dlgproc, (LPARAM)(LPCSTR)title ) != ALIAS_DO_MORE ) {
+                break;
+            }
+        }
+        FreeProcInstance_DLG( dlgproc );
+    }
+#else
     for( ;; ) {
-        ret = DialogBoxParam( instance, "ALIAS_DLG", hwnd, dlgproc, (LPARAM)(LPCSTR)title );
-        if( ret != ALIAS_DO_MORE ) {
+        if( DialogBoxParam( instance, "ALIAS_DLG", hwnd, AliasDlgProc, (LPARAM)(LPCSTR)title ) != ALIAS_DO_MORE ) {
             break;
         }
     }
-    FreeProcInstance_DLG( dlgproc );
+#endif
     CurHdl = NULL;
 
 } /* Query4Aliases */

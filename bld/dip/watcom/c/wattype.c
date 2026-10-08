@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -649,6 +649,10 @@ static search_result SearchEnumTypeName( imp_image_handle *iih, imp_mod_handle i
         p = FindAName( &state, Type->start, which, li );
         if( p != NULL ) {
             ish = DCSymCreate( iih, d );
+            if( ish == NULL ) {
+                sr = SR_FAIL;
+                break;
+            }
             ish->imh = imh;
             ish->name_off = (byte)( NamePtr( p ) - p );
             ish->u.typ.t.entry = entry;
@@ -829,7 +833,7 @@ static dip_status GetTypeInfo(imp_image_handle *iih, imp_type_handle *ith,
                     if( ndims != NULL )
                         ++*ndims;
                     ti->kind = TK_ARRAY;
-                    ti->size *= info.num_elts;
+                    ti->size *= info.num_elems;
                     ti->modifier = TM_NONE;
                     ti->deref = false;
                     Type->start = NULL;
@@ -1057,7 +1061,7 @@ dip_status DIPIMPENTRY( TypeArrayInfo )(imp_image_handle *iih, imp_type_handle *
             ImpInterface.TypeBase( iih, &tmp_ith, &tmp_ith, NULL, NULL );
         }
         ImpInterface.TypeArrayInfo( iih, &tmp_ith, lc, ai, index_ith );
-        ai->num_dims = tmp_ith.f.s.array_ss - ai->num_dims + 1;
+        ai->dims = tmp_ith.f.s.array_ss - ai->dims + 1;
         ai->column_major = 1;
         return( DS_OK );
     }
@@ -1070,15 +1074,15 @@ dip_status DIPIMPENTRY( TypeArrayInfo )(imp_image_handle *iih, imp_type_handle *
         p = ith->t.offset + Type->start;
         switch( MGET_U8( p + 1 ) ) {
         case ARRAY_TYPE | ARRAY_BYTE_INDEX:
-            ai->num_elts = MGET_U8( p + 2 ) + 1;
+            ai->num_elems = MGET_U8( p + 2 ) + 1;
             ai->low_bound = 0;
             break;
         case ARRAY_TYPE | ARRAY_WORD_INDEX:
-            ai->num_elts = MGET_U16( p + 2 ) + 1;
+            ai->num_elems = MGET_U16( p + 2 ) + 1;
             ai->low_bound = 0;
             break;
         case ARRAY_TYPE | ARRAY_LONG_INDEX:
-            ai->num_elts = MGET_U32( p + 2 ) + 1;
+            ai->num_elems = MGET_U32( p + 2 ) + 1;
             ai->low_bound = 0;
             break;
         case ARRAY_TYPE | ARRAY_TYPE_INDEX:
@@ -1102,7 +1106,7 @@ dip_status DIPIMPENTRY( TypeArrayInfo )(imp_image_handle *iih, imp_type_handle *
                         hi = MGET_S32( p + 6 );
                         break;
                     }
-                    ai->num_elts = (hi - ai->low_bound) + 1;
+                    ai->num_elems = (hi - ai->low_bound) + 1;
                 }
             }
             break;
@@ -1114,15 +1118,15 @@ dip_status DIPIMPENTRY( TypeArrayInfo )(imp_image_handle *iih, imp_type_handle *
             scalar = MGET_U8( p + 2 );
             ai->low_bound = GetScalar( addr, scalar );
             addr.mach.offset += (scalar & SCLR_LEN_MASK) + 1;
-            ai->num_elts = GetScalar( addr, MGET_U8( p + 3 ) );
+            ai->num_elems = GetScalar( addr, MGET_U8( p + 3 ) );
             break;
         }
     }
     PopLoad();
     if( ds == DS_OK ) {
         ImpInterface.TypeBase( iih, ith, &tmp_ith, NULL, NULL );
-        ai->num_dims = 1;
-        ds = GetTypeInfo( iih, &tmp_ith, lc, &ti, &ai->num_dims );
+        ai->dims = 1;
+        ds = GetTypeInfo( iih, &tmp_ith, lc, &ti, &ai->dims );
         if( ds == DS_OK ) {
             ai->stride = ti.size;
             ai->column_major = 0;
@@ -1743,6 +1747,10 @@ search_result SearchMbr( imp_image_handle *iih, imp_type_handle *ith,
                     len = MGET_U8( p ) - ( name - p );
                     if( len == lookup_len && scompn( name, lookup_name, len ) == 0 ) {
                         ish = DCSymCreate( iih, d );
+                        if( ish == NULL ) {
+                            sr = SR_FAIL;
+                            break;
+                        }
                         ish->u.typ.t.offset = p - Type->start;
                         ish->u.typ.t.entry = Type->entry;
                         ish->name_off = (byte)( name - p );

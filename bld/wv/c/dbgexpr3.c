@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2024      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2024-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,7 +35,7 @@
 #include "dbgstk.h"
 #include "dbgerr.h"
 #include "dbgitem.h"
-#include "dbgmem.h"
+#include "memfuncs.h"
 #include "liteng.h"
 #include "ldsupp.h"
 #include "mad.h"
@@ -301,8 +301,8 @@ void ToItem( stack_entry *entry, item_mach *tmp )
                 tmp->lo = entry->v.addr.mach.offset;
                 return;
             case 8:
-                tmp->qo.u._32[I64LO32] = entry->v.addr.mach.offset;
-                tmp->qo.u._32[I64HI32] = 0;
+                U64Low( tmp->qo ) = entry->v.addr.mach.offset;
+                U64High( tmp->qo ) = 0;
             }
             break;
         case TM_FAR:
@@ -344,25 +344,25 @@ static bool ConvU8( stack_entry *entry, conv_class from )
     case F8:
     case F10:
         //NYI: 64-bit support
-        I32ToI64( LDToD( &entry->v.real ), &tmp );
+        Set64ValI32( tmp, LDToD( &entry->v.real ) );
         break;
     case C8:
     case C16:
     case C20:
-        I32ToI64( LDToD( &entry->v.cmplx.re ), &tmp );
+        Set64ValI32( tmp, LDToD( &entry->v.cmplx.re ) );
         break;
     case NP2:
     case NP4:
         //NYI: 64-bit offsets
-        U32ToU64( entry->v.addr.mach.offset, &tmp );
+        Set64ValU32( tmp, entry->v.addr.mach.offset );
         break;
     case FP4:
     case HP4:
-        U32ToU64( entry->v.addr.mach.offset +
-                ((long) entry->v.addr.mach.segment << 16), &tmp );
+        Set64ValU32( tmp, entry->v.addr.mach.offset +
+                ((long)entry->v.addr.mach.segment << 16) );
         break;
     case FP6:
-        U32ToU64( entry->v.addr.mach.offset, &tmp );
+        Set64ValU32( tmp, entry->v.addr.mach.offset );
         break;
     default:
         return( false );
@@ -375,7 +375,7 @@ static bool ConvU1( stack_entry *entry, conv_class from )
 {
     if( !ConvU8( entry, from ) )
         return( false );
-    U32ToU64( (unsigned_8)U32FetchTrunc( entry->v.uint ), &entry->v.uint );
+    U64ConvU8( entry->v.uint );
     return( true );
 }
 
@@ -383,7 +383,7 @@ static bool ConvU2( stack_entry *entry, conv_class from )
 {
     if( !ConvU8( entry, from ) )
         return( false );
-    U32ToU64( (unsigned_16)U32FetchTrunc( entry->v.uint ), &entry->v.uint );
+    U64ConvU16( entry->v.uint );
     return( true );
 }
 
@@ -391,7 +391,7 @@ static bool ConvU4( stack_entry *entry, conv_class from )
 {
     if( !ConvU8( entry, from ) )
         return( false );
-    U32ToU64( (unsigned_32)U32FetchTrunc( entry->v.uint ), &entry->v.uint );
+    U64ConvU32( entry->v.uint );
     return( true );
 }
 
@@ -399,7 +399,7 @@ static bool ConvI1( stack_entry *entry, conv_class from )
 {
     if( !ConvU8( entry, from ) )
         return( false );
-    I32ToI64( (signed_8)U32FetchTrunc( entry->v.uint ), &entry->v.sint );
+    U64ConvI8( entry->v.sint );
     return( true );
 }
 
@@ -407,7 +407,7 @@ static bool ConvI2( stack_entry *entry, conv_class from )
 {
     if( !ConvU8( entry, from ) )
         return( false );
-    I32ToI64( (signed_16)U32FetchTrunc( entry->v.uint ), &entry->v.sint );
+    U64ConvI16( entry->v.sint );
     return( true );
 }
 
@@ -415,7 +415,7 @@ static bool ConvI4( stack_entry *entry, conv_class from )
 {
     if( !ConvU8( entry, from ) )
         return( false );
-    I32ToI64( (signed_32)U32FetchTrunc( entry->v.uint ), &entry->v.sint );
+    U64ConvI32( entry->v.sint );
     return( true );
 }
 
@@ -586,7 +586,7 @@ static bool ConvFP6( stack_entry *entry, conv_class from )
     case U2:
     case U4:
     case U8:
-        if( (entry->flags & SF_CONST) && U64Test( &entry->v.uint ) == 0 )
+        if( (entry->flags & SF_CONST) && U64isZero( entry->v.uint ) )
             tmp = NilAddr;
         //NYI: 64 bit offsets
         tmp.mach.offset = U32FetchTrunc( entry->v.uint );
@@ -595,7 +595,7 @@ static bool ConvFP6( stack_entry *entry, conv_class from )
     case I2:
     case I4:
     case I8:
-        if( (entry->flags & SF_CONST) && I64Test( &entry->v.sint ) == 0 )
+        if( (entry->flags & SF_CONST) && U64isZero( entry->v.sint ) )
             tmp = NilAddr;
         //NYI: 64 bit offsets
         tmp.mach.offset = U32FetchTrunc( entry->v.sint );
@@ -669,35 +669,35 @@ static bool (* const ConvFunc[])( stack_entry *, conv_class ) = {
  * ConvertTo -- convert 'entry' to the given 'class'.
  *      'entry' should be an rvalue.
  */
-void ConvertTo( stack_entry *entry, type_kind k, type_modifier m, dig_type_size s )
+void ConvertTo( stack_entry *entry, type_kind k, type_modifier m, dig_type_size size )
 {
     conv_class  from;
     char        *dest;
 
-    if( s == 0 && k == TK_INTEGER ) {
-        s = DefaultSize( DK_INT );
+    if( size == 0 && k == TK_INTEGER ) {
+        size = DefaultSize( DK_INT );
     }
-    if( entry->ti.kind == k && entry->ti.modifier == m && entry->ti.size == s )
+    if( entry->ti.kind == k && entry->ti.modifier == m && entry->ti.size == size )
         return;
     from = ConvIdx( &entry->ti );
     switch( from ) {
     case U1:
-        U32ToU64( U8FetchTrunc( entry->v.uint ), &entry->v.uint );
+        U64ConvU8( entry->v.uint );
         break;
     case U2:
-        U32ToU64( U16FetchTrunc( entry->v.uint ), &entry->v.uint );
+        U64ConvU16( entry->v.uint );
         break;
     case U4:
-        U32ToU64( U32FetchTrunc( entry->v.uint ), &entry->v.uint );
+        U64ConvU32( entry->v.uint );
         break;
     case I1:
-        I32ToI64( I8FetchTrunc( entry->v.uint ), &entry->v.uint );
+        U64ConvI8( entry->v.sint );
         break;
     case I2:
-        I32ToI64( I16FetchTrunc( entry->v.uint ), &entry->v.uint );
+        U64ConvI16( entry->v.sint );
         break;
     case I4:
-        I32ToI64( I32FetchTrunc( entry->v.uint ), &entry->v.uint );
+        U64ConvI32( entry->v.sint );
         break;
     case F4:
         DToLD( (float)LDToD( &entry->v.real ), &entry->v.real );
@@ -721,16 +721,20 @@ void ConvertTo( stack_entry *entry, type_kind k, type_modifier m, dig_type_size 
         if( k != TK_STRING ) {
             Error( ERR_NONE, LIT_ENG( ERR_TYPE_CONVERSION ) );
         }
-        if( s > entry->ti.size ) {
+        if( size > entry->ti.size ) {
             /* have to expand string */
-            _ChkAlloc( dest, s, LIT_ENG( ERR_NO_MEMORY_FOR_EXPR ) );
-            memcpy( dest, entry->v.string.loc.e[0].u.p, entry->ti.size );
-            memset( &dest[entry->ti.size], ' ', s - entry->ti.size );
-            if( AllocatedString( entry ) ) {
-                _Free( entry->v.string.allocated );
+            dest = MemAlloc( size );
+            if( dest == NULL ) {
+                Error( ERR_NONE, LIT_ENG( ERR_NO_MEMORY_FOR_EXPR ) );
+            } else {
+                memcpy( dest, entry->v.string.loc.e[0].u.p, entry->ti.size );
+                memset( &dest[entry->ti.size], ' ', size - entry->ti.size );
+                if( AllocatedString( entry ) ) {
+                    MemFree( entry->v.string.allocated );
+                }
+                entry->v.string.allocated = dest;
+                LocationCreate( &entry->v.string.loc, LT_INTERNAL, dest );
             }
-            entry->v.string.allocated = dest;
-            LocationCreate( &entry->v.string.loc, LT_INTERNAL, dest );
         }
         break;
     default:
@@ -738,7 +742,7 @@ void ConvertTo( stack_entry *entry, type_kind k, type_modifier m, dig_type_size 
     }
     entry->ti.kind = k;
     entry->ti.modifier = m;
-    entry->ti.size = s;
+    entry->ti.size = size;
     if( !ConvFunc[ConvIdx( &entry->ti )]( entry, from ) ) {
         Error( ERR_NONE, LIT_ENG( ERR_TYPE_CONVERSION ) );
     }

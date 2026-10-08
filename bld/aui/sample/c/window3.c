@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -28,6 +28,8 @@
 * Description:  WHEN YOU FIGURE OUT WHAT THIS MODULE DOES, PLEASE
 *               DESCRIBE IT HERE!
 *
+* UTF-8 encoding, Â¥
+*
 ****************************************************************************/
 
 
@@ -36,8 +38,8 @@
 
 
 static gui_menu_struct W3PopUp[] = {
-    { "Default Popup",      MENU_W3_POPUP,  GUI_STYLE_MENU_ENABLED },
-    { "Show Lisa The Bug",  MENU_W3_BUG,    GUI_STYLE_MENU_ENABLED },
+    { "Default Popup",      MENU_W3_POPUP,  GUI_STYLE_MENU_ENABLED, NULL, GUI_NO_MENU },
+    { "Show Lisa The Bug",  MENU_W3_BUG,    GUI_STYLE_MENU_ENABLED, NULL, GUI_NO_MENU },
 };
 
 static char *Stuff[] =
@@ -145,70 +147,70 @@ static char *Stuff[] =
 "delivers significant performance benefits on the 486, and is ready to",
 "really fly on the Pentium processor.",
 #else
-"        title = ƒRƒ}ƒ“ƒhEƒvƒƒ“ƒvƒg",
-"        help = DOS ƒRƒ}ƒ“ƒhEƒvƒƒ“ƒvƒg‚ð‹N“®‚µ, ƒRƒ}ƒ“ƒh“ü—Íó‘Ô‚É‚µ‚Ü‚·B^m^mƒRƒ}ƒ“ƒhEƒ‰ƒCƒ“‚©‚çDOS ƒVƒFƒ‹‚É–ß‚é‚½‚ß‚É‚Í:^m^m1. exit ‚Æ“ü—Í‚µ, ^m2. Enter(‰üs)ƒL[‚ð‰Ÿ‚µ‚Ä‚­‚¾‚³‚¢B^m^mŠÖ˜A€–Ú"
+"        title = ã‚³ãƒžãƒ³ãƒ‰ãƒ»ãƒ—ãƒ­ãƒ³ãƒ—ãƒˆ",
+"        help = DOS ã‚³ãƒžãƒ³ãƒ‰ãƒ»ãƒ—ãƒ­ãƒ³ãƒ—ãƒˆã‚’èµ·å‹•ã—, ã‚³ãƒžãƒ³ãƒ‰å…¥åŠ›çŠ¶æ…‹ã«ã—ã¾ã™ã€‚^m^mã‚³ãƒžãƒ³ãƒ‰ãƒ»ãƒ©ã‚¤ãƒ³ã‹ã‚‰DOS ã‚·ã‚§ãƒ«ã«æˆ»ã‚‹ãŸã‚ã«ã¯:^m^m1. exit ã¨å…¥åŠ›ã—, ^m2. Enter(æ”¹è¡Œ)ã‚­ãƒ¼ã‚’æŠ¼ã—ã¦ãã ã•ã„ã€‚^m^mé–¢é€£é …ç›®"
 "        pause = disabled",
 "    }",
 "    special = default",
 "    program = ",
 "    {",
 "        command = SWITCH",
-"        title = ‰pŒêƒ‚[ƒh‚ÖØ‚è‘Ö‚¦",
-"        help = “ú–{Œêƒ‚[ƒh‚©‚ç‰pŒêƒ‚[ƒh‚ÖØ‚è‘Ö‚¦‚Ü‚·Bƒ^ƒXƒNØ‚è‘Ö‚¦‚ðŽg—p’†‚É‚ÍŽÀs‚µ‚È‚¢‚Å‚­‚¾‚³‚¢B",
+"        title = è‹±èªžãƒ¢ãƒ¼ãƒ‰ã¸åˆ‡ã‚Šæ›¿ãˆ",
+"        help = æ—¥æœ¬èªžãƒ¢ãƒ¼ãƒ‰ã‹ã‚‰è‹±èªžãƒ¢ãƒ¼ãƒ‰ã¸åˆ‡ã‚Šæ›¿ãˆã¾ã™ã€‚ã‚¿ã‚¹ã‚¯åˆ‡ã‚Šæ›¿ãˆã‚’ä½¿ç”¨ä¸­ã«ã¯å®Ÿè¡Œã—ãªã„ã§ãã ã•ã„ã€‚",
 "        pause = disabled",
 "    }",
 "    program = ",
 "    {",
 "        command = E %1",
-"        title = PC DOS E ƒGƒfƒBƒ^[",
-"        help = ƒeƒLƒXƒgEƒtƒ@ƒCƒ‹‚ð•ÒW‚·‚é PC DOS E ƒGƒfƒBƒ^[‚ð‹N“®‚µ‚Ü‚·B‚±‚ÌƒGƒfƒBƒ^[‚ð‘I‚Ô‚Æ•ÒW‚·‚éƒtƒ@ƒCƒ‹–¼‚ð“ü—Í‚·‚éƒpƒlƒ‹‚ª•\Ž¦‚³‚ê‚Ü‚·B^m^mŠÖ˜A€–Ú^m   "
+"        title = PC DOS E ã‚¨ãƒ‡ã‚£ã‚¿ãƒ¼",
+"        help = ãƒ†ã‚­ã‚¹ãƒˆãƒ»ãƒ•ã‚¡ã‚¤ãƒ«ã‚’ç·¨é›†ã™ã‚‹ PC DOS E ã‚¨ãƒ‡ã‚£ã‚¿ãƒ¼ã‚’èµ·å‹•ã—ã¾ã™ã€‚ã“ã®ã‚¨ãƒ‡ã‚£ã‚¿ãƒ¼ã‚’é¸ã¶ã¨ç·¨é›†ã™ã‚‹ãƒ•ã‚¡ã‚¤ãƒ«åã‚’å…¥åŠ›ã™ã‚‹ãƒ‘ãƒãƒ«ãŒè¡¨ç¤ºã•ã‚Œã¾ã™ã€‚^m^mé–¢é€£é …ç›®^m   "
 "        pause = disabled",
 "        dialog = ",
 "        {",
-"            title = •ÒWƒtƒ@ƒCƒ‹–¼‚Ì“ü—Í",
-"            info = ƒtƒ@ƒCƒ‹–¼‚ð“ü—Í‚µ‚Ä‰º‚³‚¢Bƒtƒ@ƒCƒ‹‚ðƒI[ƒvƒ“‚¹‚¸‚ÉƒGƒfƒBƒ^[‚ð‹N“®‚·‚éê‡‚ÍAEnterƒL[‚ð‰Ÿ‚µ‚Ä‰º‚³‚¢B",
-"            prompt = •ÒWƒtƒ@ƒCƒ‹–¼?",
+"            title = ç·¨é›†ãƒ•ã‚¡ã‚¤ãƒ«åã®å…¥åŠ›",
+"            info = ãƒ•ã‚¡ã‚¤ãƒ«åã‚’å…¥åŠ›ã—ã¦ä¸‹ã•ã„ã€‚ãƒ•ã‚¡ã‚¤ãƒ«ã‚’ã‚ªãƒ¼ãƒ—ãƒ³ã›ãšã«ã‚¨ãƒ‡ã‚£ã‚¿ãƒ¼ã‚’èµ·å‹•ã™ã‚‹å ´åˆã¯ã€Enterã‚­ãƒ¼ã‚’æŠ¼ã—ã¦ä¸‹ã•ã„ã€‚",
+"            prompt = ç·¨é›†ãƒ•ã‚¡ã‚¤ãƒ«å?",
 "            parameter = %1",
 "        }",
 "    }",
 "    program = ",
 "    {",
-"        help = ƒXƒPƒWƒ…[ƒ‰[‚ðŽg—p‚·‚ê‚ÎŽw’è‚µ‚½“úŽž‚ÉŽw’è‚µ‚½ƒvƒƒOƒ‰ƒ€‚ðŽÀs‚·‚é‚±‚Æ‚ª‚Å‚«‚Ü‚·BDOSƒvƒƒ“ƒvƒg‚©‚ç‹N“®‚Å‚«‚éƒvƒƒOƒ‰ƒ€‚Å‚ ‚ê‚Î‚Ç‚ñ‚ÈƒvƒƒOƒ‰ƒ€‚Å‚àŽw’è‚·‚é‚±‚Æ‚ª‚Å‚«‚Ü‚·B‚½‚¾‚µADOSSHELL ‚ð‹N“®‚·‚é‘O‚É CPSCHED.EXE(TSR) ‚ðí’“‚³‚¹‚Ä‚¨‚­•K—v‚ª‚ ‚è‚Ü‚·B",
+"        help = ã‚¹ã‚±ã‚¸ãƒ¥ãƒ¼ãƒ©ãƒ¼ã‚’ä½¿ç”¨ã™ã‚Œã°æŒ‡å®šã—ãŸæ—¥æ™‚ã«æŒ‡å®šã—ãŸãƒ—ãƒ­ã‚°ãƒ©ãƒ ã‚’å®Ÿè¡Œã™ã‚‹ã“ã¨ãŒã§ãã¾ã™ã€‚DOSãƒ—ãƒ­ãƒ³ãƒ—ãƒˆã‹ã‚‰èµ·å‹•ã§ãã‚‹ãƒ—ãƒ­ã‚°ãƒ©ãƒ ã§ã‚ã‚Œã°ã©ã‚“ãªãƒ—ãƒ­ã‚°ãƒ©ãƒ ã§ã‚‚æŒ‡å®šã™ã‚‹ã“ã¨ãŒã§ãã¾ã™ã€‚ãŸã ã—ã€DOSSHELL ã‚’èµ·å‹•ã™ã‚‹å‰ã« CPSCHED.EXE(TSR) ã‚’å¸¸é§ã•ã›ã¦ãŠãå¿…è¦ãŒã‚ã‚Šã¾ã™ã€‚",
 "        screenmode = text",
 "        alttab = enabled",
 "        altesc = enabled",
 "        ctrlesc = enabled",
 "        prevent = disabled",
 "        command = SCHEDULE",
-"        title = Central PointƒXƒPƒWƒ…[ƒ‰[",
+"        title = Central Pointã‚¹ã‚±ã‚¸ãƒ¥ãƒ¼ãƒ©ãƒ¼",
 "        pause = disabled",
 "    }",
 "    program = ",
 "    {",
-"        help = ƒtƒ‹EƒXƒNƒŠ[ƒ“‚Ì UNDELETE ƒvƒƒOƒ‰ƒ€‚ð‹N“®‚µAˆÈ‘O‚Éíœ‚µ‚½ƒtƒ@ƒCƒ‹‚¨‚æ‚ÑƒfƒBƒŒƒNƒgƒŠ[‚ð•œŒ³‚µ‚Ü‚·B"
+"        help = ãƒ•ãƒ«ãƒ»ã‚¹ã‚¯ãƒªãƒ¼ãƒ³ã® UNDELETE ãƒ—ãƒ­ã‚°ãƒ©ãƒ ã‚’èµ·å‹•ã—ã€ä»¥å‰ã«å‰Šé™¤ã—ãŸãƒ•ã‚¡ã‚¤ãƒ«ãŠã‚ˆã³ãƒ‡ã‚£ãƒ¬ã‚¯ãƒˆãƒªãƒ¼ã‚’å¾©å…ƒã—ã¾ã™ã€‚"
 "        screenmode = text",
 "        alttab = enabled",
 "        altesc = enabled",
 "        ctrlesc = enabled",
 "        prevent = disabled",
 "        command = UNDELETE",
-"        title = Central PointƒAƒ“ƒfƒŠ[ƒg",
+"        title = Central Pointã‚¢ãƒ³ãƒ‡ãƒªãƒ¼ãƒˆ",
 "        pause = disabled",
 "    }",
 "    group = ",
 "    {",
-"        title = ƒfƒBƒXƒNEƒ†[ƒeƒBƒŠƒeƒB[",
-"        help = ƒfƒBƒXƒNŠÇ—‚Ì‚½‚ß‚Ìƒ†[ƒeƒBƒŠƒeƒB[‚ÌƒvƒƒOƒ‰ƒ€EƒAƒCƒeƒ€‚ð•\Ž¦‚µ‚Ü‚·B‚Ü‚½, ƒƒCƒ“EƒOƒ‹[ƒv‚â’Ç‰Á‚µ‚½ƒOƒ‹[ƒv‚ðƒI[ƒvƒ“‚·‚é‚±‚Æ‚à‚Å‚«‚Ü‚·B",
+"        title = ãƒ‡ã‚£ã‚¹ã‚¯ãƒ»ãƒ¦ãƒ¼ãƒ†ã‚£ãƒªãƒ†ã‚£ãƒ¼",
+"        help = ãƒ‡ã‚£ã‚¹ã‚¯ç®¡ç†ã®ãŸã‚ã®ãƒ¦ãƒ¼ãƒ†ã‚£ãƒªãƒ†ã‚£ãƒ¼ã®ãƒ—ãƒ­ã‚°ãƒ©ãƒ ãƒ»ã‚¢ã‚¤ãƒ†ãƒ ã‚’è¡¨ç¤ºã—ã¾ã™ã€‚ã¾ãŸ, ãƒ¡ã‚¤ãƒ³ãƒ»ã‚°ãƒ«ãƒ¼ãƒ—ã‚„è¿½åŠ ã—ãŸã‚°ãƒ«ãƒ¼ãƒ—ã‚’ã‚ªãƒ¼ãƒ—ãƒ³ã™ã‚‹ã“ã¨ã‚‚ã§ãã¾ã™ã€‚",
 "        program = ",
 "        {",
 "            command = diskcopy %1",
-"            title = ƒfƒBƒXƒPƒbƒg‚Ì•¡ŽÊ",
+"            title = ãƒ‡ã‚£ã‚¹ã‚±ãƒƒãƒˆã®è¤‡å†™",
 "            pause = enabled",
 "            dialog = ",
 "            {",
-"                title = ƒfƒBƒXƒPƒbƒg‚Ì•¡ŽÊ",
-"                info = •¡ŽÊŒ³‚¨‚æ‚Ñ•¡ŽÊæƒhƒ‰ƒCƒu‚ð“ü—Í‚µ‚Ä‚­‚¾‚³‚¢B",
-"                prompt = ƒpƒ‰ƒ[ƒ^[ . . .",
+"                title = ãƒ‡ã‚£ã‚¹ã‚±ãƒƒãƒˆã®è¤‡å†™",
+"                info = è¤‡å†™å…ƒãŠã‚ˆã³è¤‡å†™å…ˆãƒ‰ãƒ©ã‚¤ãƒ–ã‚’å…¥åŠ›ã—ã¦ãã ã•ã„ã€‚",
+"                prompt = ãƒ‘ãƒ©ãƒ¡ãƒ¼ã‚¿ãƒ¼ . . .",
 "                default = a: b:",
 "                parameter = %1",
 "            }",
@@ -216,13 +218,13 @@ static char *Stuff[] =
 "        program = ",
 "        {",
 "            command = format %1 /q",
-"            title = ƒNƒCƒbƒNEƒtƒH[ƒ}ƒbƒg",
+"            title = ã‚¯ã‚¤ãƒƒã‚¯ãƒ»ãƒ•ã‚©ãƒ¼ãƒžãƒƒãƒˆ",
 "            pause = enabled",
 "            dialog = ",
 "            {",
-"                title = ƒNƒCƒbƒNEƒtƒH[ƒ}ƒbƒg",
-"                info = ƒNƒCƒbƒNEƒtƒH[ƒ}ƒbƒg‚·‚éƒhƒ‰ƒCƒu‚ð“ü—Í‚µ‚Ä‚­‚¾‚³‚¢B",
-"                prompt = ƒpƒ‰ƒ[ƒ^[ . . .",
+"                title = ã‚¯ã‚¤ãƒƒã‚¯ãƒ»ãƒ•ã‚©ãƒ¼ãƒžãƒƒãƒˆ",
+"                info = ã‚¯ã‚¤ãƒƒã‚¯ãƒ»ãƒ•ã‚©ãƒ¼ãƒžãƒƒãƒˆã™ã‚‹ãƒ‰ãƒ©ã‚¤ãƒ–ã‚’å…¥åŠ›ã—ã¦ãã ã•ã„ã€‚",
+"                prompt = ãƒ‘ãƒ©ãƒ¡ãƒ¼ã‚¿ãƒ¼ . . .",
 "                default = a:",
 "                parameter = %1",
 "            }",
@@ -235,13 +237,13 @@ static char *Stuff[] =
 "        program = ",
 "        {",
 "            command = format %1",
-"            title = ƒtƒH[ƒ}ƒbƒg",
+"            title = ãƒ•ã‚©ãƒ¼ãƒžãƒƒãƒˆ",
 "            pause = enabled",
 "            dialog = ",
 "            {",
-"                title = ƒtƒH[ƒ}ƒbƒg",
-"                info = ƒtƒH[ƒ}ƒbƒg‚·‚éƒhƒ‰ƒCƒu‚ð“ü—Í‚µ‚Ä‚­‚¾‚³‚¢B",
-"                prompt = ƒpƒ‰ƒ[ƒ^[ . . .",
+"                title = ãƒ•ã‚©ãƒ¼ãƒžãƒƒãƒˆ",
+"                info = ãƒ•ã‚©ãƒ¼ãƒžãƒƒãƒˆã™ã‚‹ãƒ‰ãƒ©ã‚¤ãƒ–ã‚’å…¥åŠ›ã—ã¦ãã ã•ã„ã€‚",
+"                prompt = ãƒ‘ãƒ©ãƒ¡ãƒ¼ã‚¿ãƒ¼ . . .",
 "                default = a:",
 "                parameter = %1",
 "            }",
@@ -249,13 +251,13 @@ static char *Stuff[] =
 "        program = ",
 "        {",
 "            command = undelete %1",
-"            title = ƒtƒ@ƒCƒ‹‚Ì•œŒ³",
+"            title = ãƒ•ã‚¡ã‚¤ãƒ«ã®å¾©å…ƒ",
 "            pause = enabled",
 "            dialog = ",
 "            {",
-"                title = ƒtƒ@ƒCƒ‹‚Ì•œŒ³",
-"                info = ’ˆÓI‚±‚ÌƒRƒ}ƒ“ƒh‚Ííœ‚µ‚½ƒtƒ@ƒCƒ‹‚ð•œŒ³‚Å‚«‚È‚¢‚±‚Æ‚ª‚ ‚è‚Ü‚·BÚ‚µ‚­‚Í, F1ƒL[‚ð‰Ÿ‚µ‚Ä‚­‚¾‚³‚¢B",
-"                prompt = ƒpƒ‰ƒ[ƒ^[ . . .",
+"                title = ãƒ•ã‚¡ã‚¤ãƒ«ã®å¾©å…ƒ",
+"                info = æ³¨æ„ï¼ã“ã®ã‚³ãƒžãƒ³ãƒ‰ã¯å‰Šé™¤ã—ãŸãƒ•ã‚¡ã‚¤ãƒ«ã‚’å¾©å…ƒã§ããªã„ã“ã¨ãŒã‚ã‚Šã¾ã™ã€‚è©³ã—ãã¯, F1ã‚­ãƒ¼ã‚’æŠ¼ã—ã¦ãã ã•ã„ã€‚",
+"                prompt = ãƒ‘ãƒ©ãƒ¡ãƒ¼ã‚¿ãƒ¼ . . .",
 "                default = /LIST",
 "                parameter = %1",
 "            }",
@@ -326,7 +328,7 @@ static wnd_info W3Info = {
     NoNextRow,
     NoNotify,
     NoChkUpdate,
-    PopUp( W3PopUp )
+    GUI_MENU_ARRAY( W3PopUp )
 };
 
 a_window W3Open( void )

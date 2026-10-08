@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -46,7 +46,9 @@
 #include "wdeinfo.h"
 #include "wrdll.h"
 #include "jdlg.h"
-#include "wclbproc.h"
+#ifdef __WINDOWS__
+    #include "wclbproc.h"
+#endif
 
 
 /****************************************************************************/
@@ -170,7 +172,11 @@ bool WdeCreateInfoWindow( HWND main_window, HINSTANCE inst )
         return( FALSE );
     }
 
+#ifdef __WINDOWS__
     WdeInfoWinProc = MakeProcInstance_DLG( WdeInfoWndDlgProc, inst );
+#else
+    WdeInfoWinProc = WdeInfoWndDlgProc;
+#endif
 
     WdeInfoColor = GetSysColor( COLOR_BTNFACE );
     WdeInfoBrush = CreateSolidBrush( WdeInfoColor );
@@ -193,9 +199,11 @@ bool WdeCreateInfoWindow( HWND main_window, HINSTANCE inst )
 void WdeInfoFini( void )
 {
     WdeFiniInfoText();
+#ifdef __WINDOWS__
     if( WdeInfoWinProc != NULL ) {
         FreeProcInstance_DLG( WdeInfoWinProc );
     }
+#endif
     if( WdeInfoBrush != NULL ) {
         DeleteObject( WdeInfoBrush );
     }
@@ -369,7 +377,7 @@ void WdeDisplayDialogInfo( WdeInfoStruct *is )
         WdeSetEditWithStr( "", WdeInfoWindow, IDB_INFO_CAPTION );
     } else {
         WdeSetEditWithStr( str, WdeInfoWindow, IDB_INFO_CAPTION );
-        WRMemFree( str );
+        MemFree( str );
     }
 
     name = is->u.dlg.name;
@@ -382,17 +390,17 @@ void WdeDisplayDialogInfo( WdeInfoStruct *is )
         str1 = WResIDToStr( name );
         if( str1 != NULL ) {
             len = strlen( str1 ) + 3;
-            str2 = WRMemAlloc( len );
+            str2 = MemAlloc( len );
             if( str2 != NULL ) {
                 str2[0] = '"';
                 strcpy( &str2[1], str1 );
                 str2[len - 2] = '"';
                 str2[len - 1] = '\0';
                 WdeSetComboWithStr( str2, WdeInfoWindow, IDB_INFO_IDSTR );
-                WRMemFree( str2 );
+                MemFree( str2 );
                 ok = true;
             }
-            WRMemFree( str1 );
+            MemFree( str1 );
         }
         if( !ok ) {
             WdeSetComboWithStr( "", WdeInfoWindow, IDB_INFO_IDSTR );
@@ -417,12 +425,12 @@ void WdeDisplayControlInfo( WdeInfoStruct *is )
     cp = WdeResNameOrOrdinalToStr( is->u.ctl.text, 10 );
     if( cp != NULL ) {
         str = WRConvertStringFrom( cp, "\t\n", "tn" );
-        WRMemFree( cp );
+        MemFree( cp );
     }
 
     if( str != NULL ) {
         WdeSetEditWithStr( str, WdeInfoWindow, IDB_INFO_CAPTION );
-        WRMemFree( str );
+        MemFree( str );
     } else {
         WdeSetEditWithStr( "", WdeInfoWindow, IDB_INFO_CAPTION );
     }
@@ -462,13 +470,13 @@ void WdeChangeDialogInfo( WdeInfoStruct *is )
     cp = WdeGetStrFromEdit( WdeInfoWindow, IDB_INFO_CAPTION, NULL );
     if( cp != NULL ) {
         str = WRConvertStringTo( cp, "\t\n", "tn" );
-        WRMemFree( cp );
+        MemFree( cp );
     }
     c_is.u.dlg.caption = str;
 
     str = WdeGetStrFromCombo( WdeInfoWindow, IDB_INFO_IDSTR );
     if( str == NULL ) {
-        WRMemFree( c_is.u.dlg.caption );
+        MemFree( c_is.u.dlg.caption );
         c_is.u.dlg.caption = NULL;
         return;
     }
@@ -494,8 +502,8 @@ void WdeChangeDialogInfo( WdeInfoStruct *is )
     }
 
     if( str[0] == '\0' ) {
-        WRMemFree( str );
-        WRMemFree( c_is.u.dlg.caption );
+        MemFree( str );
+        MemFree( c_is.u.dlg.caption );
         c_is.u.dlg.caption = NULL;
         return;
     }
@@ -507,14 +515,14 @@ void WdeChangeDialogInfo( WdeInfoStruct *is )
 
     if( quoted_str ) {
         c_is.u.dlg.name = WResIDFromStr( str );
-        WRMemFree( str );
+        MemFree( str );
     } else if( str_is_ordinal ) {
         c_is.u.dlg.name = WResIDFromNum( ord );
-        WRMemFree( str );
+        MemFree( str );
     } else {
         if( !WRIsValidSymbol( str ) ) {
-            WRMemFree( str );
-            WRMemFree( c_is.u.dlg.caption );
+            MemFree( str );
+            MemFree( c_is.u.dlg.caption );
             c_is.u.dlg.caption = NULL;
             return;
         }
@@ -556,19 +564,19 @@ void WdeChangeControlInfo( WdeInfoStruct *is )
     cp = WdeGetStrFromEdit( WdeInfoWindow, IDB_INFO_CAPTION, NULL );
     if( cp != NULL ) {
         str = WRConvertStringTo( cp, "\t\n", "tn" );
-        WRMemFree( cp );
+        MemFree( cp );
     }
 
     if( str != NULL ) {
         c_is.u.ctl.text = ResStrToNameOrOrdinal( str );
-        WRMemFree( str );
+        MemFree( str );
     } else {
         c_is.u.ctl.text = NULL;
     }
 
     str = WdeGetStrFromCombo( WdeInfoWindow, IDB_INFO_IDSTR );
     if( str == NULL ) {
-        WRMemFree( c_is.u.ctl.text );
+        MemFree( c_is.u.ctl.text );
         c_is.u.ctl.text = NULL;
         return;
     }
@@ -576,8 +584,8 @@ void WdeChangeControlInfo( WdeInfoStruct *is )
     WRStripSymbol( str );
 
     if( str[0] == '\0' ) {
-        WRMemFree( str );
-        WRMemFree( c_is.u.ctl.text );
+        MemFree( str );
+        MemFree( c_is.u.ctl.text );
         c_is.u.ctl.text = NULL;
         return;
     }
@@ -589,11 +597,11 @@ void WdeChangeControlInfo( WdeInfoStruct *is )
 
     if( str_is_ordinal ) {
         c_is.u.ctl.id = ord;
-        WRMemFree( str );
+        MemFree( str );
     } else {
         if( !WRIsValidSymbol( str ) ) {
-            WRMemFree( str );
-            WRMemFree( c_is.u.ctl.text );
+            MemFree( str );
+            MemFree( c_is.u.ctl.text );
             c_is.u.ctl.text = NULL;
             return;
         }
@@ -666,7 +674,7 @@ void WdeInfoLookupComboEntry( HWND hWnd, WORD hw )
     // if the string numeric or empty then return
     strtoul( str, &cp, 0 );
     if( *cp == '\0' ) {
-        WRMemFree( str );
+        MemFree( str );
         return;
     }
 
@@ -677,7 +685,7 @@ void WdeInfoLookupComboEntry( HWND hWnd, WORD hw )
         }
     }
 
-    WRMemFree( str );
+    MemFree( str );
 }
 
 INT_PTR CALLBACK WdeInfoWndDlgProc( HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam )
@@ -728,7 +736,7 @@ INT_PTR CALLBACK WdeInfoWndDlgProc( HWND hWnd, UINT message, WPARAM wParam, LPAR
 #if defined( __NT__ )
         if( WdeInfoColor != GetSysColor( COLOR_BTNFACE ) ) {
             /* Fake it, this proc does not get it ... */
-            SendMessage( hWnd, WM_SYSCOLORCHANGE, (WPARAM)0, (LPARAM)0 );
+            SendMessage( hWnd, WM_SYSCOLORCHANGE, 0, 0 );
         }
 #endif
         GetClientRect( hWnd, &r );

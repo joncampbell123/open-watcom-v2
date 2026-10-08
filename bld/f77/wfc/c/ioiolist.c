@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -39,6 +39,7 @@
 #include "fcodes.h"
 #include "global.h"
 #include "stmtsw.h"
+#include "namecod.h"
 #include "recog.h"
 #include "ferror.h"
 #include "insert.h"
@@ -60,12 +61,12 @@ void    IOList( void ) {
 
     GStartIO();
     if( CITNode->link != NULL ) {
-        if( RecNOpn() && RecNextOpr( OPR_TRM ) ) {
+        if( RecNoOpn() && RecNextOpr( OPR_TRM ) ) {
             AdvanceITPtr();                   // WRITE(6,3)
-        } else if( Already( IO_NAMELIST ) ) {
+        } else if( IOPermChk( IO_NAMELIST ) ) {
             Error( IL_NO_IOLIST );
         }
-        for(;;) {
+        for( ;; ) {
             if( CITNode->link == NULL ) {
                 break;
             }
@@ -79,7 +80,7 @@ void    IOList( void ) {
 static  bool    HasUnion( sym_id fld ) {
 //======================================
 
-    for(;;) {
+    for( ;; ) {
         if( fld == NULL )
             return( false );
         if( fld->u.fd.typ == FT_STRUCTURE ) {
@@ -123,7 +124,7 @@ bool    StartImpDo( void ) {
     itnode      *lastcomma;
     int         level;
 
-    if( !RecNOpn() )
+    if( !RecNoOpn() )
         return( false );
     if( !RecNextOpr( OPR_LBR ) )
         return( false );
@@ -132,12 +133,12 @@ bool    StartImpDo( void ) {
     lastcomma = NULL;
     level = 0;
     AdvanceITPtr();
-    for(;;) {
-        if( RecOpenParen() ) {
+    for( ;; ) {
+        if( RecOpenParenOpr() ) {
             level++;
-        } else if( RecCloseParen() ) {
+        } else if( RecCloseParenOpr() ) {
             level--;
-        } else if( RecComma() && ( level == 0 ) ) {
+        } else if( RecCommaOpr() && ( level == 0 ) ) {
             lastcomma = CITNode;
         }
         if( ( level < 0 ) || RecTrmOpr() ) {
@@ -145,7 +146,7 @@ bool    StartImpDo( void ) {
             return( false );
         }
         AdvanceITPtr();
-        if( RecEquSign() && ( level == 0 ) ) {
+        if( RecEquOpr() && ( level == 0 ) ) {
             break;
         }
     }
@@ -156,7 +157,7 @@ bool    StartImpDo( void ) {
     InitImpDo( lastcomma );
     CITNode = citnode;
     AdvanceITPtr();
-    if( ( RecNextOpr( OPR_TRM ) && RecNOpn() ) ) {
+    if( ( RecNextOpr( OPR_TRM ) && RecNoOpn() ) ) {
         Error( IL_EMPTY_IMP_DO );
     }
     return( true );
@@ -174,13 +175,13 @@ void    ProcessList( void ) {
     if( RecTrmOpr() ) {
         FinishImpDo();
         if( !RecTrmOpr() ) {
-            ReqComma();
+            ReqCommaOpr();
         }
     } else if( !StartImpDo() ) {
         ProcIOExpr();
         ListItem();
         if( !RecTrmOpr() ) {
-            ReqComma();
+            ReqCommaOpr();
         }
     }
 }
@@ -193,7 +194,7 @@ void    ListItem( void ) {
 
     sym_id      sd;
 
-    if( RecNOpn() ) {
+    if( RecNoOpn() ) {
         if( !CpError ) {
             Error( SX_SURP_OPR );
         }
@@ -236,12 +237,12 @@ void    InitImpDo( itnode *lastcomma ) {
     CITNode = lastcomma;
     CITNode->opr = OPR_TRM;     // marks the end of the i/o list
     ImpDo();
-    if( !ReqCloseParen() ) {
+    if( !ReqCloseParenOpr() ) {
         level = 0;
-        for(;;) {
-            if( RecOpenParen() ) {
+        for( ;; ) {
+            if( RecOpenParenOpr() ) {
                 level++;
-            } else if( RecCloseParen() ) {
+            } else if( RecCloseParenOpr() ) {
                 level--;
             }
             if( level < 0 )
@@ -255,7 +256,7 @@ void    InitImpDo( itnode *lastcomma ) {
             AdvanceITPtr();
         }
     }
-    ReqNOpn();
+    ReqNoOpn();
     imp_do_list = lastcomma->link;
     lastcomma->link = CITNode->link;
     CITNode->link = NULL;

@@ -6,21 +6,18 @@ womp_autodepends = .AUTODEPEND
 
 womp_trmem = 1
 
+womp_wreslib_cli = text
+
 !include cproj.mif
 !include defrule.mif
 !include deftarg.mif
-!include trmem.mif
 
 #
 # cflags
 #
 .c: ../c;$(trmem_dir)
 
-inc_dirs = -I. -I"$(womp_dir)/h"
-
-extra_cpp_flags_f_memory = $(trmem_cpp_flags)
-
-extra_c_flags_f_memory = $(trmem_cover_cflags)
+inc_dirs = -I. -I"$(womp_dir)/h" -I"$(trmem_dir)"
 
 # explicit rules
 #################
@@ -63,8 +60,7 @@ exetarg_objs = &
     segment.obj     &
     wat2can0.obj    &
     wat2can1.obj    &
-    wpmsg.obj       &
-    $(trmem_objs)
+    wpmsg.obj $(trmem_objs)
 exetarg_res        = $(proj_name).res
 !include exetarg.mif
 

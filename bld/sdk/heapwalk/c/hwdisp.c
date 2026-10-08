@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -33,6 +33,7 @@
 #include "heapwalk.h"
 #include "wclbproc.h"
 #include "jdlg.h"
+#include "dpmi.h"
 
 
 /* Local Window callback functions prototypes */
@@ -92,7 +93,7 @@ static HWND ShowBitmapHeapItem( heap_list *hl, HWND parent )
     WORD                height;
     BITMAPINFOHEADER    *bmheader;
 
-    info = MemAlloc( sizeof( ResInfo ) );
+    info = MemAlloc( sizeof( *info ) );
     if( info == NULL )
         return( NULL );
     info->type = GD_BITMAP;
@@ -125,7 +126,7 @@ static HWND ShowIconHeapItem( heap_list *hl, HWND parent )
     WORD                width;
     WORD                height;
 
-    info = MemAlloc( sizeof( ResInfo ) );
+    info = MemAlloc( sizeof( *info ) );
     if( info == NULL )
         return( NULL );
     btinfo = (BITMAPINFOHEADER *)LockResource( hl->info.ge.hBlock );
@@ -157,7 +158,7 @@ static HWND ShowCursorHeapItem( heap_list *hl, HWND parent )
     WORD        width;
     WORD        height;
 
-    info = MemAlloc( sizeof( ResInfo ) );
+    info = MemAlloc( sizeof( *info ) );
     if( info == NULL )
         return( NULL );
     hdl = MkDisplayWin( STR_CURSOR, parent );
@@ -179,7 +180,7 @@ static HWND ShowMenuHeapItem( heap_list *hl, HWND parent )
     void __far  *ptr;
     ResInfo     *info;
 
-    info = MemAlloc( sizeof( ResInfo ) );
+    info = MemAlloc( sizeof( *info ) );
     if( info == NULL )
         return( NULL );
     info->type = GD_MENU;
@@ -236,7 +237,7 @@ static HWND ShowDialogHeapItem( heap_list *hl, HWND hwnd )
     ResInfo     *info;
     char        *rcstr;
 
-    info = MemAlloc( sizeof( ResInfo ) );
+    info = MemAlloc( sizeof( *info ) );
     if( info == NULL )
         return( NULL );
     info->type = GD_DIALOG;
@@ -545,7 +546,7 @@ void ShowHeapObject( HWND lbhandle )
     char        *rcstr;
 
     dispwnd = NULL;
-    index = (int)SendMessage( lbhandle, LB_GETCURSEL, 0 , 0L );
+    index = (int)SendMessage( lbhandle, LB_GETCURSEL, 0 , 0 );
     if( index == LB_ERR ) {
         rcstr = HWAllocRCString( STR_SHOW );
         RCMessageBox( HeapWalkMainWindow, STR_NO_ITEM_SELECTED, rcstr, MB_OK | MB_ICONEXCLAMATION );
@@ -554,9 +555,9 @@ void ShowHeapObject( HWND lbhandle )
     }
     hl = HeapList[ index ];
     if( hl->is_dpmi ) {
-        memhdl = DispMem( Instance, HeapWalkMainWindow, hl->info.mem.sel, TRUE );
+        memhdl = DispMem( Instance, HeapWalkMainWindow, hl->info.mem.sel, TRUE, 0, PMGetSelectorSize( hl->info.mem.sel ) );
     } else if( hl->info.ge.hBlock != NULL ) {
-        memhdl = DispMem( Instance, HeapWalkMainWindow, (WORD)hl->info.ge.hBlock, FALSE );
+        memhdl = DispMem( Instance, HeapWalkMainWindow, (WORD)hl->info.ge.hBlock, FALSE, 0, PMGetSelectorSize( (WORD)hl->info.ge.hBlock ) );
     }
     if( memhdl == NULL )
         return;

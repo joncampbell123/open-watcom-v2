@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,7 +35,7 @@
 #include "liteng.h"
 #include "dbginvk.h"
 #include "dbgerr.h"
-#include "dbgmem.h"
+#include "memfuncs.h"
 #include "dbgio.h"
 #include "dbgscan.h"
 #include "dbgutil.h"
@@ -188,11 +188,11 @@ static bool GetInvkCmd( invokes *inv )
             ch = '\r';
         }
         if( cmd >= buff + inv->buff_size ) {
-            _Alloc( buff, inv->buff_size + CMD_LEN + 1 );
+            buff = MemAlloc( inv->buff_size + CMD_LEN + 1 );
             if( buff != NULL ) {
                 memcpy( buff, inv->buff, inv->buff_size );
                 cmd = buff + inv->buff_size;
-                _Free( inv->buff );
+                MemFree( inv->buff );
                 inv->buff = buff;
                 inv->buff_size += CMD_LEN;
             } else {
@@ -214,14 +214,14 @@ static void Conclude( invokes *inv )
         FileClose( inv->fh );
     }
     FreeRing( inv->prmlst );
-    _Free( inv->buff );
-    _Free( inv );
+    MemFree( inv->buff );
+    MemFree( inv );
 }
 
 
-static bool DoneInvLine( inp_data_handle _inv, inp_rtn_action action )
+static bool DoneInvLine( inp_data_handle handle, inp_rtn_action action )
 {
-    invokes *inv = _inv;
+    invokes *inv = (invokes *)handle;
 
     switch( action ) {
     case INP_RTN_INIT:
@@ -247,19 +247,9 @@ static void DoInvoke( file_handle fh, const char *name, char_ring *parmlist )
 {
     invokes     *inv;
 
-    _Alloc( inv, sizeof( invokes ) + strlen( name ) );
-    if( inv != NULL ) {
-        inv->buff_size = CMD_LEN;
-        _Alloc( inv->buff, inv->buff_size + 1 ); /* extra for NULLCHAR */
-    }
-    if( inv == NULL || inv->buff == NULL ) {
-        if( inv != NULL )
-            _Free( inv );
-        FileClose( fh );
-        FreeRing( parmlist );
-        Error( ERR_NONE, LIT_ENG( ERR_NO_MEMORY ) );
-        return;
-    }
+    inv = MemAllocSafe( sizeof( *inv ) + strlen( name ) );
+    inv->buff_size = CMD_LEN;
+    inv->buff = MemAllocSafe( inv->buff_size + 1 ); /* extra for NULLCHAR */
     strcpy( inv->name, name );
     inv->in_size = 0;
     inv->in_off = 0;
@@ -269,8 +259,9 @@ static void DoInvoke( file_handle fh, const char *name, char_ring *parmlist )
     inv->prmlst = parmlist;
     inv->number = InvCount++;
     inv->line = 0;
-    PushInpStack( inv, DoneInvLine, true );
-    TypeInpStack( INP_CMD_FILE );
+    if( PushInpStack( (inp_data_handle)inv, DoneInvLine, true ) ) {
+        TypeInpStack( INP_CMD_FILE );
+    }
 }
 
 void Invoke( const char *invfile, size_t len, char_ring *parmlist )
@@ -341,11 +332,7 @@ void ProcInvoke( void )
     owner = &parmlist;
     while( !ScanEOC() ) {
         ScanItem( true, &start, &len );
-        _Alloc( path, sizeof( char_ring ) + len );
-        if( path == NULL ) {
-            FreeRing( parmlist );
-            Error( ERR_NONE, LIT_ENG( ERR_NO_MEMORY ) );
-        }
+        path = MemAllocSafe( sizeof( *path ) + len );
         memcpy( path->name, start, len );
         path->name[len] = NULLCHAR;
         path->next = NULL;

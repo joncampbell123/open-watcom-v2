@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -77,8 +77,8 @@ void MSwitch::addOptText( WString& s )
         s.concat( ' ' );
         s.concat( '[' );
         const char* c = _on;
-        size_t i;
-        for( i=strlen( c ); i>0; i-- ) {
+        std::size_t i;
+        for( i=std::strlen( c ); i>0; i-- ) {
             if( c[i-1] == '\\' ) {
                 break;
             }
@@ -110,7 +110,7 @@ bool MSwitch::isTagEqual( const char* swtag, int kludge ) const
     }
     for( int i = 0; i < _idlen; i++ ) {
         int ct = (unsigned char)_id[i];
-        int cs = (unsigned char)*swtag++;
+        int cs = *(unsigned char *)swtag++;
         if( cs == '\0' )
             return( false );
         if( ct == cs )
@@ -120,7 +120,7 @@ bool MSwitch::isTagEqual( const char* swtag, int kludge ) const
             if( cs == '-' && ct == ' ' || cs == ' ' && ct == '-' )
                 continue;
             // ignore upper/lower case mismatch
-            if( toupper( cs ) == toupper( ct ) ) {
+            if( std::toupper( cs ) == std::toupper( ct ) ) {
                 continue;
             }
 //        } else if( kludge == 2 ) {

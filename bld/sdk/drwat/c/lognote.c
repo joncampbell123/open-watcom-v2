@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -31,9 +32,11 @@
 
 
 #include "drwatcom.h"
-#include "wclbproc.h"
 #include "notelog.rh"
 #include "jdlg.h"
+#ifdef __WINDOWS__
+    #include "wclbproc.h"
+#endif
 
 
 #define BUF_SIZE        100
@@ -66,7 +69,7 @@ WINEXPORT INT_PTR CALLBACK NoteLogDlgProc( HWND hwnd, UINT msg, WPARAM wparam, L
         case IDOK:
             fn = (void *)GET_DLGDATA( hwnd );
             edithwnd = GetDlgItem( hwnd, LOG_TEXT );
-            linecnt = (int)SendMessage( edithwnd, EM_GETLINECOUNT, 0, 0L );
+            linecnt = (int)SendMessage( edithwnd, EM_GETLINECOUNT, 0, 0 );
             for( i = 0; i < linecnt; i++ ) {
                 wptr = (WORD *) buf;
                 *wptr = BUF_SIZE - 1;
@@ -76,10 +79,10 @@ WINEXPORT INT_PTR CALLBACK NoteLogDlgProc( HWND hwnd, UINT msg, WPARAM wparam, L
                     fn( buf );
                 }
             }
-            SendMessage( hwnd, WM_CLOSE, 0, 0L );
+            SendMessage( hwnd, WM_CLOSE, 0, 0 );
             break;
         case IDCANCEL:
-            SendMessage( hwnd, WM_CLOSE, 0, 0L );
+            SendMessage( hwnd, WM_CLOSE, 0, 0 );
             break;
         }
         ret = true;
@@ -92,11 +95,13 @@ WINEXPORT INT_PTR CALLBACK NoteLogDlgProc( HWND hwnd, UINT msg, WPARAM wparam, L
     return( ret );
 }
 
-void AnotateLog( HWND hwnd, HANDLE Instance, void (*fn)(char *)  ) {
-
-    DLGPROC     dlgproc;
-
-    dlgproc = MakeProcInstance_DLG( NoteLogDlgProc, Instance );
+void AnotateLog( HWND hwnd, HANDLE Instance, void (*fn)(char *) )
+{
+#ifdef __WINDOWS__
+    DLGPROC dlgproc = MakeProcInstance_DLG( NoteLogDlgProc, Instance );
     JDialogBoxParam( Instance, "NOTE_LOG", hwnd, dlgproc, (LPARAM)fn );
     FreeProcInstance_DLG( dlgproc );
+#else
+    JDialogBoxParam( Instance, "NOTE_LOG", hwnd, NoteLogDlgProc, (LPARAM)fn );
+#endif
 }

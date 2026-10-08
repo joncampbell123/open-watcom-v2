@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -59,7 +59,8 @@
 /*
  * size of map file buffer
  */
-#define MAP_BUFFER_SIZE (16 * SECTOR_SIZE)
+#define MAP_BUFFER_SIZE     (16 * SECTOR_SIZE)
+#define MAP_LINEBUFF_SIZE   4096
 
 typedef struct {
     unsigned_32         address;
@@ -93,6 +94,8 @@ static time_t           StartT;
 static clock_t          ClockTicks;
 static bool             Absolute_Seg;
 static unsigned long    NumMapSyms;
+
+static char             *MapLineBuff;
 
 void ResetWriteMapIO( void )
 /**************************/
@@ -142,24 +145,21 @@ static void WriteMapMsgPrintf( int msgid, ... )
 {
     char        format[RESOURCE_MAX_SIZE];
     va_list     args;
-    char        buff[MAX_MSG_SIZE];
     size_t      len;
 
     Msg_Get( msgid, format );
     va_start( args, msgid );
-    len = DoFmtStr( buff, sizeof( buff ), format, args );
+    len = DoFmtStr( MapLineBuff, MAP_LINEBUFF_SIZE, format, args );
     va_end( args );
-    WriteMap( buff, len );
+    WriteMap( MapLineBuff, len );
     WriteMapNL();
 }
 
 static void WriteMapMsg( int msgid )
 /**********************************/
 {
-    char        buff[RESOURCE_MAX_SIZE];
-
-    Msg_Get( msgid, buff );
-    WriteMap( buff, strlen( buff ) );
+    Msg_Get( msgid, MapLineBuff );
+    WriteMap( MapLineBuff, strlen( MapLineBuff ) );
     WriteMapNL();
 }
 
@@ -167,13 +167,12 @@ static void WriteMapPrintf( const char *format, ... )
 /***************************************************/
 {
     va_list     args;
-    char        buff[MAX_MSG_SIZE];
     size_t      len;
 
     va_start( args, format );
-    len = DoFmtStr( buff, sizeof( buff ), format, args );
+    len = DoFmtStr( MapLineBuff, MAP_LINEBUFF_SIZE, format, args );
     va_end( args );
-    WriteMap( buff, len );
+    WriteMap( MapLineBuff, len );
     WriteMapNL();
 }
 
@@ -205,7 +204,6 @@ static void WriteMapColPrintf( size_t col, const char *str, ... )
     va_list         args;
     size_t          num;
     static  char    Blanks[]={"                                      "};
-    char            buff[MAX_MSG_SIZE];
     size_t          len;
 
     num = 0;
@@ -217,27 +215,27 @@ static void WriteMapColPrintf( size_t col, const char *str, ... )
     MapCol += num;
     WriteMap( Blanks, num );
     va_start( args, str );
-    len = DoFmtStr( buff, sizeof( buff ), str, args );
+    len = DoFmtStr( MapLineBuff, MAP_LINEBUFF_SIZE, str, args );
     va_end( args );
-    WriteMap( buff, len );
+    WriteMap( MapLineBuff, len );
     MapCol += len;
 }
 
 static void WriteMapGroups( void )
 /********************************/
 {
-    group_entry     *currgrp;
+    group_entry     *group;
 
     if( Groups != NULL ) {
         WriteMapBox( MSG_MAP_BOX_GROUP );
         WriteMapMsg( MSG_MAP_TITLE_GROUP_0 );
         WriteMapMsg( MSG_MAP_TITLE_GROUP_1 );
         WriteMapNL();
-        for( currgrp = Groups; currgrp != NULL; currgrp = currgrp->next_group ) {
-            if( !currgrp->isautogrp ) { /* if not an autogroup */
-                WriteMapColPrintf( 0, "%s", currgrp->sym->name );
-                WriteMapColPrintf( 32, "%a", &currgrp->grp_addr );
-                WriteMapColPrintf( 53, "%h", currgrp->totalsize );
+        for( group = Groups; group != NULL; group = group->next ) {
+            if( !group->isautogrp ) { /* if not an autogroup */
+                WriteMapColPrintf( 0, "%s", group->sym->name );
+                WriteMapColPrintf( 32, "%a", &group->addr );
+                WriteMapColPrintf( 53, "%h", group->totalsize );
                 WriteMapNL();
             }
         }
@@ -250,11 +248,11 @@ static void WriteMapAbsSeg( void *_leader )
 {
     seg_leader  *leader = _leader;
 
-    if( leader->info & SEG_ABSOLUTE ) {
+    if( leader->info & SEGINF_ABSOLUTE ) {
         WriteMapColPrintf( 0, "%s", leader->segname );
         WriteMapColPrintf( 24, "%s", leader->class->name );
         if( (FmtData.type & MK_16BIT)
-          && (leader->info & USE_32) ) {
+          && (leader->info & SEGINF_USE_32) ) {
             WriteMapColPrintf( 40, "%A", &leader->seg_addr );
         } else {
             WriteMapColPrintf( 40, "%a", &leader->seg_addr );
@@ -269,7 +267,7 @@ static void WriteMapNonAbsSeg( void *_seg )
 {
     seg_leader  *seg = _seg;
 
-    if( seg->info & SEG_ABSOLUTE ) {
+    if( seg->info & SEGINF_ABSOLUTE ) {
         Absolute_Seg = true;
     } else {
         WriteMapColPrintf( 0, "%s", seg->segname );
@@ -278,7 +276,7 @@ static void WriteMapNonAbsSeg( void *_seg )
             WriteMapColPrintf( 38, "%s", seg->group->sym->name );
         }
         if( (FmtData.type & MK_16BIT)
-          && (seg->info & USE_32) ) {
+          && (seg->info & SEGINF_USE_32) ) {
             WriteMapColPrintf( 53, "%A", &seg->seg_addr );
         } else {
             WriteMapColPrintf( 53, "%a", &seg->seg_addr );
@@ -310,20 +308,20 @@ static void WriteMapSectSegs( section *sect )
     seg_leader      *seg;
     seg_info        *segs;
 
-    if( sect->classlist != NULL ) {
+    if( sect->classes != NULL ) {
         WriteMapBox( MSG_MAP_BOX_SEGMENTS );
         WriteMapMsg( MSG_MAP_TITLE_SEGMENTS_0 );
         WriteMapMsg( MSG_MAP_TITLE_SEGMENTS_1 );
         WriteMapNL();
         count = 0;
-        for( class = sect->classlist; class != NULL; class = class->next_class ) {
+        for( class = sect->classes; class != NULL; class = class->next ) {
             if( (class->flags & CLASS_DEBUG_INFO) == 0 ) {
                 count += RingCount( class->segs );
             }
         }
-        _ChkAlloc( segs, count * sizeof( seg_info ) );
+        segs = MemAllocSafe( count * sizeof( seg_info ) );
         count = 0;
-        for( class = sect->classlist; class != NULL; class = class->next_class ) {
+        for( class = sect->classes; class != NULL; class = class->next ) {
             if( (class->flags & CLASS_DEBUG_INFO) == 0 ) {
                 for( seg = NULL; (seg = RingStep( class->segs, seg )) != NULL; ) {
                     segs[count].idx = count;
@@ -345,7 +343,7 @@ static void WriteMapSectSegs( section *sect )
                 WriteMapAbsSeg( segs[i].seg );
             }
         }
-        _LnkFree( segs );
+        MemFree( segs );
     }
 }
 
@@ -377,10 +375,10 @@ static void WriteMapPubModHead( void )
 {
     char        full_name[PATH_MAX];
 
-    if( CurrMod->f.source == NULL ) {
+    if( CurrMod->u1.source == NULL ) {
         strcpy( full_name, CurrMod->name.u.ptr );
     } else {
-        MakeFileName( CurrMod->f.source->infile, full_name );
+        MakeFileName( CurrMod->u1.source->infile, full_name );
     }
     WriteMapMsgPrintf( MSG_MAP_DEFINING_MODULE, full_name, CurrMod->name.u.ptr );
 }
@@ -440,10 +438,10 @@ void WriteMapLnkMsgCallback( unsigned msgnum, const char *str, size_t len )
 void WriteMapOvlVectHead( vect_state *VectState )
 /***********************************************/
 {
-    vecnode             *vectnode;
-    int                 n;
-    targ_addr           addr;
-    symbol              *sym;
+    vecnode         *vectnode;
+    int             n;
+    addr_type       addr;
+    symbol          *sym;
 
     WriteMapNL();
     WriteMapNL();
@@ -462,14 +460,14 @@ void WriteMapOvlVectHead( vect_state *VectState )
 }
 
 
-void WriteMapOvlPubHead( section *sec )
-/*************************************/
+void WriteMapOvlPubHead( section *sect )
+/**************************************/
 {
     WriteMapNL();
     WriteMapNL();
-    WriteMapPrintf( "Overlay section %d address %a", sec->ovlref, &sec->sect_addr );
+    WriteMapPrintf( "Overlay section %d address %a", sect->ovlref, &sect->sect_addr );
     WriteMapPrintf( "====================================" );
-    WriteMapSectSegs( sec );
+    WriteMapSectSegs( sect );
     WriteMapMemoryMapHead();
 }
 
@@ -491,25 +489,31 @@ static void WriteMapModulesSegmentsHead( void )
 static void WriteMapImports( void )
 /*********************************/
 {
-    symbol *    sym;
+    symbol          *sym;
 
-    for( sym = HeadSym; sym != NULL; sym = sym->link ) {
-        if( IS_SYM_IMPORTED( sym )
-          && sym->p.import != NULL ) {
-            if( (FmtData.type & MK_NOVELL) == 0
-              || sym->p.import != DUMMY_IMPORT_PTR ) {
-                if( sym->prefix != NULL
-                  && ( sym->prefix[0] != '\0' ) ) {
-                    WriteMapColPrintf( 0, "%s@%s", sym->prefix, sym->name );
-                } else {
+    for( sym = HeadSym; sym != NULL; sym = sym->next ) {
+        if( IS_SYM_IMPORTED( sym ) ) {
+            if( FmtData.type & MK_NOVELL ) {
+                if( sym->p.import_nov != NULL
+                  && sym->p.import_nov != DUMMY_IMPORT_PTR ) {
+                    if( sym->prefix != NULL
+                      && ( sym->prefix[0] != '\0' ) ) {
+                        WriteMapColPrintf( 0, "%s@%s", sym->prefix, sym->name );
+                    } else {
+                        WriteMapColPrintf( 0, "%s", sym->name );
+                    }
+                    WriteMapNL();
+                }
+            } else {
+                if( sym->p.import_dll != NULL ) {
                     WriteMapColPrintf( 0, "%s", sym->name );
-                }
 #ifdef _OS2
-                if( FmtData.type & (MK_OS2 | MK_WIN_NE | MK_PE | MK_WIN_VXD) ) {
-                    WriteMapColPrintf( 36, "%s", ImpModuleName( sym->p.import ) );
-                }
+                    if( FmtData.type & (MK_NE | MK_OS2_FLAT | MK_PE | MK_WIN_VXD) ) {
+                        WriteMapColPrintf( 36, "%s", sym->p.import_dll->m.modnum->name.u.ptr );
+                    }
 #endif
-                WriteMapNL();
+                    WriteMapNL();
+                }
             }
         }
     }
@@ -534,12 +538,12 @@ static void WriteMapSegment( void *_seg )
  * NYI: completely broken for absolute segments
  */
 {
-    segdata     *seg = _seg;
-    char        star;
-    char        bang;
-    char        see;
-    targ_addr   addr;
-    seg_leader  *leader;
+    segdata         *seg = _seg;
+    char            star;
+    char            bang;
+    char            see;
+    addr_type       addr;
+    seg_leader      *leader;
 
     if( seg->isdead )
         return;
@@ -548,7 +552,7 @@ static void WriteMapSegment( void *_seg )
         return;
     WriteMapColPrintf( 16, "%s", leader->segname );
     WriteMapColPrintf( 38, "%s", leader->class->name );
-    star = ( leader->info & SEG_ABSOLUTE ) ? '*' : ' ';
+    star = ( leader->info & SEGINF_ABSOLUTE ) ? '*' : ' ';
     bang = ( seg->bits == BITS_32 ) ? '!' : ' ';
     see = ( seg->iscdat ) ? 'c' : ' ';
     addr = leader->seg_addr;
@@ -565,7 +569,7 @@ static void WriteMapSegment( void *_seg )
 static void WriteMapModuleSegments( mod_entry *mod )
 /**************************************************/
 {
-    if( (mod->modinfo & MOD_NEED_PASS_2) && mod->segs != NULL ) {
+    if( (mod->flags_mod & MOD_NEED_PASS_2) && mod->segs != NULL ) {
         WriteMapColPrintf( 0, "%s", mod->name.u.ptr );
         if( strlen( mod->name.u.ptr ) > 15 )
             WriteMapNL();
@@ -709,14 +713,14 @@ static void WriteMapLines( void )
       || length == 0 )
        return;
 
-    _ChkAlloc( input, length );
+    input = MemAllocSafe( length );
     ReadInfo( input_vm, input, length );
 
     for( p = input; p - input < length; ) {
         state.col = 0;
         state.is_32 = false;
         state.has_seg = false;
-        unit_length = MGET_U32( p );
+        unit_length = MGET_U32_UN( p );
         p += sizeof( unsigned_32 );
         unit_base = p;
 
@@ -737,22 +741,22 @@ static void WriteMapLines( void )
         opcode_base = *p;
         p += 1;
 
-        _ChkAlloc( opcode_lengths, sizeof( unsigned ) * ( opcode_base - 1 ) );
+        opcode_lengths = MemAllocSafe( sizeof( unsigned ) * ( opcode_base - 1 ) );
         for( i = 0; i < opcode_base - 1; ++i ) {
             opcode_lengths[i] = *p++;
         }
 
         if( p - input >= length ) {
-            _LnkFree( opcode_lengths );
-            _LnkFree( input );
+            MemFree( opcode_lengths );
+            MemFree( input );
             return;
         }
 
         while( *p != 0 ) {
             p += strlen( (char *)p ) + 1;
             if( p - input >= length ) {
-                _LnkFree( opcode_lengths );
-                _LnkFree( input );
+                MemFree( opcode_lengths );
+                MemFree( input );
                 return;
             }
         }
@@ -766,8 +770,8 @@ static void WriteMapLines( void )
             p = SkipLEB128( p );
             p = SkipLEB128( p );
             if( p - input >= length ) {
-                _LnkFree( opcode_lengths );
-                _LnkFree( input );
+                MemFree( opcode_lengths );
+                MemFree( input );
                 return;
             }
         }
@@ -788,10 +792,10 @@ static void WriteMapLines( void )
                     break;
                 case DW_LNE_set_address:
                     if( op_len == 4 ) {
-                        tmp = MGET_U32( p );
+                        tmp = MGET_U32_UN( p );
                         state.is_32 = true;
                     } else if( op_len == 2 ) {
-                        tmp = MGET_U16( p );
+                        tmp = MGET_U16_UN( p );
                         state.is_32 = false;
                     } else {
                         tmp = 0xffffffff;
@@ -803,9 +807,9 @@ static void WriteMapLines( void )
                 case DW_LNE_WATCOM_set_segment:
                     state.has_seg = true;
                     if( op_len == 4 ) {
-                        tmp = MGET_U32( p );
+                        tmp = MGET_U32_UN( p );
                     } else if( op_len == 2 ) {
-                        tmp = MGET_U16( p );
+                        tmp = MGET_U16_UN( p );
                     } else {
                         tmp = 0xffffffff;
                     }
@@ -857,7 +861,7 @@ static void WriteMapLines( void )
                     state.address += ( value / line_range ) * min_instr;
                     break;
                 case DW_LNS_fixed_advance_pc:
-                    tmp = MGET_U16( p );
+                    tmp = MGET_U16_UN( p );
                     p += sizeof( unsigned_16 );
                     state.address += tmp;
                     break;
@@ -875,9 +879,9 @@ static void WriteMapLines( void )
             }
         }
         WriteMapNL();
-        _LnkFree( opcode_lengths );
+        MemFree( opcode_lengths );
     }
-    _LnkFree( input );
+    MemFree( input );
 }
 
 static bool CheckSymRecList( void *_info, void *sym )
@@ -894,7 +898,7 @@ static void AddSymRecList( symbol *sym, symrecinfo **head )
     symrecinfo      *info;
 
     if( RingLookup( *head, CheckSymRecList, sym ) == NULL ) {
-        _ChkAlloc( info, sizeof( symrecinfo ) );
+        info = MemAllocSafe( sizeof( symrecinfo ) );
         info->next = NULL;
         info->sym = sym;
         info->mod = CurrMod;
@@ -917,10 +921,10 @@ static void PrintUndefinedSym( void *_info )
     mod_entry   *mod;
 
     mod = info->mod;
-    LnkMsg( YELL+MSG_UNDEF_SYM, "12S", mod->f.source->infile->name, mod->name, info->sym );
+    LnkMsg( YELL+MSG_UNDEF_SYM, "12S", mod->u1.source->infile->name, mod->name, info->sym );
     if( MapFile != NULL ) {
         WriteMapColPrintf( 0, "%S", info->sym );
-        WriteMapColPrintf( 32, "%s(%s)", mod->f.source->infile->name, mod->name );
+        WriteMapColPrintf( 32, "%s(%s)", mod->u1.source->infile->name, mod->name );
         WriteMapNL();
     }
 }
@@ -981,14 +985,14 @@ static void WriteMapSize( int msgid, unsigned_32 size )
 void WriteMapLibsUsed( void )
 /***************************/
 {
-    file_list   *lib;
+    file_list   *file;
     char        new_name[PATH_MAX];
 
     if( LinkState & LS_GENERATE_LIB_LIST ) {
         WriteMapBox( MSG_MAP_BOX_LIB_USED );
-        for( lib = ObjLibFiles; lib != NULL; lib = lib->next_file ) {
-            if( lib->flags & STAT_LIB_USED ) {
-                MakeFileName( lib->infile, new_name );
+        for( file = ObjLibFiles; file != NULL; file = file->next ) {
+            if( file->flags_file & STAT_LIB_USED ) {
+                MakeFileName( file->infile, new_name );
                 WriteMapPrintf( "%s", new_name );
             }
         }
@@ -1003,7 +1007,7 @@ static const char *getStubName( void )
     if( FmtData.u.os2fam.no_stub ) {
         return( "none" );
     }
-    if( FmtData.type & (MK_OS2 | MK_WIN_NE | MK_PE | MK_WIN_VXD) ) {
+    if( FmtData.type & (MK_NE | MK_OS2_FLAT | MK_PE | MK_WIN_VXD) ) {
         return( FmtData.u.os2fam.stub_file_name );
     }
 #endif
@@ -1030,7 +1034,7 @@ static void WriteMapSizes( void )
     if( UndefList != NULL ) {
         WriteMapNL();
     }
-    if( FmtData.type & (MK_NOVELL | MK_OS2 | MK_WIN_NE | MK_PE) ) {
+    if( FmtData.type & (MK_NOVELL | MK_NE | MK_OS2_FLAT | MK_PE) ) {
         WriteMapImportsHead();
         WriteMapImports();
     }
@@ -1083,6 +1087,7 @@ void MapInit( void )
             LnkMsg( FTL+MSG_CANT_OPEN, "12", MapFName, strerror( errno ) );
             return;
         }
+        MapLineBuff = MemAlloc( MAP_LINEBUFF_SIZE );
         setvbuf( MapFile, NULL, _IOFBF, MAP_BUFFER_SIZE );
         localt = localtime( &StartT );
         MapCol = 0;
@@ -1154,6 +1159,7 @@ void MapFini( void )
         }
 
         MapFlags = 0;
+        MemFree( MapLineBuff );
 
         if( fclose( MapFile ) ) {
             LnkMsg( ERR+MSG_IO_PROBLEM, "12", MapFName, strerror( errno ) );
@@ -1161,7 +1167,7 @@ void MapFini( void )
         MapFile = NULL;
 
         if( MapFName != NULL ) {
-            _LnkFree( MapFName );
+            MemFree( MapFName );
             MapFName = NULL;
         }
     }
@@ -1224,11 +1230,11 @@ void WriteMapPubEnd( void )
       && ( NumMapSyms > 0 ) ) {
         symarray = NULL;
         if( NumMapSyms < ( UINT_MAX / sizeof( symbol * ) ) - 1 ) {
-            _LnkAlloc( symarray, NumMapSyms * sizeof( symbol * ) );
+            symarray = MemAllocSafe( NumMapSyms * sizeof( symbol * ) );
         }
         currsym = symarray;
         ok = ( symarray != NULL );
-        for( sym = HeadSym; sym != NULL; sym = sym->link ) {
+        for( sym = HeadSym; sym != NULL; sym = sym->next ) {
             if( sym->info & SYM_MAP_GLOBAL ) {
                 sym->info &= ~SYM_MAP_GLOBAL;
                 if( ok ) {
@@ -1243,7 +1249,7 @@ void WriteMapPubEnd( void )
             LnkMsg( WRN+MSG_CANT_SORT_SYMBOLS, NULL );
         } else {
             WriteMapSymArray( symarray, NumMapSyms );
-            _LnkFree( symarray );
+            MemFree( symarray );
         }
     }
 }
@@ -1255,7 +1261,7 @@ void WriteMapPubSortStart( pubdefinfo *info )
     if( (MapFlags & MAP_SORT)
       && (MapFlags & MAP_GLOBAL) == 0
       && ( CurrMod->publist != NULL ) ) {
-        _ChkAlloc( info->symarray, Ring2Count( CurrMod->publist ) * sizeof( symbol * ) );
+        info->symarray = MemAllocSafe( Ring2Count( CurrMod->publist ) * sizeof( symbol * ) );
     }
 }
 
@@ -1266,7 +1272,7 @@ void WriteMapPubSortEnd( pubdefinfo *info )
         WriteMapSymArray( info->symarray, info->num );
     }
     if( info->symarray != NULL ) {
-        _LnkFree( info->symarray );
+        MemFree( info->symarray );
         info->symarray = NULL;
     }
 }

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -349,6 +349,7 @@ typedef enum {
 /* handy constants section */
 
 #define DWLINE_OPCODE_BASE      10
+#define DWLINE_OPCODE_BASE_V5   14
 
 /*
  * these next three constants do not have to be defined this way, but it
@@ -424,7 +425,7 @@ typedef struct {
     unsigned_16     version;
     unsigned_32     abbrev_offset;
     unsigned_8      addr_size;
-} _WCUNALIGNED compuhdr_prologue;
+} _WCUNALIGNED comp_unit_prologue;
 
 typedef struct {
     unsigned_32     length;

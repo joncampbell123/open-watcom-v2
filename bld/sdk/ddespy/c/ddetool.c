@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -232,7 +232,7 @@ void MakeDDEToolBar( HWND hwnd )
     ToolBarDisplay( ToolBar.hdl, &ToolBar.info );
     resizeForTB( &ToolBar.info.area, hwnd );
 
-    ToolBar.hbitmaps = MemAlloc( BUTTON_CNT * sizeof( HBITMAP ) );
+    ToolBar.hbitmaps = MemAlloc( sizeof( *ToolBar.hbitmaps ) * BUTTON_CNT );
     for( i=0; i < BUTTON_CNT; i++ ) {
         if( ButInfo[i].flags & ITEM_BLANK ) {
             ToolBar.hbitmaps[i] = NULL;
@@ -266,7 +266,7 @@ void MakeDDEToolBar( HWND hwnd )
 /*
  * DDEToolBarFini - destroy the toolbar and free memory associated with it
  */
-void DDEToolBarFini()
+void DDEToolBarFini( void )
 {
     unsigned    i;
 

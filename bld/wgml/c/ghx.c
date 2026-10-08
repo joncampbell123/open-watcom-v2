@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2004-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2004-2026 The Open Watcom Contributors. All Rights Reserved.
 *
 *  ========================================================================
 *
@@ -182,10 +182,8 @@ void gen_heading( char *h_text, const char *hdrefid, hdlvl hn_lvl, hdsrc hds_lvl
     doc_element     *cur_el;
     group_type      sav_group_type;         // save prior group type
     hdlvl           hlvl;
-    unsigned        current;
     unsigned        headlen;
     unsigned        prefixlen;
-    unsigned        txtlen;
     page_pos        old_line_pos;
     ref_entry       *cur_ref         = NULL;
     unsigned        bot_depth;
@@ -216,7 +214,7 @@ void gen_heading( char *h_text, const char *hdrefid, hdlvl hn_lvl, hdsrc hds_lvl
     if( hds_lvl < HDS_abstract ) {
         if( hds_lvl == HDS_appendix ) {
             prefixlen = strlen( layout_work.appendix.string ) + strlen( hd_nums[hn_lvl].hnumstr );
-            prefix = (char *)mem_alloc( prefixlen + 1 );
+            prefix = MemAllocSafe( prefixlen + 1 );
             strcpy( prefix, layout_work.appendix.string ); // prefix
             strcat( prefix, hd_nums[hn_lvl].hnumstr ); // numbered header
         } else {
@@ -224,7 +222,7 @@ void gen_heading( char *h_text, const char *hdrefid, hdlvl hn_lvl, hdsrc hds_lvl
             prefixlen = strlen( prefix );
         }
         headlen = prefixlen + strlen( h_text ) + 2;
-        headp = (char *)mem_alloc( headlen );
+        headp = MemAllocSafe( headlen );
         if( layout_work.hx.hx_head[hds_lvl].number_form != FORM_none ) {
             strcpy( headp, prefix ); // numbered header
             strcat( headp, " " );
@@ -234,7 +232,7 @@ void gen_heading( char *h_text, const char *hdrefid, hdlvl hn_lvl, hdsrc hds_lvl
     } else {
         prefix = hd_nums[hn_lvl].hnumstr;
         headlen = strlen( prefix ) + strlen( h_text ) + 2;
-        headp = (char *)mem_alloc( headlen );
+        headp = MemAllocSafe( headlen );
         *headp = '\0';
     }
     strcat( headp, h_text );
@@ -246,7 +244,7 @@ void gen_heading( char *h_text, const char *hdrefid, hdlvl hn_lvl, hdsrc hds_lvl
     /* Reset $HEADx */
 
     resize_and_copy_value( hd_nums[hn_lvl].headsub, headp );
-    mem_free( headp );
+    MemFree( headp );
 
     /* Reset $HNUMx */
 
@@ -278,18 +276,14 @@ void gen_heading( char *h_text, const char *hdrefid, hdlvl hn_lvl, hdsrc hds_lvl
 
         if( hds_lvl < HDS_abstract ) {
             if( prefix[0] != '\0' ) {
-                current = strlen( prefix );
-                hd_entry->prefix = (char *)mem_alloc( current + 1 );
-                strcpy( hd_entry->prefix, prefix );
+                hd_entry->prefix = MemStrdupSafe( prefix );
                 if( layout_work.hx.hx_head[hds_lvl].number_form != FORM_none ) {
                     hd_entry->flags |= FFH_prefix;  // mark prefix for use
                 }
             }
         }
-        txtlen = strlen( h_text );
-        if( txtlen > 0 ) {              // text line not empty
-            hd_entry->text = (char *)mem_alloc( txtlen + 1 );
-            strcpy( hd_entry->text, h_text );
+        if( h_text[0] != '\0' ) {              // text line not empty
+            hd_entry->text = MemStrdupSafe( h_text );
         }
 
         /***********************************************************************/
@@ -352,7 +346,7 @@ void gen_heading( char *h_text, const char *hdrefid, hdlvl hn_lvl, hdsrc hds_lvl
     t_page.cur_left = old_cur_left;
     if( (prefix != NULL)
       && (prefix != hd_nums[hn_lvl].hnumstr) ) {
-        mem_free( prefix );
+        MemFree( prefix );
     }
 
     cur_group_type = sav_group_type;
@@ -550,10 +544,12 @@ void gen_heading( char *h_text, const char *hdrefid, hdlvl hn_lvl, hdsrc hds_lvl
 
 static void gml_hx_common( const gmltag *entry, hdlvl hn_lvl )
 {
-    bool            id_seen     = false;
+    bool            id_seen = false;
     char            hdrefid[REFID_LEN + 1];
     char            *p;
     char            *pa;
+    char            *p1;
+    int             c1;
     hdsrc           hds_lvl;
     hdlvl           hlvl;
     text_space      sav_spacing;
@@ -722,9 +718,15 @@ static void gml_hx_common( const gmltag *entry, hdlvl hn_lvl )
             /* Implement the case attribute */
 
             if( layout_work.hx.hx_head[hds_lvl].hd_case == case_lower ) {
-                strlwr( p );
+                p1 = p;
+                while( (c1 = *(unsigned char *)p1) != '\0' ) {
+                    *p1++ = tolower( c1 );
+                }
             } else if( layout_work.hx.hx_head[hds_lvl].hd_case == case_upper ) {
-                strupr( p );
+                p1 = p;
+                while( (c1 = *(unsigned char *)p1) != '\0' ) {
+                    *p1++ = toupper( c1 );
+                }
             }
         }
         if( ProcFlags.overprint

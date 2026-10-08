@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2023      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2023-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -36,26 +36,33 @@
 #include "alloc.h"
 #include "yacc.h"
 
-index_n npro;
-index_n nsym;
-index_n nterm;
-index_n nvble;
-index_n nitem;
-
-a_sym   **symtab, *symlist, *startsym, *eofsym, *goalsym, *nosym, *errsym;
-a_pro   **protab, *startpro;
+rule_n      npro;
+sym_n       nsym;
+sym_n       nterm;
+sym_n       nvble;
+unsigned    nitem;
+a_sym       **symtab;
+a_sym       *symlist;
+a_sym       *startsym;
+a_sym       *eofsym;
+a_sym       *goalsym;
+a_sym       *nosym;
+a_sym       *errsym;
+a_pro       **protab;
+a_pro       *startpro;
 
 void buildpro( void )
 {
-    a_sym       *sym;
-    a_sym       *rhs[2];
-    a_pro       *pro;
-    an_item     *item;
-    index_n     i;
-    index_n     j;
+    a_sym           *sym;
+    a_sym           *rhs[2];
+    a_pro           *pro;
+    an_item         *item;
+    sym_n           sym_idx;
+    sym_n           j;
 
     if( startsym == NULL ) {
         msg( "No grammar specified.\n" );
+        /* never return */
     }
     /*
      * construct: $start <- <start_symbol> $eof
@@ -74,7 +81,7 @@ void buildpro( void )
             nvble++;
             for( pro = sym->pro; pro != NULL; pro = pro->next ) {
                 ++nitem;
-                for( item = pro->items; item->p.sym != NULL; ++item ) {
+                for( item = pro->items; item->u.sym != NULL; ++item ) {
                     ++nitem;
                 }
             }
@@ -83,9 +90,9 @@ void buildpro( void )
         }
     }
     nsym = nterm + nvble;
-    symtab = CALLOC( nsym, a_sym * );
-    protab = CALLOC( npro, a_pro * );
-    i = 0;
+    symtab = MemCAllocSafe( nsym, sizeof( *symtab ) );
+    protab = MemCAllocSafe( npro, sizeof( *protab ) );
+    sym_idx = 0;
     j = 0;
     for( sym = symlist; sym != NULL; sym = sym->next ) {
         if( sym->pro != NULL ) {
@@ -94,15 +101,15 @@ void buildpro( void )
                 protab[pro->pidx] = pro;
             }
         } else {
-            sym->idx = i++;
+            sym->idx = sym_idx++;
         }
         symtab[sym->idx] = sym;
     }
 }
 
-static a_sym **findsymptr( char *s )
+static a_sym **findsymptr( const char *s )
 {
-    a_sym       **sym;
+    a_sym           **sym;
 
     for( sym = &symlist; *sym != NULL; sym = &(*sym)->next ) {
         if( strcmp( s, (*sym)->name ) == 0 ) {
@@ -112,39 +119,39 @@ static a_sym **findsymptr( char *s )
     return( sym );
 }
 
-a_sym *findsym( char *s )
+a_sym *findsym( const char *s )
 {
     return( *findsymptr( s ) );
 }
 
-a_sym *addsym( char *s )
+a_sym *addsym( const char *s )
 {
-    a_sym       **sym;
-    a_sym       *p;
+    a_sym           **sym;
+    a_sym           *p;
 
     sym = findsymptr( s );
     if( *sym == NULL ) {
-        p = CALLOC( 1, a_sym );
-        p->name = strdup( s );
+        p = MemCAllocSafe( 1, sizeof( *p ) );
+        p->name = MemStrdupSafe( s );
         *sym = p;
     }
     return( *sym );
 }
 
-a_pro *addpro( a_sym *sym, a_sym **rhs, int n )
+a_pro *addpro( a_sym *sym, a_sym **rhs, unsigned n )
 {
-    a_pro       *pro;
-    size_t      amt;
-    int         i;
+    a_pro           *pro;
+    size_t          amt;
+    unsigned        i;
 
-    amt = sizeof( a_pro ) + n * sizeof( an_item );
-    pro = (a_pro *)CALLOC( amt, char );
+    amt = sizeof( a_pro ) + ( n - 1 + 2 ) * sizeof( an_item );
+    pro = MemCAllocSafe( 1, amt );
     pro->pidx = npro++;
     for( i = 0; i < n; ++i ) {
-        pro->items[i].p.sym = rhs[i];
+        pro->items[i].u.sym = rhs[i];
     }
-    pro->items[n + 0].p.sym = NULL;
-    pro->items[n + 1].p.pro = pro;
+    pro->items[n + 0].u.sym = NULL;
+    pro->items[n + 1].u.pro = pro;
     pro->sym = sym;
     pro->next = sym->pro;
     pro->SR_conflicts = NULL;
@@ -156,30 +163,30 @@ a_pro *addpro( a_sym *sym, a_sym **rhs, int n )
 
 void showpro( void )
 {
-    index_n     i;
+    rule_n          pidx;
 
-    for( i = 0; i < npro; ++i ) {
-        showitem( protab[i]->items, "" );
+    for( pidx = 0; pidx < npro; ++pidx ) {
+        showitem( protab[pidx]->items, "" );
     }
 }
 
-void showitem( an_item *p, char *dot )
+void showitem( an_item *p, const char *dot )
 {
-    an_item     *q;
-    a_pro       *pro;
+    an_item         *q;
+    a_pro           *pro;
 
-    for( q = p; q->p.sym != NULL; ) {
+    for( q = p; q->u.sym != NULL; ) {
         ++q;
     }
-    pro = q[1].p.pro;
+    pro = q[1].u.pro;
     printf( "%3d (%03x): %s <-", pro->pidx, pro->pidx, pro->sym->name );
     for( q = pro->items; ; ++q ) {
         if( q == p ) {
             printf( "%s", dot );
         }
-        if( q->p.sym == NULL )
+        if( q->u.sym == NULL )
             break;
-        printf( " %s", q->p.sym->name );
+        printf( " %s", q->u.sym->name );
     }
     if( pro->unit ) {
         printf( " (unit production)" );
@@ -189,25 +196,60 @@ void showitem( an_item *p, char *dot )
 
 void show_unused( void )
 {
-    unsigned    count;
-    index_n     i;
+    unsigned        count;
+    rule_n          pidx;
 
     count = 0;
-    for( i = 0; i < npro; ++i ) {
-        if( protab[i]->sym == goalsym )
+    for( pidx = 0; pidx < npro; ++pidx ) {
+        if( protab[pidx]->sym == goalsym )
             continue;
-        if( !protab[i]->used ) {
+        if( !protab[pidx]->used ) {
             ++count;
         }
     }
     dumpstatistic( "number of rules not reduced", count );
     if( count ) {
-        for( i = 0; i < npro; ++i ) {
-            if( protab[i]->sym == goalsym )
+        for( pidx = 0; pidx < npro; ++pidx ) {
+            if( protab[pidx]->sym == goalsym )
                 continue;
-            if( !protab[i]->used ) {
-                showitem( protab[i]->items, "" );
+            if( !protab[pidx]->used ) {
+                showitem( protab[pidx]->items, "" );
             }
         }
     }
+}
+
+void FreeBuildproData( void )
+/***************************/
+{
+    a_sym               *sym;
+    a_sym               *sym_next;
+    a_pro               *pro;
+    a_pro               *pro_next;
+    a_SR_conflict_list  *sr;
+    a_SR_conflict_list  *sr_next;
+
+    for( sym = symlist; sym != NULL; sym = sym_next ) {
+        sym_next = sym->next;
+        MemFree( sym->name );
+        if( sym->type != NULL ) {
+            MemFree( sym->type );
+            sym->type = NULL;
+        }
+        if( sym->min != NULL ) {
+            MemFree( sym->min );
+            sym->min = NULL;
+        }
+        for( pro = sym->pro; pro != NULL; pro = pro_next ) {
+            pro_next = pro->next;
+            for( sr = pro->SR_conflicts; sr != NULL; sr = sr_next ) {
+                sr_next = sr->next;
+                MemFree( sr );
+            }
+            MemFree( pro );
+        }
+        MemFree( sym );
+    }
+    symlist = NULL;
+    /* symtab and protab pointer arrays are freed by genobj()/genobj_fast() */
 }

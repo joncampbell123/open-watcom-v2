@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2020 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -57,19 +57,17 @@
 /* static variables                                                         */
 /****************************************************************************/
 
-bool WChangeMemFlags( HWND parent, uint_16 *mflags, WResID *res_name,
+bool WChangeMemFlags( HWND parent, ResMemFlags *res_flags, WResID *res_name,
                       HINSTANCE inst, HELPFUNC help_callback )
 {
     char            *name;
     bool            ok;
-    HELPFUNC        hcb;
 
     /* unused parameters */ (void)inst;
 
     name = NULL;
-    hcb = NULL;
 
-    ok = (mflags != NULL && res_name != NULL);
+    ok = (res_flags != NULL && res_name != NULL);
 
     if( ok )  {
         if( res_name != NULL ) {
@@ -79,20 +77,17 @@ bool WChangeMemFlags( HWND parent, uint_16 *mflags, WResID *res_name,
     }
 
     if( ok ) {
-        hcb = MakeProcInstance_HELP( help_callback, inst );
-        ok = ( hcb != NULL );
-    }
-
-    if( ok ) {
-        ok = WRChangeMemFlags( parent, name, mflags, hcb );
-    }
-
-    if( hcb != NULL ) {
+#ifdef __WINDOWS__
+        HELPFUNC hcb = MakeProcInstance_HELP( help_callback, inst );
+        ok = WRChangeMemFlags( parent, name, res_flags, hcb );
         FreeProcInstance_HELP( hcb );
+#else
+        ok = WRChangeMemFlags( parent, name, res_flags, help_callback );
+#endif
     }
 
     if( name != NULL ) {
-        WRMemFree( name );
+        MemFree( name );
     }
 
     return( ok );

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -39,6 +39,7 @@
 #include "segmap.rh"
 #include "jdlg.h"
 #include "memwnd.h"
+#include "dpmi.h"
 
 
 /* Local Window callback functions prototypes */
@@ -52,11 +53,12 @@ static ADDRESS          firstAddr;
 static interrupt_struct oldIntData;
 
 #ifdef __NT__
-static HANDLE           processHdl;
+static HANDLE           statProcessHdl;
 static DWORD            processID;
 
-void SetProcessInfo( HANDLE hdl, DWORD procid ) {
-    processHdl = hdl;
+void SetProcessInfo( HANDLE hdl, DWORD procid )
+{
+    statProcessHdl = hdl;
     processID = procid;
 }
 #endif
@@ -330,7 +332,7 @@ INT_PTR CALLBACK SegMapDlgProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpara
                 str[4] = '\0';
                 seg = atoi( str );
                 if( DoGlobalEntryModule( &ge, DTTaskEntry.hModule, seg ) ) {
-                    DispMem( Instance, hwnd, (WORD)ge.hBlock, (ge.dwSize == 1) );
+                    DispMem( Instance, hwnd, (WORD)ge.hBlock, (ge.dwSize == 1), 0, PMGetSelectorSize( (WORD)ge.hBlock ) );
                 }
             }
             ret = true;
@@ -349,9 +351,6 @@ INT_PTR CALLBACK StatDialogDlgProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM l
 {
     WORD        cmd;
     bool        ret;
-#ifndef __NT__
-    DLGPROC     dlgproc;
-#endif
 
     lparam = lparam;
 
@@ -379,11 +378,13 @@ INT_PTR CALLBACK StatDialogDlgProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM l
     case WM_COMMAND:
         cmd = LOWORD( wparam );
         switch( cmd ) {
-#ifndef __NT__
+#ifdef __WINDOWS__
         case STAT_SEG_MAP:
-            dlgproc = MakeProcInstance_DLG( SegMapDlgProc, Instance );
-            JDialogBox( Instance, "SEG_MAP_DLG", hwnd, dlgproc );
-            FreeProcInstance_DLG( dlgproc );
+            {
+                DLGPROC dlgproc = MakeProcInstance_DLG( SegMapDlgProc, Instance );
+                JDialogBox( Instance, "SEG_MAP_DLG", hwnd, dlgproc );
+                FreeProcInstance_DLG( dlgproc );
+            }
             break;
         case STAT_STACK_TRACE:
             StartStackTraceDialog( hwnd );
@@ -394,7 +395,7 @@ INT_PTR CALLBACK StatDialogDlgProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM l
                 HANDLE                  hdl;
                 DuplicateHandle(
                             GetCurrentProcess(),
-                            processHdl,
+                            statProcessHdl,
                             GetCurrentProcess(),
                             &hdl,
                             0,
@@ -436,9 +437,7 @@ INT_PTR CALLBACK StatDialogDlgProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM l
  */
 void DoStatDialog( HWND hwnd )
 {
-    DLGPROC     dlgproc;
-
-    dlgproc = MakeProcInstance_DLG( StatDialogDlgProc, Instance );
+    DLGPROC dlgproc = MakeProcInstance_DLG( StatDialogDlgProc, Instance );
     JDialogBox( Instance, "TASKSTATUS", hwnd, dlgproc );
     FreeProcInstance_DLG( dlgproc );
 

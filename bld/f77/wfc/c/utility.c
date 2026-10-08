@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -38,6 +38,7 @@
 #include "cpopt.h"
 #include "global.h"
 #include "fmemmgr.h"
+#include "namecod.h"
 #include "recog.h"
 #include "ferror.h"
 #include "insert.h"
@@ -107,7 +108,7 @@ char    *MkNodeStr( itnode *itptr ) {
     char        *str;
 
     opnd_size = itptr->opnd_size;
-    str = FMemAlloc( opnd_size + sizeof( char ) );
+    str = MemAllocSafe( opnd_size + 1 );
     memcpy( str, itptr->opnd, opnd_size );
     str[opnd_size] = NULLCHAR;
     return( str );
@@ -119,15 +120,14 @@ void    FrNodeStr( char *str ) {
 
 // Free memory allocated by MkNodeStr().
 
-    FMemFree( str );
+    MemFree( str );
 }
 
 
-bool    CmpNode2Str( itnode *itptr, char *str ) {
-//===============================================
-
+bool    CmpNode2Str( itnode *itptr, const char *str )
+//===================================================
 // Compare the "opnd" field of an itnode to a string.
-
+{
     size_t      str_len;
 
     str_len = strlen( str );

@@ -32,6 +32,7 @@
 
 #include "variety.h"
 #include "widechar.h"
+#include "seterrno.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -49,7 +50,6 @@
     #include "nw_lib.h"
 #endif
 #include "rtdata.h"
-#include "rterrno.h"
 #include "fileacc.h"
 #include "commode.h"
 #include "openmode.h"
@@ -102,7 +102,7 @@ unsigned _WCNEAR __F_NAME(__open_flags,__wopen_flags)( const CHAR_TYPE *modestr,
         flags |= _WRITE | _APPEND;
         break;
     default:
-        _RWD_errno = EINVAL;
+        lib_set_errno( EINVAL );
         return( 0 );
     }
     modestr++;
@@ -330,7 +330,7 @@ static FILE * _WCNEAR close_file( FILE *fp )
         }
     }
     /* We ain't seen that file pointer ever. Leave things be. */
-    _RWD_errno = EBADF;
+    lib_set_errno( EBADF );
     _ReleaseIOB();
     return( NULL );
 }

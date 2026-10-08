@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -77,11 +77,11 @@ typedef struct macro_entry {
 #define PPTYPE_MACRO        1
 
 typedef struct preproc_value {
-    int                 type;   // PPTYPE_SIGNED or PPTYPE_UNSIGNED
     union {
         long            ivalue;
         unsigned long   uvalue;
     } val;
+    int                 type;   // PPTYPE_SIGNED or PPTYPE_UNSIGNED
 } PREPROC_VALUE;
 
 typedef void        (* pp_walk_func)( const MACRO_ENTRY *me, const PREPROC_VALUE *val, void *cookie );
@@ -106,6 +106,3 @@ extern void         PPENTRY PP_MacrosFini( void );
 
 extern int          PPENTRY PP_MBCharLen( const char *p );
 extern const char   * PPENTRY PP_GetEnv( const char *__name );
-extern void         * PPENTRY PP_Malloc( size_t __size );
-extern void         PPENTRY PP_Free( void *__ptr );
-extern void         PPENTRY PP_OutOfMemory( void );

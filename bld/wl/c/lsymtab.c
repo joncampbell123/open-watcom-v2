@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -60,7 +60,8 @@
 #define STATIC_TABALLOC (256 * sizeof( symbol * ))  // 1st power of 128 > TABSIZE
 #define GLOBAL_TABALLOC (1792 * sizeof( symbol * )) // 1st power of 128 > TABSIZE
 
-int             (*CmpRtn)( const char *, const char *, size_t );
+int             (*CmpNRtn)( const char *, const char *, size_t );
+int             (*CmpRtn)( const char *, const char * );
 size_t          NameLen;
 symbol          *LastSym;
 
@@ -72,264 +73,6 @@ static symbol   **GlobalSymPtrs;
 static symbol   **StaticSymPtrs;
 
 static const unsigned ScatterTable[] = {
-#ifdef _M_I86   // it is a 16-bit hosted linker
-0x1DE8,
-0x2EE1,
-0x6E21,
-0x134B,
-0x0F40,
-0x6D5B,
-0x0767,
-0x1454,
-0x3FE5,
-0x30A8,
-0x05D0,
-0x3ED8,
-0x6306,
-0x0B8C,
-0x02B9,
-0x3A2E,
-0x065A,
-0x15F3,
-0x177C,
-0x1A12,
-0x1100,
-0x789C,
-0x3DB0,
-0x2031,
-0x5416,
-0x0785,
-0x7725,
-0x0A74,
-0x091B,
-0x1715,
-0x799E,
-0x7A0C,
-0x5A05,
-0x780C,
-0x5A4D,
-0x3F42,
-0x4F21,
-0x462B,
-0x750F,
-0x15FC,
-0x3EAF,
-0x75A2,
-0x0B6C,
-0x1F0E,
-0x1A39,
-0x4B3E,
-0x574C,
-0x2246,
-0x35B7,
-0x2B4F,
-0x0D7A,
-0x6536,
-0x6464,
-0x6B5A,
-0x0BDA,
-0x22BF,
-0x075E,
-0x1283,
-0x2F6A,
-0x6F62,
-0x6A00,
-0x34B9,
-0x0DFB,
-0x1646,
-0x0800,
-0x549F,
-0x0FAB,
-0x3B09,
-0x1947,
-0x783E,
-0x2429,
-0x4C47,
-0x7F93,
-0x5C6B,
-0x0FA8,
-0x12EB,
-0x71CF,
-0x72F9,
-0x0BA0,
-0x6A38,
-0x012E,
-0x179F,
-0x3747,
-0x6C96,
-0x5409,
-0x27A8,
-0x13D3,
-0x211D,
-0x327E,
-0x685D,
-0x086C,
-0x75E3,
-0x40C4,
-0x6832,
-0x29F3,
-0x1306,
-0x0350,
-0x46B3,
-0x4275,
-0x5278,
-0x08A9,
-0x0F2C,
-0x546D,
-0x688D,
-0x550C,
-0x121B,
-0x15BD,
-0x0946,
-0x6BBF,
-0x6956,
-0x1E6B,
-0x165B,
-0x1235,
-0x12FC,
-0x471C,
-0x220A,
-0x28E7,
-0x4F1D,
-0x7351,
-0x52A2,
-0x35ED,
-0x2C29,
-0x4363,
-0x72CE,
-0x7D5E,
-0x6E19,
-0x6A3F,
-0x3AA2,
-0x436D,
-0x3C5F,
-0x22E2,
-0x1D67,
-0x1440,
-0x428E,
-0x0194,
-0x2826,
-0x2D8F,
-0x2FCA,
-0x1CE4,
-0x3CF7,
-0x6602,
-0x40ED,
-0x4A66,
-0x3707,
-0x2E47,
-0x417E,
-0x6B2F,
-0x436A,
-0x07F5,
-0x2F53,
-0x040D,
-0x7AA6,
-0x0E23,
-0x6D00,
-0x1D87,
-0x06FB,
-0x6BC7,
-0x2F06,
-0x2798,
-0x6374,
-0x5BD0,
-0x0FBC,
-0x5D2A,
-0x7FAE,
-0x0F03,
-0x75FC,
-0x6354,
-0x546B,
-0x1397,
-0x3A8F,
-0x2053,
-0x34D6,
-0x1A8F,
-0x3856,
-0x064A,
-0x6894,
-0x36D9,
-0x333D,
-0x4DB9,
-0x5A8F,
-0x722B,
-0x41DF,
-0x5BBF,
-0x6881,
-0x5399,
-0x25F9,
-0x500F,
-0x1F42,
-0x33F6,
-0x3F91,
-0x76B4,
-0x6FD2,
-0x7BF1,
-0x06E2,
-0x1984,
-0x2926,
-0x27EB,
-0x390E,
-0x6D65,
-0x42B3,
-0x2D99,
-0x2382,
-0x1743,
-0x43BB,
-0x1F5E,
-0x3A28,
-0x04CD,
-0x535A,
-0x2966,
-0x6450,
-0x14F2,
-0x3D4F,
-0x4482,
-0x2C5C,
-0x4C1F,
-0x778B,
-0x3AC6,
-0x3E2D,
-0x1035,
-0x747C,
-0x59E4,
-0x6051,
-0x284C,
-0x4E16,
-0x6F47,
-0x53E9,
-0x7C2A,
-0x15A6,
-0x69EF,
-0x475B,
-0x4F81,
-0x5456,
-0x3E0F,
-0x47BD,
-0x74EC,
-0x087F,
-0x6668,
-0x5CFC,
-0x34A8,
-0x2BB2,
-0x1F63,
-0x3CD0,
-0x6312,
-0x0D84,
-0x37F1,
-0x4060,
-0x62E4,
-0x0F1D,
-0x1423,
-0x08B4,
-0x0F2F,
-0x0B7F,
-0x3D88,
-0x7DDF,
-0x4918,
-0x7897
-#else   /* 32-bit */
 0x1DE82EE1,
 0x6E21134B,
 0x0F406D5B,
@@ -586,7 +329,6 @@ static const unsigned ScatterTable[] = {
 0x4735414C,
 0x1C90167A,
 0x4106567B
-#endif
 };
 
 void ResetSym( void )
@@ -596,7 +338,8 @@ void ResetSym( void )
     SymList = NULL;
     HeadSym = NULL;
     LastSym = NULL;
-    CmpRtn = strnicmp;
+    LinkFlags |= LF_CASE_FLAG;
+    SetSymCase();
     ResetPermBlocks();
     ClearHashPointers();
 }
@@ -604,8 +347,8 @@ void ResetSym( void )
 void InitSym( void )
 /*************************/
 {
-    _ChkAlloc( GlobalSymPtrs, GLOBAL_TABALLOC );
-    _ChkAlloc( StaticSymPtrs, STATIC_TABALLOC );
+    GlobalSymPtrs = MemAllocSafe( GLOBAL_TABALLOC );
+    StaticSymPtrs = MemAllocSafe( STATIC_TABALLOC );
 }
 
 #ifdef DEVBUILD
@@ -661,18 +404,21 @@ static void DumpHashTable( void )
 static void WipeSym( symbol *sym )
 /********************************/
 {
-    if( IS_SYM_IMPORTED( sym ) && (FmtData.type & MK_ELF) == 0 ) {
+    if( IS_SYM_IMPORTED( sym )
+      && (FmtData.type & MK_ELF) == 0 ) {
         if( FmtData.type & MK_NOVELL ) {
-            if( sym->p.import != DUMMY_IMPORT_PTR ) {
-                _LnkFree( sym->p.import );
+            if( sym->p.import_nov != DUMMY_IMPORT_PTR ) {
+                MemFree( sym->p.import_nov );
             }
+            sym->p.import_nov = NULL;
         } else {
-            FreeImport( sym->p.import );
+            FreeImport( sym->p.import_dll );
+            sym->p.import_dll = NULL;
         }
-        sym->p.import = NULL;
     } else if( IS_SYM_ALIAS( sym ) ) {
-        if( sym->info & SYM_FREE_ALIAS ) {
-            _LnkFree( sym->p.alias.u.ptr );
+        if( sym->p.alias.u.ptr != NULL ) {
+            MemFree( sym->p.alias.u.ptr );
+            sym->p.alias.u.ptr = NULL;
         }
         sym->u.aliaslen = 0;    // make sure this is nulled again
     }
@@ -696,7 +442,7 @@ void CleanSym( void )
 #endif
     if( (LinkFlags & LF_INC_LINK_FLAG) == 0 ) {
         for( sym = HeadSym; sym != NULL; sym = next ) {
-            next = sym->link;
+            next = sym->next;
             FreeSymbol( sym );
         }
     }
@@ -707,8 +453,8 @@ void CleanSym( void )
 void FiniSym( void )
 /*************************/
 {
-    _LnkFree( GlobalSymPtrs );
-    _LnkFree( StaticSymPtrs );
+    MemFree( GlobalSymPtrs );
+    MemFree( StaticSymPtrs );
 }
 
 static void PrepHashTable( symbol **table, unsigned size )
@@ -758,23 +504,27 @@ void SetSymCase( void )
 /****************************/
 {
     if( LinkFlags & LF_CASE_FLAG ) {
-        CmpRtn = strncmp;
+        CmpNRtn = strncmp;
+        CmpRtn = strcmp;
     } else {
-        CmpRtn = strnicmp;
+        CmpNRtn = strnicmp;
+        CmpRtn = stricmp;
     }
 }
 
 void SymModStart( void )
-/*****************************/
-/* do necessary symbol table processing before the start of a module in pass1 */
+/*****************************
+ * do necessary symbol table processing before the start of a module in pass1
+ */
 {
     SymList = LastSym;
 }
 
 void SymModEnd( void )
-/***************************/
-/* go through the list of symbols generated in this module, and find all
- * references to symbols which are in this module only. */
+/***************************
+ * go through the list of symbols generated in this module, and find all
+ * references to symbols which are in this module only.
+ */
 {
     symbol *    sym;
 
@@ -783,13 +533,14 @@ void SymModEnd( void )
     } else {
         sym = SymList;
         if( sym != NULL ) {     // symlist points to previous one
-            sym = sym->link;
+            sym = sym->next;
         }
     }
-    for( ; sym != NULL; sym = sym->link ) {
+    for( ; sym != NULL; sym = sym->next ) {
         sym->info &= ~SYM_IN_CURRENT;
         sym->info |= SYM_OLDHAT;
-        if( (sym->info & SYM_REFERENCED) && (sym->info & SYM_DEFINED) ) {
+        if( (sym->info & SYM_REFERENCED)
+          && (sym->info & SYM_DEFINED) ) {
             sym->info &= ~SYM_REFERENCED;
             sym->info |= SYM_LOCAL_REF;
         }
@@ -804,14 +555,15 @@ void ClearRefInfo( symbol *sym )
 
     if( (sym->info & SYM_EXPORTED) == 0 ) {
         save = *(sym->e.vfdata);
-        _LnkFree( sym->e.vfdata );
+        MemFree( sym->e.vfdata );
         sym->e.def = save;
     }
 }
 
 void ClearSymUnion( symbol * sym )
-/***************************************/
-/* clear the symbol unions of any possible allocated data */
+/***************************************
+ * clear the symbol unions of any possible allocated data
+ */
 {
     sym->info &= ~SYM_LINK_GEN;
     if( IS_SYM_VF_REF( sym ) ) {
@@ -833,7 +585,8 @@ symbol *DefISymbol( const char *name )
     symbol *sym;
 
     sym = RefISymbol( name );
-    if( (sym->info & SYM_DEFINED) && (sym->info & SYM_LINK_GEN) == 0 ) {
+    if( (sym->info & SYM_DEFINED)
+      && (sym->info & SYM_LINK_GEN) == 0 ) {
         LnkMsg( ERR+MSG_RESERVED_SYM_DEFINED, "s", name );
     }
     sym->info |= SYM_DEFINED | SYM_LINK_GEN;
@@ -851,15 +604,15 @@ symbol *SymOpNWPfx( sym_flags symop, const char *name, size_t length, const char
 {
     symbol  *sym;
 
-    if( NULL == (sym = SymOp( symop, name, length )) )
+    if( (sym = SymOp( symop, name, length )) == NULL )
         return( NULL );
 
-    if( ( NULL != prefix ) && ( 0 != prefixlen ) ) {
+    if( ( prefix != NULL ) && prefixlen ) {
         if( prefixlen > 254 ) {
             LnkMsg( ERR+MSG_SYMBOL_NAME_TOO_LONG, "s", prefix );
             return( NULL );
         }
-        if( NULL == (sym->prefix = AddSymbolStringTable( &PrefixStrings, prefix, prefixlen )) ) {
+        if( (sym->prefix = AddSymbolStringTable( &PrefixStrings, prefix, prefixlen )) == NULL ) {
             LnkMsg( ERR+MSG_INTERNAL, "s", "no memory for prefix symbol");
             return( NULL );
         }
@@ -871,20 +624,22 @@ static void SetSymAlias( symbol *sym, const char *target, size_t targetlen )
 /**************************************************************************/
 {
     SET_SYM_TYPE( sym, SYM_ALIAS );
-    sym->p.alias.u.ptr = ChkToString( target, targetlen );
+    sym->p.alias.u.ptr = MemToStringSafe( target, targetlen );
     sym->u.aliaslen = targetlen;
     sym->info |= SYM_DEFINED;           /* an alias can't be undefined */
     sym->info &= ~SYM_WAS_LAZY;
 }
 
 void MakeSymAlias( const char *name, size_t namelen, const char *target, size_t targetlen )
-/*****************************************************************************************/
-/* make a symbol table alias */
+/******************************************************************************************
+ * make a symbol table alias
+ */
 {
     symbol      *sym;
     symbol      *targ;
 
-    if( namelen == targetlen && (*CmpRtn)( name, target, namelen ) == 0 ) {
+    if( namelen == targetlen
+      && (*CmpNRtn)( name, target, namelen ) == 0 ) {
         char    *buff;
 
         DUPSTR_STACK( buff, target, targetlen );
@@ -895,7 +650,7 @@ void MakeSymAlias( const char *name, size_t namelen, const char *target, size_t 
     if( IS_SYM_ALIAS( sym ) ) {
         LnkMsg( WRN+MSG_MULTIPLE_ALIASES, "S", sym );
         if( sym->info & SYM_FREE_ALIAS ) {
-            _LnkFree( sym->p.alias.u.ptr );
+            MemFree( sym->p.alias.u.ptr );
         }
     } else if( sym->info & SYM_DEFINED ) {
         return;                 // <--------- NOTE: premature return!!!!
@@ -910,8 +665,9 @@ void MakeSymAlias( const char *name, size_t namelen, const char *target, size_t 
 }
 
 void WeldSyms( symbol *src, symbol *targ )
-/****************************************/
-/* make all references to src refer to targ. (alias src to targ) */
+/*****************************************
+ * make all references to src refer to targ. (alias src to targ)
+ */
 {
     if( targ != NULL ) {
         SetSymAlias( src, targ->name.u.ptr, strlen( targ->name.u.ptr ) );
@@ -919,13 +675,15 @@ void WeldSyms( symbol *src, symbol *targ )
 }
 
 static symbol *GlobalSearchSym( const char *symname, unsigned hash, size_t len )
-/******************************************************************************/
-/* search through the given chain for the given name */
+/*******************************************************************************
+ * search through the given chain for the given name
+ */
 {
     symbol      *sym;
 
     for( sym = GlobalSymPtrs[hash]; sym != NULL; sym = sym->hash ) {
-        if( len == sym->namelen_cmp && (*CmpRtn)( symname, sym->name.u.ptr, len ) == 0 ) {
+        if( len == sym->namelen_cmp
+          && (*CmpNRtn)( symname, sym->name.u.ptr, len ) == 0 ) {
             break;
         }
     }
@@ -933,14 +691,16 @@ static symbol *GlobalSearchSym( const char *symname, unsigned hash, size_t len )
 }
 
 static symbol *StaticSearchSym( const char *symname, unsigned hash, size_t len )
-/******************************************************************************/
-/* search through the given chain for the given name */
+/*******************************************************************************
+ * search through the given chain for the given name
+ */
 {
     symbol      *sym;
 
     for( sym = StaticSymPtrs[hash]; sym != NULL; sym = sym->hash ) {
         if( sym->info & SYM_IN_CURRENT ) {
-            if( len == sym->namelen_cmp && memcmp( symname, sym->name.u.ptr, len ) == 0 ) {
+            if( len == sym->namelen_cmp
+              && memcmp( symname, sym->name.u.ptr, len ) == 0 ) {
                 break;
             }
         }
@@ -990,7 +750,8 @@ static symbol *DoSymOp( sym_flags symop, const char *symname, size_t length )
     DUPSTR_STACK( symname_dbg, symname, length );
 #endif
     DEBUG(( DBG_OLD, "SymOp( %d, %s, %d )", symop, symname_dbg, length ));
-    if( NameLen != 0 && NameLen < length ) {
+    if( NameLen
+      && NameLen < length ) {
         searchlen = NameLen;
     } else {
         searchlen = length;
@@ -1039,7 +800,8 @@ symbol *UnaliasSym( sym_flags symop, symbol *sym )
 /************************************************/
 {
     symbol *orig_sym = sym;
-    while( sym != NULL && IS_SYM_ALIAS( sym ) ) {
+    while( sym != NULL
+      && IS_SYM_ALIAS( sym ) ) {
         sym = DoSymOp( symop, sym->p.alias.u.ptr, sym->u.aliaslen );
         /* circular ref, may be a weak symbol ! */
         if( sym == orig_sym ) {
@@ -1061,8 +823,9 @@ symbol *SymOp( sym_flags symop, const char *symname, size_t length )
     }
     if( sym != NULL ) {
         if( symop & ST_DEFINE ) {
-            if( IS_SYM_ALIAS( sym ) && (sym->info & SYM_FREE_ALIAS) ) {
-                _LnkFree( sym->p.alias.u.ptr );
+            if( IS_SYM_ALIAS( sym )
+              && (sym->info & SYM_FREE_ALIAS) ) {
+                MemFree( sym->p.alias.u.ptr );
                 sym->info &= ~SYM_FREE_ALIAS;
             }
             sym->info |= SYM_DEFINED;
@@ -1086,7 +849,7 @@ void ReportMultiple( symbol *sym, const char *name, size_t len )
         lev = MILD_ERR;
         LinkState |= LS_UNDEFED_SYM_ERROR;
     }
-    if( CmpRtn( sym->name.u.ptr, name, len + 1 ) == 0 ) {
+    if( (*CmpNRtn)( sym->name.u.ptr, name, len + 1 ) == 0 ) {
         LnkMsg( LOC+lev+MSG_MULT_DEF, "S", sym );
     } else {
         LnkMsg( LOC+lev+MSG_MULT_DEF_BY, "12", sym->name.u.ptr, name );
@@ -1100,7 +863,7 @@ void ReportUndefined( void )
     symbol *    sym;
     unsigned    level;
 
-    for( sym = HeadSym; sym != NULL; sym = sym->link ) {
+    for( sym = HeadSym; sym != NULL; sym = sym->next ) {
         sym->info &= ~SYM_CLEAR_ON_P2;  // reset also floatin-point patch flags
         if( (sym->info & (SYM_DEFINED | SYM_IS_ALTDEF)) == 0 )  {
             if( LinkFlags & LF_UNDEFS_ARE_OK ) {
@@ -1191,7 +954,9 @@ static void CleanAltDefs( symbol *sym )
     symbol *    testring;
     symbol *    altsym;
 
-    if( IS_SYM_ALIAS( sym ) || (sym->info & SYM_DEAD) || sym->u.altdefs == NULL )
+    if( IS_SYM_ALIAS( sym )
+      || (sym->info & SYM_DEAD)
+      || sym->u.altdefs == NULL )
         return;
     testring = NULL;
     while( (altsym = RingPop( &sym->u.altdefs )) != NULL ) {
@@ -1211,7 +976,8 @@ static void UndefSymbol( symbol *sym )
 {
     ClearSymUnion( sym );
     SET_ADDR_UNDEFINED( sym->addr );
-    if( (sym->info & SYM_EXPORTED) == 0 && sym->e.def != NULL ) {
+    if( (sym->info & SYM_EXPORTED) == 0
+      && sym->e.def != NULL ) {
         sym->info = SYM_LAZY_REF | SYM_REFERENCED;
     } else {
         sym->info = SYM_REGULAR | SYM_REFERENCED;
@@ -1271,45 +1037,54 @@ static void WalkHashTables( void (*fn)(symbol **) )
 void PurgeSymbols( void )
 /******************************/
 {
-    symbol **   list;
-    symbol *    sym;
+    symbol      **owner;
+    symbol      *sym;
 
     WalkHashTables( PurgeHashTable );
     WalkHashTables( CleanupOldAltdefs );
-    for( list = &HeadSym; *list != NULL; ) {
-        sym = *list;
+    for( owner = &HeadSym; (sym = *owner) != NULL; ) {
         if( sym->info & SYM_KILL ) {
-            *list = sym->link;
+            *owner = sym->next;
             FreeSymbol( sym );
         } else if( sym->info & SYM_IS_ALTDEF ) {
-            *list = sym->link;          // gonna get rid of these later
+            *owner = sym->next;          // gonna get rid of these later
         } else {
-            if( IS_SYM_ALIAS( sym ) && (sym->info & SYM_WAS_LAZY) ) {
+            if( IS_SYM_ALIAS( sym )
+              && (sym->info & SYM_WAS_LAZY) ) {
                 WipeSym( sym );
                 sym->info = SYM_WEAK_REF | SYM_REFERENCED;
             }
             LastSym = sym;
-            list = &(*list)->link;
+            owner = &(*owner)->next;
         }
     }
 }
 
 void ConvertLazyRefs( void )
-/*********************************/
-/* go through all symbols, & turn lazy refs to aliases to default sym. */
+/***************************
+ * go through all symbols, & turn lazy refs to aliases to default sym.
+ *
+ * NOTE 1:
+ * this is done because of pure virtual functions.  A pure virtual function
+ * can be referenced with a vf reference coment, and never be defined, yet we
+ * still want this vf reference to have an effect on the vf elimination call
+ * graph.  So... we look at all undefed lazy refs that have been referenced
+ * by a vf reference coment, and add a bogus segdata to the graph to register
+ * the effects of this references
+ */
 {
     symbol *    defsym;
     symbol *    sym;
 
-    for( sym = HeadSym; sym != NULL; sym = sym->link ) {
+    for( sym = HeadSym; sym != NULL; sym = sym->next ) {
         if( IS_SYM_A_REF( sym ) ) {
             if( IS_SYM_VF_REF( sym ) ) {
                 defsym = *(sym->e.vfdata);
-                _LnkFree( sym->e.vfdata );
+                MemFree( sym->e.vfdata );
             } else {
                 defsym = sym->e.def;
-                if( sym->info & SYM_VF_MARKED ) {
-                    DefStripSym( sym, AllocSegData() ); // see note 1 below.
+                if( sym->info & SYM_1_VF_MARKED ) {
+                    DefStripSym( sym, AllocSegData() ); // see note 1 above.
                 }
             }
             WeldSyms( sym, defsym );
@@ -1322,16 +1097,6 @@ void ConvertLazyRefs( void )
         }
     }
 }
-
-/*
- * NOTE 1 for above function:
- * this is done because of pure virtual functions.  A pure virtual function
- * can be referenced with a vf reference coment, and never be defined, yet we
- * still want this vf reference to have an effect on the vf elimination call
- * graph.  So... we look at all undefed lazy refs that have been referenced
- * by a vf reference coment, and add a bogus segdata to the graph to register
- * the effects of this references
-*/
 
 static void MarkSymTraced( void *sym )
 /************************************/
@@ -1365,7 +1130,7 @@ void ConvertVFSym( symbol * sym )
     symbol *    defsym;
 
     defsym = *(sym->e.vfdata);
-    _LnkFree( sym->e.vfdata );
+    MemFree( sym->e.vfdata );
     sym->e.def = defsym;
     if( IS_SYM_PURE_REF( sym ) ) {
         SET_SYM_TYPE( sym, SYM_LAZY_REF );
@@ -1399,7 +1164,7 @@ group_entry *SymbolGroup( symbol *sym )
     if( IS_SYM_ALIAS( sym ) ) {
         group = NULL;
     } else if( IS_SYM_GROUP( sym ) ) {
-        for( group = Groups; group != NULL; group = group->next_group ) {
+        for( group = Groups; group != NULL; group = group->next ) {
             if( sym == group->sym ) {
                 break;
             }

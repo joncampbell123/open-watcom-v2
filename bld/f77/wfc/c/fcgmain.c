@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -32,14 +32,12 @@
 
 #include "ftnstd.h"
 #include "global.h"
-#include "wf77defs.h"
 #include "wf77aux.h"
 #include "fcodes.h"
 #include "cpopt.h"
 #include "fcgbls.h"
 #include "progsw.h"
 #include "cgflags.h"
-#include "wf77segs.h"
 #include "wf77labe.h"
 #include "wf77info.h"
 #include "compcfg.h"
@@ -161,11 +159,11 @@ static  void    CGStart( void )
         if( CGOpts & CGOPT_CONST_CODE ) {
             cg_target_opts |= CGSW_X86_CONST_IN_CODE;
         }
-        #if _CPU == 386
+    #if _CPU == 386
         if( OZOpts & OZOPT_O_BASE_PTR ) {
             cg_gen_opts |= CGSW_GEN_MEMORY_LOW_FAILS;
         }
-        #endif
+    #endif
 #endif
         if( OZOpts & OZOPT_O_SUPER_OPTIMAL ) {
             cg_gen_opts |= CGSW_GEN_SUPER_OPTIMAL;
@@ -396,11 +394,11 @@ void    FCodeSequence( void )
 {
     FCODE   f_code;
 
-    for(;;) {
+    for( ;; ) {
         f_code = GetFCode();
         if( f_code == FC_END_OF_SEQUENCE )
             break;
-        FCTablePtr[ f_code ]();
+        FCTablePtr[f_code]();
     }
 }
 
@@ -409,8 +407,8 @@ void    CGPurge( void )
 //=====================
 // Free up unallocated memory if code generator gave a fatal error.
 {
-    FiniLabels( 0 );
-    FiniLabels( FORMAT_LABEL );
+    FiniLabels( false );
+    FiniLabels( true );
     FiniTmps();
     FreeUsedBacks( false );
     FreeGlobalSegs();

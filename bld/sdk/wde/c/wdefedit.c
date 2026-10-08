@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -94,7 +94,9 @@ static bool     WdeEditDefineHook( HWND, UINT, WPARAM, LPARAM, DialogStyle );
 /* static variables                                                         */
 /****************************************************************************/
 static HINSTANCE                WdeApplicationInstance;
+#ifdef __WINDOWS__
 static DISPATCH_FN              *WdeEditDispatch;
+#endif
 static WdeDialogBoxControl      *WdeDefaultEdit = NULL;
 static int                      WdeEditWndExtra;
 static WNDPROC                  WdeOriginalEditProc;
@@ -131,7 +133,7 @@ OBJPTR WdeMakeEdit( OBJPTR parent, RECT *obj_rect, OBJPTR handle, DialogStyle st
 
     new = WdeEdCreate( parent, obj_rect, handle, id, WdeDefaultEdit );
 
-    WRMemFree( GETCTL_TEXT( WdeDefaultEdit ) );
+    MemFree( GETCTL_TEXT( WdeDefaultEdit ) );
     SETCTL_TEXT( WdeDefaultEdit, NULL );
 
     return( new );
@@ -149,13 +151,17 @@ OBJPTR WdeEdCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle,
         return( NULL );
     }
 
-    new = (WdeEditObject *)WRMemAlloc( sizeof( WdeEditObject ) );
+    new = MemAlloc( sizeof( WdeEditObject ) );
     if( new == NULL ) {
         WdeWriteTrail( "WdeEditCreate: Object malloc failed" );
         return( NULL );
     }
 
+#ifdef __WINDOWS__
     OBJ_DISPATCHER_SET( new, WdeEditDispatch );
+#else
+    OBJ_DISPATCHER_SET( new, WdeEditDispatcher );
+#endif
 
     new->object_id = id;
 
@@ -169,21 +175,21 @@ OBJPTR WdeEdCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle,
 
     if( new->control == NULL ) {
         WdeWriteTrail( "WdeEditCreate: CONTROL_OBJ not created!" );
-        WRMemFree( new );
+        MemFree( new );
         return( NULL );
     }
 
     if( !Forward( new->object_handle, SET_OBJECT_INFO, info, NULL ) ) {
         WdeWriteTrail( "WdeEditCreate: SET_OBJECT_INFO failed!" );
         Destroy( new->control, false );
-        WRMemFree( new );
+        MemFree( new );
         return( NULL );
     }
 
     if( !Forward( new->object_handle, CREATE_WINDOW, NULL, NULL ) ) {
         WdeWriteTrail( "WdeEditCreate: CREATE_WINDOW failed!" );
         Destroy( new->control, false );
-        WRMemFree( new );
+        MemFree( new );
         return( NULL );
     }
 
@@ -250,15 +256,18 @@ bool WdeEditInit( bool first )
     SETCTL_TEXT( WdeDefaultEdit, NULL );
     SETCTL_CLASSID( WdeDefaultEdit, ResNumToControlClass( CLASS_EDIT ) );
 
+#ifdef __WINDOWS__
     WdeEditDispatch = MakeProcInstance_DISPATCHER( WdeEditDispatcher, WdeGetAppInstance() );
-
+#endif
     return( true );
 }
 
 void WdeEditFini( void )
 {
     WdeFreeDialogBoxControl( &WdeDefaultEdit );
+#ifdef __WINDOWS__
     FreeProcInstance_DISPATCHER( WdeEditDispatch );
+#endif
 }
 
 bool WdeEditDestroy( WdeEditObject *obj, bool *flag, bool *p2 )
@@ -270,7 +279,7 @@ bool WdeEditDestroy( WdeEditObject *obj, bool *flag, bool *p2 )
         return( false );
     }
 
-    WRMemFree( obj );
+    MemFree( obj );
 
     return( true );
 }
@@ -297,7 +306,7 @@ bool WdeEditCopyObject( WdeEditObject *obj, WdeEditObject **new, OBJPTR handle )
         return( false );
     }
 
-    *new = (WdeEditObject *)WRMemAlloc( sizeof( WdeEditObject ) );
+    *new = MemAlloc( sizeof( WdeEditObject ) );
 
     if( *new == NULL ) {
         WdeWriteTrail( "WdeEditCopyObject: Object malloc failed" );
@@ -315,7 +324,7 @@ bool WdeEditCopyObject( WdeEditObject *obj, WdeEditObject **new, OBJPTR handle )
 
     if( !CopyObject( obj->control, &(*new)->control, (*new)->object_handle ) ) {
         WdeWriteTrail( "WdeEditCopyObject: Control not created!" );
-        WRMemFree( *new );
+        MemFree( *new );
         return( false );
     }
 

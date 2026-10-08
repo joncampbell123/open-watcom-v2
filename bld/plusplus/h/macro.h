@@ -33,12 +33,10 @@
 #define MACRO_H
 
 
-#define GetMacroParmCount(m)    ((m)->parm_count - 1)
-#define MacroWithParenthesis(m) ((m)->parm_count > 0)
+#define GetMacroParmCount(m)    ((m)->u.parm_count - 1)
+#define MacroWithParenthesis(m) ((m)->u.parm_count > 0)
 #define MacroIsSpecial(m)       ((m)->macro_defn == 0)
 #define MacroHasVarArgs(m)      ((m)->macro_flags & MFLAG_HAS_VAR_ARGS)
-
-typedef unsigned char   mac_parm_count;
 
 typedef enum {
     #define pick( s, i, f )    i,
@@ -95,8 +93,19 @@ typedef struct macro_entry {
     uint_16             macro_defn;     /* offset to defn, 0 ==> special macro name*/
     uint_16             macro_len;      /* length of macro definition */
     macro_flags         macro_flags;    /* flags */
-    mac_parm_count      parm_count;     /* special macro indicator if defn == 0 */
-    unsigned            : 0;            /* align macro_name to a DWORD boundary */
+    union {
+        /*
+         * be careful
+         * parm_count field is used specialy
+         * 0    macro without parenthesis
+         * 1    macro with parenhesis without parameters
+         * 2    macro with parenhesis with 1 parameter
+         * ...
+         * real parameters count is parm_count - 1
+         */
+        int             parm_count;     /* standard macro parameters count */
+        special_macros  special_macro;  /* special macro if defn == 0 */
+    } u;
     char                macro_name[1];  /* name,parms, and macro definition */
 } MEDEFN, *MEPTR;
 

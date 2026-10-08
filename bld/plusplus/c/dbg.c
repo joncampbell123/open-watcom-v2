@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -47,6 +47,7 @@
 #include "initdefs.h"
 #include "pragdefn.h"
 #include "togglesd.h"
+#include "floatsup.h"
 #include "dbg.h"
 #include "feprotos.h"
 
@@ -106,7 +107,7 @@ static void printToken(         // PRINT CURRENT TOKEN
     } else if( CurToken == T_CONSTANT ) {
         printf( "T_CONSTANT of type(%d) '%s'\n", ConstType, Buffer );
     } else {
-        printf( "'%s'\n", Tokens[CurToken] );
+        printf( "'%s'\n", TokenString[CurToken] );
     }
 }
 
@@ -137,11 +138,11 @@ void DumpMacPush(               // DUMP PUSH OF MACRO
 {
     const MEPTR mentry = (const MEPTR)p_mac; // - macro being pushed
     const char**args = (const char **)p_args;  // - arguments
-    unsigned count;
+    int count;
     if( TOGGLEDBG( dump_mtokens ) ) {
         printf( "Macro Push: %s", mentry->macro_name );
         if( !MacroIsSpecial( mentry ) && ( args != NULL ) ) {
-            count = mentry->parm_count;
+            count = mentry->u.parm_count;
             if( count == 1 ) {
                 printf( " = %s", *args );
             } else if( count > 0 ) {
@@ -159,16 +160,17 @@ void DumpMacPush(               // DUMP PUSH OF MACRO
 
 
 void DumpMDefn(                 // DUMP MACRO DEFINITION
-    char *p )                  // - definition
+    const char *p )             // - definition
 {
     int             c;
-    TOKEN           tok;
+    TOKEN           token;
+    const char      *fmt;
 
     if( p == NULL )
         return;
-    for( ; (tok = *(TOKEN *)p) != T_NULL; ) {
-        p += sizeof( TOKEN );
-        switch( tok ) {
+    for( ; (token = GET_MTOKEN( p )) != T_NULL; ) {
+        p += SIZE_MTOKEN;
+        switch( token ) {
         case T_CONSTANT:
             switch( *p++ ) {
             case TYP_FLOAT :
@@ -202,10 +204,16 @@ void DumpMDefn(                 // DUMP MACRO DEFINITION
             putchar( *p++ );
             break;
         case T_MACRO_PARM:
-            printf( "parm#%c", '1' + *p++ );
+            fmt = "parm#%d";
+            /* fall through */
+        case T_MACRO_VAR_PARM:
+            if( token == T_MACRO_VAR_PARM )
+                fmt = "varparm#%d";
+            printf( fmt, GET_MPARM( p ) );
+            p += SIZE_MPARM;
             break;
         default:
-            printf( "%s", Tokens[tok] );
+            printf( "%s", TokenString[token] );
             break;
         }
     }
@@ -1011,15 +1019,20 @@ void DbgDumpTokenLocn           // DUMP A TOKEN_LOCN
     TOKEN_LOCN const * locn;    // - the location
 
     locn = parm;
-    if( NULL == locn
-     || NULL == locn->src_file ) {
-        printf( " <No SrcFile Location>" );
-    } else {
+    if( locn != NULL
+     && locn->src_file != NULL ) {
         printf( " SrcFile(%s,%d-%d)"
               , SrcFileName( locn->src_file )
               , locn->line
               , locn->column
               );
+    } else {
+        /*
+         * handling internal symbols which have no location in source file
+         * in the future can be defined some derived location
+         * for now this handle missing symbol source file location
+         */
+        printf( " <No SrcFile Location>" );
     }
 }
 
@@ -1373,7 +1386,7 @@ void DumpInitInfo( void *v_info )
         case DT_BITFIELD:
             printf( "(BITFIELD)"
                     " mask"         F_HEX_4 F_EOL
-                  , info->u.b.mask
+                  , U64Low( info->u.b.mask )
                   );
             break;
         case DT_SCALAR:

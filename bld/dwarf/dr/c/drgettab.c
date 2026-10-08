@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -140,8 +140,8 @@ filetab_idx DR_IndexFile( dr_fileidx fileidx, file_table *tab )
     return( tab->tab[fileidx].u.idx.fnameidx );
 }
 
-char * DR_IndexFileName( filetab_idx ftidx, file_table *tab )
-/***********************************************************/
+char *DR_IndexFileName( filetab_idx ftidx, file_table *tab )
+/**********************************************************/
 {
     return( tab->tab[ftidx].u.name );
 }
@@ -246,15 +246,15 @@ void DR_ScanFileTable( drmem_hdl start, file_info *nametab, file_table *idxtab )
     DR_FiniFileTable( &curridxmap, false );
 }
 
-char * DR_FindFileName( dr_fileidx fileidx, drmem_hdl entry )
-/***********************************************************/
+char *DR_FindFileName( dr_fileidx fileidx, drmem_hdl entry )
+/**********************************************************/
 {
-    dr_cu_handle    compunit;
+    dr_cui_handle   cui;
     filetab_idx     ftidx;
 
     if( fileidx != 0 ) {
-        compunit = DR_FindCompileInfo( entry );
-        ftidx = DR_IndexFile( fileidx - 1, &compunit->filetab );
+        cui = DR_FindCompileInfo( entry );
+        ftidx = DR_IndexFile( fileidx - 1, &cui->filetab );
         return( DR_IndexFileName( ftidx, &DR_FileNameTable.fnametab ) );
     }
     return( NULL );

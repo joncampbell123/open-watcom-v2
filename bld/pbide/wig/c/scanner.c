@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2020 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -77,7 +77,7 @@ int wig_parse( void )
 static void addToTok( char ch )
 /*****************************/
 {
-    if( yyTextLen == yyTextSize ) {
+    if( yyTextSize == yyTextLen ) {
         yyTextSize += BUF_SIZE_INCREMENT;
         yyText = MemRealloc( yyText, yyTextSize );
     }
@@ -106,7 +106,7 @@ static int nextChar( void )
     if( ( c == EOF ) && errno ) {
         Error( FILE_READ_ERR, yyFileName );
     }
-    if( yyLineLen == yyLineSize ) {
+    if( yyLineSize == yyLineLen ) {
         yyLineSize += BUF_SIZE_INCREMENT;
         yyLine = MemRealloc( yyLine, yyLineSize );
     }
@@ -141,12 +141,12 @@ bool InitLex( char *fname )
 
     yyTextSize = BUF_SIZE_INCREMENT;
     yyTextLen = 0;
-    yyText = MemMalloc( BUF_SIZE_INCREMENT );
+    yyText = MemAlloc( BUF_SIZE_INCREMENT );
     *yyText = '\0';
 
     yyLineLen = 0;
     yyLineSize = 0;
-    yyLine = MemMalloc( BUF_SIZE_INCREMENT );
+    yyLine = MemAlloc( BUF_SIZE_INCREMENT );
     *yyLine = '\0';
 
     memset( idBuffer, 0, sizeof( idBuffer ) );
@@ -156,7 +156,7 @@ bool InitLex( char *fname )
     if( yyFhdl == NULL ) {
         Error( FILE_OPEN_ERR, fname );
     }
-    yyFileName = MemStrDup( fname );
+    yyFileName = MemStrdup( fname );
     return( false );
 }
 

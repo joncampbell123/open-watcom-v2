@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -95,7 +95,7 @@ static vi_rc createNewFile( const char *name, bool same_file )
         CurrentFile->dup_count++;
         SetFileWindowTitle( current_window_id, CurrentInfo, true );
         tmp = CurrentInfo;
-        CurrentInfo = MemAlloc( sizeof( *CurrentInfo ) );
+        CurrentInfo = MemAllocSafe( sizeof( *CurrentInfo ) );
         FTSRunCmds( name );
 
         rc = ERR_NO_ERR;
@@ -104,7 +104,7 @@ static vi_rc createNewFile( const char *name, bool same_file )
 
         crlf_reached = false;
         tmp = CurrentInfo;
-        CurrentInfo = MemAlloc( sizeof( *CurrentInfo ) );
+        CurrentInfo = MemAllocSafe( sizeof( *CurrentInfo ) );
         FTSRunCmds( name );
         height = editw_info.area.y2 - editw_info.area.y1 + 1;
 
@@ -281,13 +281,13 @@ file *FileAlloc( const char *name )
     /*
      * get new file entry
      */
-    cfile = MemAlloc( FILE_SIZE );
+    cfile = MemAllocSafe( FILE_SIZE );
 
     /*
      * initialize file info
      */
     if( name != NULL ) {
-        cfile->name = DupString( name );
+        cfile->name = MemStrdupSafe( name );
         GetCWD1( &(cfile->home) );
         MyGetFileSize( name, &(cfile->size) );
     }
@@ -309,8 +309,8 @@ file *FileAlloc( const char *name )
  */
 void FileFree( file *f )
 {
-    _MemFreeArray( f->name );
-    _MemFreeArray( f->home );
+    MemFree( f->name );
+    MemFree( f->home );
     MemFree( f );
 
 } /* FileFree */

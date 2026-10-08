@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -114,7 +114,7 @@ void WRERemoveMenuEditSession( WREMenuSession *session )
         if( session->info != NULL ) {
             WMenuFreeMenuInfo( session->info );
         }
-        WRMemFree( session );
+        MemFree( session );
     }
 }
 
@@ -129,12 +129,12 @@ WResID *WRECreateMenuTitle( void )
     name = NULL;
     text = AllocRCString( WRE_DEFMENUNAME );
     if( text != NULL ) {
-        title = (char *)WRMemAlloc( strlen( text ) + 20 + 1 );
+        title = MemAlloc( strlen( text ) + 20 + 1 );
         if( title != NULL ) {
             title[0] = '\0';
             sprintf( title, text, WRENumMenuTitles );
             name = WResIDFromStr( title );
-            WRMemFree( title );
+            MemFree( title );
         }
         FreeRCString( text );
     }
@@ -179,7 +179,7 @@ bool WREAddMenuToDir( WRECurrentResInfo *curr )
             rname = WRECreateMenuTitle();
             ok = (rname != NULL);
             if( ok ) {
-                ok = WRENewResource( curr, tname, rname, DEF_MEMFLAGS, 0, 0,
+                ok = WRENewResource( curr, tname, rname, DEFAULT_FLAGS_MP, 0, 0,
                                      &lang, &dup, RESOURCE2INT( RT_MENU ), tname_alloc );
                 if( !ok && dup ) {
                     ok = true;
@@ -187,7 +187,7 @@ bool WREAddMenuToDir( WRECurrentResInfo *curr )
                 num_retries++;
             }
             if( rname != NULL ) {
-                WRMemFree( rname );
+                MemFree( rname );
             }
         }
         if( dup ) {
@@ -200,7 +200,7 @@ bool WREAddMenuToDir( WRECurrentResInfo *curr )
     }
 
     if( tname_alloc ) {
-        WRMemFree( tname );
+        MemFree( tname );
     }
 
     return( ok );
@@ -238,7 +238,7 @@ bool WREEditMenuResource( WRECurrentResInfo *curr )
                     if( WREStartMenuSession( curr ) == NULL ) {
                         ok = false;
                     }
-                    WRMemFree( curr->lang->data );
+                    MemFree( curr->lang->data );
                     curr->lang->data = NULL;
                 }
             } else {
@@ -304,10 +304,10 @@ WREMenuSession *WREStartMenuSession( WRECurrentResInfo *curr )
 
     session->info->parent = WREGetMainWindowHandle();
     session->info->inst = WREGetAppInstance();
-    session->info->file_name = WREStrDup( WREGetQueryName( curr->info ) );
+    session->info->file_name = WREStrdup( WREGetQueryName( curr->info ) );
     session->info->res_name = WRECopyWResID( &curr->res->Info.ResName );
     session->info->lang = curr->lang->Info.lang;
-    session->info->MemFlags = curr->lang->Info.MemoryFlags;
+    session->info->res_flags = curr->lang->Info.res_flags;
     session->info->data_size = curr->lang->Info.Length;
     session->info->data = curr->lang->data;
     session->info->is32bit = curr->info->is32bit;
@@ -327,7 +327,7 @@ WREMenuSession *WREStartMenuSession( WRECurrentResInfo *curr )
         WREInsertObject( &WREMenuSessions, session );
     } else {
         WMenuFreeMenuInfo( session->info );
-        WRMemFree( session );
+        MemFree( session );
         session = NULL;
     }
 
@@ -358,12 +358,12 @@ bool WREGetMenuSessionData( WREMenuSession *session, bool close )
 
     if( ok && session->info->modified ) {
         if( session->lnode->data != NULL ) {
-            WRMemFree( session->lnode->data );
+            MemFree( session->lnode->data );
         }
         session->lnode->data = session->info->data;
         session->lnode->Info.lang = session->info->lang;
         session->lnode->Info.Length = (uint_32)session->info->data_size;
-        session->lnode->Info.MemoryFlags = session->info->MemFlags;
+        session->lnode->Info.res_flags = session->info->res_flags;
         session->lnode->Info.Offset = 0;
         session->info->data = NULL;
         session->info->data_size = 0;
@@ -467,7 +467,7 @@ WREMenuSession *WREAllocMenuSession( void )
 {
     WREMenuSession *session;
 
-    session = (WREMenuSession *)WRMemAlloc( sizeof( WREMenuSession ) );
+    session = MemAlloc( sizeof( WREMenuSession ) );
 
     if( session != NULL ) {
         memset( session, 0, sizeof( WREMenuSession ) );

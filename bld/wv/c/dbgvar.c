@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -39,7 +39,7 @@
 #include "dbgitem.h"
 #include "dlgvarx.h"
 #include "dbgvar.h"
-#include "dbgmem.h"
+#include "memfuncs.h"
 #include "wspawn.h"
 #include "dui.h"
 #include "strutil.h"
@@ -54,7 +54,7 @@
 #include "dbgparse.h"
 #include "dbgprog.h"
 #include "dipimp.h"
-#include "dipinter.h"
+#include "wvdipcli.h"
 #include "dbgreg.h"
 #include "addarith.h"
 #include "dbgevent.h"
@@ -265,7 +265,7 @@ static void VarDisplayFree( type_display *junk )
     for( prev = junk; prev->alias != junk; prev = prev->alias )
         ;
     prev->alias = junk->alias;
-    DbgFree( junk );
+    MemFree( junk );
 }
 
 void VarDisplayFini( void )
@@ -294,7 +294,7 @@ static type_display *VarDisplayAddType( type_display **owner, const char *name )
 {
     type_display        *new;
 
-    new = DbgAlloc( sizeof( *new ) + strlen( name ) );
+    new = MemAllocSafe( sizeof( *new ) + strlen( name ) );
     memset( new, 0, sizeof( *new ) );
     strcpy( new->name, name );
     while( *owner != NULL )
@@ -556,8 +556,8 @@ static var_node *NewNode( var_info *i, unsigned len )
     int         size;
 
     i->mem_lock = true;
-    size = sizeof( var_node ) + len;
-    new = DbgAlloc( size + type_SIZE );
+    size = sizeof( *new ) + len;
+    new = MemAlloc( size + type_SIZE );
     i->mem_lock = false;
     if( new == NULL ) {
         ErrorRet( ERR_NONE, LIT_ENG( ERR_NO_MEMORY_FOR_WINDOW ) );
@@ -785,8 +785,8 @@ static void     VarNodeFini( var_node *v )
         junk = v;
         v = v->next;
         ++count;
-        DbgFree( junk->value );
-        DbgFree( junk );
+        MemFree( junk->value );
+        MemFree( junk );
     }
 }
 
@@ -794,7 +794,7 @@ static void     VarNodeFini( var_node *v )
 #define MAX_EXPAND_ARRAY_ELEMENTS 100000
 
 static int ExpandArray( var_info *i, var_node *v,
-                         long elts, long start, long end )
+                         long num_elems, long start, long end )
 /*
     Allocate and fill in var_nodes for an array expansion
 */
@@ -807,15 +807,15 @@ static int ExpandArray( var_info *i, var_node *v,
 
     owner = &v->expand;
     count = 0;
-    if( elts > MAX_EXPAND_ARRAY_ELEMENTS ) {
-        elts = MAX_EXPAND_ARRAY_ELEMENTS;
-        Format( buff, LIT_ENG( WARN_ONLY_MAX_EXPAND_ARRAY_ELEMENTS ), elts );
+    if( num_elems > MAX_EXPAND_ARRAY_ELEMENTS ) {
+        num_elems = MAX_EXPAND_ARRAY_ELEMENTS;
+        Format( buff, LIT_ENG( WARN_ONLY_MAX_EXPAND_ARRAY_ELEMENTS ), num_elems );
         Warn( buff );
     }
     for( element = start; element <= end; ++element ) {
-        if( elts == 0 )
+        if( num_elems == 0 )
             break;
-        --elts;
+        --num_elems;
         new = NewNode( i, 0 );
         if( new == NULL )
             break;
@@ -949,7 +949,7 @@ bool    VarExpand( var_info *i, var_node *v, long start, long end )
 */
 {
     bool                ok;
-    unsigned long       elts;
+    unsigned long       num_elems;
     alloc_field_info    d;
     array_info          ainfo;
 
@@ -962,7 +962,7 @@ bool    VarExpand( var_info *i, var_node *v, long start, long end )
     ok = true;
     switch( ExprSP->ti.kind ) {
     case TK_STRUCT:
-        ok = SpawnP( PushFirstField, ExprSP->th ) == 0;
+        ok = SpawnP( PushFirstField, (wspawn_parm)ExprSP->th ) == 0;
         if( ok )
             PopEntry();
         break;
@@ -998,8 +998,8 @@ bool    VarExpand( var_info *i, var_node *v, long start, long end )
                 }
             }
         } else {
-            elts = end - start + 1;
-            ExpandArray( i, v, elts, start, end );
+            num_elems = end - start + 1;
+            ExpandArray( i, v, num_elems, start, end );
             v->fake_array = true;
         }
         break;
@@ -1013,12 +1013,12 @@ bool    VarExpand( var_info *i, var_node *v, long start, long end )
     case TK_ARRAY:
         if( end < start ) {
             DIPTypeArrayInfo( ExprSP->th, ExprSP->lc, &ainfo, NULL );
-            elts = ainfo.num_elts;
+            num_elems = ainfo.num_elems;
         } else {
-            elts = end - start + 1;
+            num_elems = end - start + 1;
             v->fake_array = true;
         }
-        ExpandArray( i, v, elts, start, end );
+        ExpandArray( i, v, num_elems, start, end );
         break;
     }
     return( true );
@@ -1401,7 +1401,7 @@ static var_node *DoVarFindRow( var_info *i, int row )
         return( NULL );
     v = VarFindRoot( i, row, &skipped );
     TargRow -= skipped;
-    if( SpawnP( VarScanForward, v ) != 0 ) {
+    if( SpawnP( VarScanForward, (wspawn_parm)v ) != 0 ) {
         VarError = true;
         return( NULL );
     }
@@ -1573,12 +1573,13 @@ void    VarBuildName( var_info *info, var_node *v, bool just_end_bit )
         switch( v->path->node_type ) {
         case NODE_FIELD:
             if( VarError || !FindField( field, v->path ) ) {
-                name = LIT_ENG( field );
                 len = strlen( LIT_ENG( field ) );
+                _AllocA( name, len + 1 );
+                strcpy( name, LIT_ENG( field ) );
             } else {
                 len = DIPSymName( field, NULL, SNT_SOURCE, NULL, 0 );
-                _AllocA( name, len+1 );
-                DIPSymName( field, NULL, SNT_SOURCE, name, len+1 );
+                _AllocA( name, len + 1 );
+                DIPSymName( field, NULL, SNT_SOURCE, name, len + 1 );
             }
             if( delay_indirect ) {
                 prio = AddToName( T_SSL_SPEC_POINTER_FIELD, name, len, prio );
@@ -1841,8 +1842,8 @@ void VarDelete( var_info *i, var_node *v )
         owner = &(*owner)->next;
     }
     *owner = v->next;
-    DbgFree( v->value );
-    DbgFree( v );
+    MemFree( v->value );
+    MemFree( v );
 }
 
 
@@ -1958,14 +1959,19 @@ void VarDisplaySetPointer( var_node *v )
     VarSetType( v, 0, 0, 0, 0, 1 );
 }
 
+static void _BreakOnExprSP( void *comment )
+{
+    BreakOnExprSP( comment );
+}
+
 void VarBreakOnWrite( var_info *i, var_node *v )
 {
     char                *name;
 
     VarBuildName( i, v, false );
-    name = DupStr( TxtBuff );
-    SpawnP( BreakOnExprSP, name );
-    DbgFree( name );
+    name = MemStrdupSafe( TxtBuff );
+    SpawnP( _BreakOnExprSP, (wspawn_parm)name );
+    MemFree( name );
 }
 
 void VarAddWatch( var_info *i, var_node *v )
@@ -2111,7 +2117,7 @@ static char *Append( char *end, char *p, char *str )
 }
 
 static char *VarDisplayTop( char *p, char *end, var_info *i, type_display *type )
-/********************************************************************************/
+/*******************************************************************************/
 {
     bool        comma, dotted;
 
@@ -2123,7 +2129,7 @@ static char *VarDisplayTop( char *p, char *end, var_info *i, type_display *type 
                 p = Append( end, p, ", " );
             FreezeStack();
             DupStack();
-            dotted = ( SpawnPP( DotNamedField, ExprSP->th, type->name ) == 0 );
+            dotted = ( SpawnPP( DotNamedField, (wspawn_parm)ExprSP->th, (wspawn_parm)type->name ) == 0 );
             if( !dotted ) {
                 UnFreezeStack( true );
                 continue;
@@ -2142,10 +2148,10 @@ static char *VarDisplayTop( char *p, char *end, var_info *i, type_display *type 
     return( Append( end, p, " }" ) );
 }
 
-char *VarGetValue( var_info *i, var_node *v )
+const char *VarGetValue( var_info *i, var_node *v )
 {
     mad_radix           old_radix;
-    char                *value;
+    const char          *value;
     char                buff[TXT_LEN];
     char                *p, *end;
 
@@ -2165,7 +2171,6 @@ char *VarGetValue( var_info *i, var_node *v )
     if( VarError ) {
         value = LIT_ENG( Quest_Marks );
     } else {
-        value = " ";
         switch( ExprSP->ti.kind ) {
         case TK_POINTER:
             FreezeStack();
@@ -2173,39 +2178,37 @@ char *VarGetValue( var_info *i, var_node *v )
             if( v->display_type != NULL &&
                 v->display_type->has_top && PointerToStruct() ) {
                 VarDisplayTop( buff, buff + TXT_LEN, i, v->display_type );
-                strcpy( TxtBuff, buff );
-                value = TxtBuff;
             } else {
-                value = TxtBuff;
-                VarPrintValue( TxtBuff, TXT_LEN, i, v->display, v->is_string );
+                VarPrintValue( buff, TXT_LEN, i, v->display, v->is_string );
             }
+            value = strcpy( TxtBuff, buff );
             UnFreezeStack( true );
             break;
         case TK_STRUCT:
             if( v->display_type != NULL && v->display_type->has_top ) {
                 VarDisplayTop( buff, buff + TXT_LEN, i, v->display_type );
-                strcpy( TxtBuff, buff );
-                value = TxtBuff;
+                value = strcpy( TxtBuff, buff );
             } else {
-                end = TxtBuff+TXT_LEN;
-                p = TxtBuff;
+                end = buff + TXT_LEN;
+                p = buff;
                 p = Append( end, p, "(" );
-                p = VarDisplayType( v, p, TXT_LEN-2 );
+                p = VarDisplayType( v, p, TXT_LEN - 2 );
                 if( p == NULL ) {
                     value = LIT_ENG( Struct );
                 } else {
                     p = Append( end, p, ")" );
-                    value = TxtBuff;
+                    value = strcpy( TxtBuff, buff );
                 }
             }
             break;
         case TK_ARRAY:
             if( ( v->display & VARDISP_STRING ) ) {
-                value = TxtBuff;
-                PrintAString( i, TxtBuff, TXT_LEN, true );
+                PrintAString( i, buff, TXT_LEN, true );
+                value = strcpy( TxtBuff, buff );
             } else if( v->is_string ) {
-                value = TxtBuff;
-                if( !PrintAString( i, TxtBuff, TXT_LEN, false ) ) {
+                if( PrintAString( i, buff, TXT_LEN, false ) ) {
+                    value = strcpy( TxtBuff, buff );
+                } else {
                     value = LIT_ENG( Array );
                 }
             } else {
@@ -2213,8 +2216,8 @@ char *VarGetValue( var_info *i, var_node *v )
             }
             break;
         default:
-            value = TxtBuff;
-            VarPrintValue( TxtBuff, TXT_LEN, i, v->display, v->is_string );
+            VarPrintValue( buff, TXT_LEN, i, v->display, v->is_string );
+            value = strcpy( TxtBuff, buff );
             break;
         }
     }
@@ -2227,8 +2230,8 @@ void VarSetValue( var_node *v, const char *value )
 {
     if( v->value_valid )
         return;
-    DbgFree( v->value );
-    v->value = DupStr( value );
+    MemFree( v->value );
+    v->value = MemStrdupSafe( value );
     v->value_valid = true;
 }
 
@@ -2265,7 +2268,7 @@ static scope_state *NilScope( void )
 {
     scope_state *s;
 
-    s = DbgMustAlloc( sizeof( scope_state ) );
+    s = MemAllocSafe( sizeof( *s ) );
     memset( s, 0, sizeof( *s ) );
     InitMappableAddr( &s->scope );
     s->scope.addr = NilAddr;
@@ -2364,8 +2367,8 @@ static void VarFreeScopeList( var_info *i, scope_state *junk )
     *owner = junk->next;
     VarNodeFini( junk->v );
     FiniMappableAddr( &junk->scope );
-    DbgFree( junk->wnd_data );
-    DbgFree( junk );
+    MemFree( junk->wnd_data );
+    MemFree( junk );
     for( s = i->s; s != NULL; s = s->next ) {
         if( s->outer == junk ) {
             s->outer = NULL;

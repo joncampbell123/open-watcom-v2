@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2020 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -41,21 +41,22 @@
 #include "reserr.h"
 #include "wresrtns.h"
 
-bool ResWriteVerBlockHeader( VerBlockHeader * head, bool use_unicode, WResTargetOS res_os, FILE *fp )
-/***************************************************************************************************/
-/* Writes the header, correcting it for 32 bit alligning */
+bool ResWriteVerBlockHeader( VerBlockHeader * head, bool iswin32, FILE *fp )
+/***************************************************************************
+ * Writes the header, correcting it for 32 bit alligning
+ */
 {
     bool        error;
 
-    error = ResWriteUint16( head->Size, fp );
+    error = ResWriteUint16( fp, head->Size );
     if( !error ) {
-        error = ResWriteUint16( head->ValSize, fp );
+        error = ResWriteUint16( fp, head->ValSize );
     }
-    if( !error && res_os == WRES_OS_WIN32 ) {
-        error = ResWriteUint16( head->Type, fp );
+    if( !error && iswin32 ) {
+        error = ResWriteUint16( fp, head->Type );
     }
     if( !error ) {
-        error = ResWriteString( head->Key, use_unicode, fp );
+        error = ResWriteString( head->Key, iswin32, fp );
     }
     if( !error ) {
         error = ResWritePadDWord( fp );
@@ -64,18 +65,17 @@ bool ResWriteVerBlockHeader( VerBlockHeader * head, bool use_unicode, WResTarget
     return( error );
 }
 
-size_t ResSizeVerBlockHeader( VerBlockHeader *head, bool use_unicode, WResTargetOS res_os )
-/*****************************************************************************************/
+size_t ResSizeVerBlockHeader( VerBlockHeader *head, bool iswin32 )
+/****************************************************************/
 {
     size_t      key_size;
     size_t      padding;
     size_t      fixed_size;
 
     key_size = strlen( head->Key ) + 1;
-    if( use_unicode )
-        key_size *= 2;
-    if( res_os == WRES_OS_WIN32 ) {
+    if( iswin32 ) {
         /* the NT key field begins 2 bytes from a 32 bit boundary */
+        key_size *= 2;
         padding = RES_PADDING_DWORD( key_size + 2 );
         fixed_size = 3 * sizeof( uint_16 );
     } else {
@@ -85,26 +85,26 @@ size_t ResSizeVerBlockHeader( VerBlockHeader *head, bool use_unicode, WResTarget
     return( fixed_size + key_size + padding );
 }
 
-bool ResWriteVerValueItem( VerValueItem *item, bool use_unicode, FILE *fp )
-/*************************************************************************/
+bool ResWriteVerValueItem( VerValueItem *item, bool iswin32, FILE *fp )
+/*********************************************************************/
 {
     bool            error;
 
     error = false;
     if( item->IsNum ) {
-        error = ResWriteUint16( item->Value.Num, fp );
+        error = ResWriteUint16( fp, item->Value.Num );
     } else {
         if( item->strlen == VER_CALC_SIZE ) {
-            error = ResWriteString( item->Value.String, use_unicode, fp );
+            error = ResWriteString( item->Value.String, iswin32, fp );
         } else {
-            error = ResWriteStringLen( item->Value.String, use_unicode, fp, item->strlen );
+            error = ResWriteStringLen( item->Value.String, item->strlen, iswin32, false, fp );
         }
     }
     return( error );
 }
 
-size_t ResSizeVerValueItem( VerValueItem * item, bool use_unicode )
-/*****************************************************************/
+size_t ResSizeVerValueItem( VerValueItem * item, bool iswin32 )
+/*************************************************************/
 {
     size_t  size;
 
@@ -116,10 +116,10 @@ size_t ResSizeVerValueItem( VerValueItem * item, bool use_unicode )
         } else {
             size = item->strlen + 1;
         }
-        if( use_unicode ) {
-            size = ConvToUnicode( size, item->Value.String, NULL );
+        if( iswin32 ) {
+            size = ConvToUnicode( item->Value.String, size, NULL, 0 );
         } else {
-            size = ConvToMultiByte( size, item->Value.String, NULL );
+            size = ConvToMultiByte( item->Value.String, size, NULL, 0 );
         }
     }
     return( size );

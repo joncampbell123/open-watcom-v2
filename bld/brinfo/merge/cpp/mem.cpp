@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2019 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -41,29 +41,30 @@
 
 #include <malloc.h>
 //#include <dr.h>       //include only for the browser
-#ifdef TRACKER
-extern "C" {
-#include "trmem.h"
-}
-#include "io.h"
-#include "fcntl.h"
-#ifdef __WINDOWS__
-#define TRMEM_NO_STDOUT
-#define STRICT
-#include <windows.h>
-#endif
-#ifdef __OS2__
-#define TRMEM_NO_STDOUT
-#define INCL_PM
-#include <os2.h>
+#ifdef TRMEM
+    #include "trmem.h"
+    #include "io.h"
+    #include "fcntl.h"
+  #ifdef __WINDOWS__
+    #define TRMEM_NO_STDOUT
+    #define STRICT
+    #include <windows.h>
+  #endif
+  #ifdef __OS2__
+    #define TRMEM_NO_STDOUT
+    #define INCL_PM
+    #include <os2.h>
+  #endif
 #endif
 
+
+#ifdef TRMEM
 
 #pragma initialize  40;
 
 static unsigned     NumMessages = 0;
 static _trmem_hdl   TrHdl;
-static FILE         *TrFileHandle = NULL;
+static FILE         *TrFile = NULL;
 
 struct Memory
 {
@@ -77,25 +78,21 @@ void PrintLine( void *parm, const char *buf, size_t len )
 {
     /* unused parameters */ (void)parm; (void)len;
 
-    if( TrFileHandle != NULL ) {
-        fprintf( TrFileHandle, "%s\n", buf );
+    if( TrFile != NULL ) {
+        fprintf( TrFile, "%s\n", buf );
     }
     NumMessages++;
 }
-#endif
+
+#endif /* TRMEM */
 
 void *operator new( size_t size )
 /*******************************/
 {
     void *p;
-#ifdef TRACKER
-    _trmem_who  caller;
-
-    caller = _trmem_guess_who();
-#endif
 
 //  for(;;) {
-#ifdef TRACKER
+#ifdef TRMEM
         p = _trmem_alloc( size, _trmem_guess_who(), TrHdl );
 #else
         p = malloc( size );
@@ -113,14 +110,9 @@ void * WBRAlloc( size_t size )
 // calling functions when the memory tracker is in.
 {
     void *p;
-#ifdef TRACKER
-    _trmem_who  caller;
-
-    caller = _trmem_guess_who();
-#endif
 
 //    for(;;) {
-#ifdef TRACKER
+#ifdef TRMEM
         p = _trmem_alloc( size, _trmem_guess_who(), TrHdl );
 #else
         p = malloc( size );
@@ -135,15 +127,9 @@ void * WBRRealloc( void * p, size_t size )
 // note: code cloned from above since we need to be able to trace
 // calling functions when the memory tracker is in.
 {
-#ifdef TRACKER
-    _trmem_who  caller;
-
-    caller = _trmem_guess_who();
-#endif
-
 //    for(;;) {
-#ifdef TRACKER
-        p = _trmem_realloc( p, size, caller, TrHdl );
+#ifdef TRMEM
+        p = _trmem_realloc( p, size, _trmem_guess_who(), TrHdl );
 #else
         p = realloc( p, size );
 #endif
@@ -155,8 +141,9 @@ void * WBRRealloc( void * p, size_t size )
 void WBRFree( void *p )
 /*********************/
 {
-    if( p == NULL ) return;
-#ifdef TRACKER
+    if( p == NULL )
+        return;
+#ifdef TRMEM
     _trmem_free( p, _trmem_guess_who(), TrHdl );
 #else
     free( p );
@@ -168,25 +155,25 @@ void WBRFree( void *p )
 void operator delete( void *p )
 /*****************************/
 {
-    if( p == NULL ) return;
-#ifdef TRACKER
+    if( p == NULL )
+        return;
+#ifdef TRMEM
     _trmem_free( p, _trmem_guess_who(), TrHdl );
 #else
     free( p );
 #endif
 }
 
-#ifdef TRACKER
+#ifdef TRMEM
 Memory::Memory()
 /**************/
 {
-    TrHdl = _trmem_open( malloc, free, realloc, NULL, NULL, PrintLine,
-            _TRMEM_ALLOC_SIZE_0 | _TRMEM_REALLOC_SIZE_0 | _TRMEM_REALLOC_NULL |
-            _TRMEM_FREE_NULL | _TRMEM_OUT_OF_MEMORY | _TRMEM_CLOSE_CHECK_FREE );
+    TrHdl = _trmem_open( malloc, free, realloc, _TRMEM_NO_STRDUP,
+                            NULL, PrintLine, _TRMEM_DEF );
 #ifdef TRMEM_NO_STDOUT
-    TrFileHandle = fopen( "tracker.txt", "w" );
+    TrFile = fopen( "tracker.txt", "w" );
 #else
-    TrFileHandle = stdout;
+    TrFile = stdout;
 #endif
 }
 
@@ -196,7 +183,7 @@ Memory::~Memory()
     _trmem_prt_list( TrHdl );
     _trmem_close( TrHdl );
 #ifdef TRMEM_NO_STDOUT
-    fclose( TrFileHandle );
+    fclose( TrFile );
     if( NumMessages > 1 ) {
 #ifdef __WINDOWS__
         MessageBox ( NULL, "memory problems detected", "Memory Tracker",
@@ -208,6 +195,6 @@ Memory::~Memory()
 #endif
     }
 #endif
-    TrFileHandle = NULL;
+    TrFile = NULL;
 }
 #endif

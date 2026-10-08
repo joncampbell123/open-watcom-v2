@@ -30,14 +30,13 @@
 
 
 #include "variety.h"
+#include "seterrno.h"
 #include <stddef.h>
 #include <termios.h>
 #ifdef __LINUX__
     #include <sys/ioctl.h>
 #else
 #endif
-#include "rterrno.h"
-#include "seterrno.h"
 #include "thread.h"
 
 
@@ -47,7 +46,7 @@ _WCRTLINK int tcsetattr( int fd, int actions, const struct termios *termios_p )
     int cmd;
 
     if( termios_p == NULL ) {
-        return( __set_EINVAL() );
+        return( lib_set_EINVAL() );
     }
 
     switch( actions ) {
@@ -61,11 +60,11 @@ _WCRTLINK int tcsetattr( int fd, int actions, const struct termios *termios_p )
         cmd = TCSETSF;
         break;
     default:
-        return( __set_EINVAL() );
+        return( lib_set_EINVAL() );
     }
 
     return( ioctl( fd, cmd, termios_p ) );
 #else
-    return( __set_EINVAL() );
+    return( lib_set_EINVAL() );
 #endif
 }

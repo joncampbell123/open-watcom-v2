@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -69,9 +69,9 @@ bool GUIXCloseToolBar( gui_window *wnd )
             for( i = 0; i < tbar->num_items; i++ ) {
                 _wpi_deletebitmap( tbar->hbitmaps[i] );
             }
-            GUIMemFree( tbar->hbitmaps );
+            MemFree( tbar->hbitmaps );
         }
-        GUIMemFree( tbar );
+        MemFree( tbar );
         if( (wnd->flags & DOING_DESTROY) == 0 ) {
             GUIResizeBackground( wnd, true );
         }
@@ -247,17 +247,17 @@ bool GUIXCreateToolBarWithTips( gui_window *wnd, bool fixed, gui_ord in_height,
     if( wnd->tbar != NULL ) {
         GUICloseToolBar( wnd );
     }
-    tbar = wnd->tbar = (toolbarinfo *)GUIMemAlloc( sizeof( toolbarinfo ) );
+    wnd->tbar = tbar = MemAlloc( sizeof( *tbar ) );
     if( tbar == NULL ) {
         return( false );
     }
     num_items = toolinfo->num_items;
-    memset( tbar, 0, sizeof( toolbarinfo ) );
+    memset( tbar, 0, sizeof( *tbar ) );
     parent = wnd->root;
     tbar->fixed_wpi_rect = wnd->hwnd_client_rect;
-    tbar->hbitmaps = (WPI_HBITMAP *)GUIMemAlloc( num_items * sizeof( WPI_HBITMAP ) );
+    tbar->hbitmaps = MemAlloc( sizeof( *tbar->hbitmaps ) * num_items );
     if( tbar->hbitmaps == NULL ) {
-        GUIMemFree( tbar );
+        MemFree( tbar );
         wnd->tbar = NULL;
         return( false );
     }

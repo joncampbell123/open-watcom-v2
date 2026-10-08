@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -39,6 +39,7 @@
 
 #define WHPCVT_GBL
 #include "whpcvt.h"
+#include "trmem.h"
 
 #include "clibint.h"
 #include "clibext.h"
@@ -47,6 +48,8 @@
 #define HELP_PREFIX     "HLP_"
 
 #define BUF_GROW        150
+
+#define OPT_MAX_SIZE    200
 
 #define ARG_DEFS() \
     pick( ARG_I,    "i" ) \
@@ -208,11 +211,11 @@ static const char *Help_info[] = {
     "     - Each option must be on a separate line",
     "  Default <in_file> extension is .whp",
     "  Default <out_file> extension is",
-    "     for RTF:           " EXT_OUTRTF_FILE,
-    "     for OS/2 IPF:      " EXT_OUTIPF_FILE,
-    "     for Dos Infobench: " EXT_OUTIB_FILE,
-    "     for HTML:          " EXT_OUTHTML_FILE,
-    "     for wiki:          " EXT_OUTWIKI_FILE,
+    "     for RTF:           " FEXT_RTF,
+    "     for OS/2 IPF:      " FEXT_IPF,
+    "     for Dos Infobench: " FEXT_IB,
+    "     for HTML:          " FEXT_HTM,
+    "     for wiki:          " FEXT_WIKI,
     NULL
 };
 
@@ -278,6 +281,19 @@ static int          List_level = 0;
 
 static tab_size     tabs_list[MAX_TABS];
 static int          tabs_num = 0;
+
+#ifdef TRMEM
+
+static _trmem_hdl   TrHdl = _TRMEM_HDL_NONE;
+
+static void memPrintLine( void *fh, const char *buf, size_t len )
+{
+    /* unused parameters */ (void)fh; (void)len;
+
+    printf( "%s\n", buf );
+}
+
+#endif  /* TRMEM */
 
 static void print_help( void )
 /****************************/
@@ -348,31 +364,99 @@ void warning_msg( const char *msg, int line_num )
     printf( "*** WARNING: %s on line %d.\n", msg, line_num );
 }
 
-
-void *check_alloc( size_t size )
-/******************************/
+static void  MemInit( void )
+/**************************/
 {
-    void                *p;
-
-    p = malloc( size );
-
-    if( p == NULL && size != 0) {
-        error_err( ERR_NO_MEMORY );
-    }
-
-    return( p );
+#ifdef TRMEM
+    TrHdl = _trmem_open( malloc, free, realloc, strdup,
+            NULL, memPrintLine, _TRMEM_DEF );
+#endif
 }
 
-void *check_realloc( void *ptr, size_t size )
+static void  MemFini( void )
+/**************************/
+{
+#ifdef TRMEM
+    _trmem_prt_usage( TrHdl );
+    _trmem_prt_list( TrHdl );
+    _trmem_close( TrHdl );
+#endif
+}
+
+static void *check_nomem( void *ptr )
+{
+    if( ptr == NULL ) {
+        error_err( ERR_NO_MEMORY );
+        exit( 1 );
+    }
+    return( ptr );
+}
+
+TRMEMAPI( MemAllocSafe )
+void  *MemAllocSafe( size_t size )
+/********************************/
+{
+#ifdef TRMEM
+    return( check_nomem( _trmem_alloc( size, _TRMEM_WHO( 1 ), TrHdl ) ) );
+#else
+    return( check_nomem( malloc( size ) ) );
+#endif
+}
+
+TRMEMAPI( MemAlloc )
+void  *MemAlloc( size_t size )
+/********************************/
+{
+#ifdef TRMEM
+    return( _trmem_alloc( size, _TRMEM_WHO( 2 ), TrHdl ) );
+#else
+    return( malloc( size ) );
+#endif
+}
+
+TRMEMAPI( MemReallocSafe )
+void  *MemReallocSafe( void *p, size_t size )
 /*******************************************/
 {
-    ptr = realloc( ptr, size );
+#ifdef TRMEM
+    return( check_nomem( _trmem_realloc( p, size, _TRMEM_WHO( 3 ), TrHdl ) ) );
+#else
+    return( check_nomem( realloc( p, size ) ) );
+#endif
+}
 
-    if( ptr == NULL && size != 0 ) {
-        error_err( ERR_NO_MEMORY );
-    }
+TRMEMAPI( MemRealloc )
+void  *MemRealloc( void *p, size_t size )
+/***************************************/
+{
+#ifdef TRMEM
+    return( _trmem_realloc( p, size, _TRMEM_WHO( 4 ), TrHdl ) );
+#else
+    return( realloc( p, size ) );
+#endif
+}
 
-    return( ptr );
+TRMEMAPI( MemStrdupSafe )
+char *MemStrdupSafe( const char *str )
+{
+    if( str == NULL )
+        return( NULL );
+#ifdef TRMEM
+    return( check_nomem( _trmem_strdup( str, _TRMEM_WHO( 5 ), TrHdl ) ) );
+#else
+    return( check_nomem( strdup( str ) ) );
+#endif
+}
+
+TRMEMAPI( MemFree )
+void  MemFree( void *ptr )
+/************************/
+{
+#ifdef TRMEM
+    _trmem_free( ptr, _TRMEM_WHO( 6 ), TrHdl );;
+#else
+    free( ptr );
+#endif
 }
 
 static void check_brace( const char *str, size_t len )
@@ -448,7 +532,7 @@ void whp_fprintf( FILE *fp, const char *fmt, ... )
     va_list         args;
 
     if( Chk_buf == NULL ) {
-        _new( Chk_buf, 10000 );
+        Chk_buf = MemAllocSafe( 10000 );
     }
 
     if( Chk_buf != NULL ) {
@@ -482,7 +566,7 @@ static char *normalize_fname( char *file, const char *name, const char *fext )
     } else {
         len = strlen( name ) + 1;
     }
-    file = realloc( file, len );
+    file = MemRealloc( file, len );
     strcpy( file, name );
 #ifndef __UNIX__
     for( slash = file; (slash = strchr( slash, '/' )) != NULL; slash++ ) {
@@ -675,8 +759,7 @@ static int process_args( int argc, char *argv[] )
             case ARG_TL:
                 start_arg++;
                 if( start_arg < argc ) {
-                    _new( Ipf_or_Html_title, strlen( argv[start_arg] ) + 1 );
-                    strcpy( Ipf_or_Html_title, argv[start_arg] );
+                    Ipf_or_Html_title = MemStrdupSafe( argv[start_arg] );
                 } else {
                     error_err( ERR_BAD_ARGS );
                 }
@@ -687,8 +770,7 @@ static int process_args( int argc, char *argv[] )
             case ARG_DT:
                 start_arg++;
                 if( start_arg < argc ) {
-                    _new( IB_def_topic, strlen( argv[start_arg] ) + 1 );
-                    strcpy( IB_def_topic, argv[start_arg] );
+                    IB_def_topic = MemStrdupSafe( argv[start_arg] );
                 } else {
                     error_err( ERR_BAD_ARGS );
                 }
@@ -696,8 +778,7 @@ static int process_args( int argc, char *argv[] )
             case ARG_DS:
                 start_arg++;
                 if( start_arg < argc ) {
-                    _new( IB_help_desc, strlen( argv[start_arg] ) + 1 );
-                    strcpy( IB_help_desc, argv[start_arg] );
+                    IB_help_desc = MemStrdupSafe( argv[start_arg] );
                 } else {
                     error_err( ERR_BAD_ARGS );
                 }
@@ -775,7 +856,7 @@ static int valid_args( int argc, char *argv[] )
 {
     int                 start_arg;
     FILE                *opt_file;
-    char                line[200];
+    char                line[OPT_MAX_SIZE];
     int                 ret;
     int                 i;
 
@@ -826,36 +907,32 @@ static int valid_args( int argc, char *argv[] )
     for( ;; ) {
         if( Options_File != NULL ) {
             opt_file = fopen( Options_File, "r" );
+            MemFree( Options_File );
+            Options_File = NULL;
             if( opt_file == NULL ) {
                 return( -1 );
             }
             for( argc = 0 ;; argc++ ) {
-                if( fgets( line, sizeof( line ), opt_file ) == NULL ) {
+                if( fgets( line, OPT_MAX_SIZE, opt_file ) == NULL ) {
                     break;
                 }
             }
-            fclose( opt_file );
-            opt_file = fopen( Options_File, "r" );
-
-            free( Options_File );
-            Options_File = NULL;
-
-            _new( argv, argc );
-            for( argc = 0;; argc++ ) {
-                if( fgets( line, sizeof( line ), opt_file ) == NULL ) {
+            rewind( opt_file );
+            argv = MemAllocSafe( argc * sizeof( *argv ) );
+            for( i = 0; i < argc; ++i ) {
+                if( fgets( line, OPT_MAX_SIZE, opt_file ) == NULL ) {
                     break;
                 }
-                line[sizeof( line ) - 1] = '\0';
+                line[strcspn( line, "\r\n" )] = '\0';
                 trim_blanks( line );
-                _new( argv[argc], strlen( line ) + 1 );
-                strcpy( argv[argc], line );
+                argv[i] = MemStrdupSafe( line );
             }
             fclose( opt_file );
             ret = process_args( argc, argv );
             for( i = 0 ; i < argc; i++ ) {
-                free( argv[i] );
+                MemFree( argv[i] );
             }
-            free( argv );
+            MemFree( argv );
             if( ret != argc ) {
                 return( -1 );
             }
@@ -910,7 +987,7 @@ bool read_line( void )
             len++;
             if( len > Line_buf_size ) {
                 Line_buf_size += BUF_GROW;
-                Line_buf = _realloc( Line_buf, Line_buf_size );
+                Line_buf = MemReallocSafe( Line_buf, Line_buf_size );
                 buf = &Line_buf[len - 1];
             }
             *buf = (char)c;
@@ -994,7 +1071,7 @@ size_t trans_add_char( char ch, section_def *section )
          * grow by a good, big amount
          */
         section->allocated_size += 1024;
-        _renew( section->section_text, section->allocated_size );
+        section->section_text = MemReallocSafe( section->section_text, section->allocated_size );
     }
     section->section_text[section->section_size - 1] = ch;
     return( 1 );
@@ -1027,12 +1104,11 @@ void add_link( const char *link_name )
 {
     link_def            *link;
 
-    _new( link, 1 );
+    link = MemAllocSafe( sizeof( *link ) );
 
-    link->next = NULL;
+    link->next = Link_list;
     Link_list = link;
-    _new( link->link_name, strlen( link_name ) + 1 );
-    strcpy( link->link_name, link_name );
+    link->link_name = MemStrdupSafe( link_name );
     link->line_num = Line_num;
 }
 
@@ -1064,11 +1140,24 @@ keyword_def *find_keyword_all( const char *keyword )
     return( NULL );
 }
 
+static void free_keyword_list( void )
+/***********************************/
+{
+    keyword_def     *key;
+
+    while( (key = Keyword_list) != NULL ) {
+        Keyword_list = key->next;
+        MemFree( key->keyword );
+        MemFree( key->ctx_list );
+        MemFree( key );
+    }
+}
+
 static void add_key_ctx( keyword_def *key, ctx_def *ctx )
 /*******************************************************/
 {
     if( key->ctx_list == NULL ) {
-        _new( key->ctx_list, 1 );
+        key->ctx_list = MemAllocSafe( sizeof( *key->ctx_list ) );
         key->ctx_list_alloc = 1;
         key->ctx_list_size = 0;
     }
@@ -1079,7 +1168,7 @@ static void add_key_ctx( keyword_def *key, ctx_def *ctx )
          * grow by a reasonable amount
          */
         key->ctx_list_alloc += 16;
-        _renew( key->ctx_list, key->ctx_list_alloc );
+        key->ctx_list = MemReallocSafe( key->ctx_list, key->ctx_list_alloc * sizeof( *key->ctx_list ) );
     }
     key->ctx_list[key->ctx_list_size - 1] = ctx;
 }
@@ -1096,11 +1185,10 @@ void add_ctx_keyword( ctx_def *ctx, const char *keyword )
         if( key != NULL ) {
             key->duplicate = true;
         } else {
-            _new( key, 1 );
+            key = MemAllocSafe( sizeof( *key ) );
             key->duplicate = false;
             key->defined_ctx = ctx;
-            _new( key->keyword, strlen( keyword ) + 1 );
-            strcpy( key->keyword, keyword );
+            key->keyword = MemStrdupSafe( keyword );
             key->next = Keyword_list;
             key->id = Keyword_id;
             Keyword_id++;
@@ -1110,7 +1198,7 @@ void add_ctx_keyword( ctx_def *ctx, const char *keyword )
         }
         add_key_ctx( key, ctx );
 
-        _new( keylist, 1 );
+        keylist = MemAllocSafe( sizeof( *keylist ) );
         keylist->key = key;
         keylist->next = ctx->keylist;
         ctx->keylist = keylist;
@@ -1182,7 +1270,7 @@ static bool read_topic_text( ctx_def *ctx, bool is_blank, int order_num )
             break;
         }
         if( section == NULL ) {
-            _new( section, 1 );
+            section = MemAllocSafe( sizeof( *section ) );
             section->section_text = NULL;
             section->allocated_size = 0;
             section->section_size = 0;
@@ -1219,6 +1307,44 @@ ctx_def *find_ctx( const char *ctx_name )
     }
 
     return( NULL );
+}
+
+static void free_keylist( keylist_def *kl )
+/*****************************************/
+{
+    keylist_def     *tmp;
+
+    while( (tmp = kl) != NULL ) {
+        kl = tmp->next;
+        MemFree( tmp );
+    }
+}
+
+static void free_section_list( section_def *sl )
+/**********************************************/
+{
+    section_def     *tmp;
+
+    while( (tmp = sl) != NULL ) {
+        sl = tmp->next;
+        MemFree( tmp->section_text );
+        MemFree( tmp );
+    }
+}
+
+static void free_ctx_list( void )
+/*******************************/
+{
+    ctx_def         *ctx;
+
+    while( (ctx = Ctx_list) != NULL ) {
+        Ctx_list = ctx->next;
+        free_keylist( ctx->keylist );
+        free_section_list( ctx->section_list );
+        MemFree( ctx->title );
+        MemFree( ctx->ctx_name );
+        MemFree( ctx );
+    }
 }
 
 static char *skip_prep( char *str )
@@ -1274,11 +1400,10 @@ static browse_def *add_browse( const char *browse_name, ctx_def *ctx )
     }
 
     browse_prev = NULL;
-    for( browse = Browse_list;; browse_prev = browse, browse = browse->next ) {
+    for( browse = Browse_list; /* nothing */; browse_prev = browse, browse = browse->next ) {
         if( browse == NULL ) {
-            _new( browse, 1 );
-            _new( browse->browse_name, strlen( browse_name ) + 1 );
-            strcpy( browse->browse_name, browse_name );
+            browse = MemAllocSafe( sizeof( *browse ) );
+            browse->browse_name = MemStrdupSafe( browse_name );
             browse->ctx_list = NULL;
             browse->next =  NULL;
             /*
@@ -1295,7 +1420,7 @@ static browse_def *add_browse( const char *browse_name, ctx_def *ctx )
         }
     }
 
-    _new( b_ctx, 1 );
+    b_ctx = MemAllocSafe( sizeof( *b_ctx ) );
     b_ctx->ctx = ctx;
 
     for( b_ctx_list = &browse->ctx_list; *b_ctx_list != NULL; b_ctx_list = &((*b_ctx_list)->next) ) {
@@ -1311,8 +1436,8 @@ static browse_def *add_browse( const char *browse_name, ctx_def *ctx )
 }
 
 
-static void add_ctx( ctx_def *ctx, const char *title, char *keywords, const char *browse_name, int head_level )
-/*************************************************************************************************************/
+static void add_ctx( ctx_def *ctx, char *keywords, const char *browse_name, int head_level )
+/******************************************************************************************/
 {
     char                *ptr;
     char                *end;
@@ -1320,13 +1445,10 @@ static void add_ctx( ctx_def *ctx, const char *title, char *keywords, const char
     ctx_def             *up_ctx;
     ctx_def             *ctx_list;
 
-    if( title != NULL && ctx->title == NULL ) {
-        _new( ctx->title, strlen( title ) + 1 );
-        strcpy( ctx->title, title );
-    }
     if( keywords != NULL && ctx->keylist == NULL && *skip_blanks( keywords ) != '\0' ) {
         for( ptr = keywords;; ) {
-            for( end = ptr; *end != ',' && *end != ';' && *end != '\0'; end++ );
+            for( end = ptr; *end != ',' && *end != ';' && *end != '\0'; end++ )
+                /* nothing */;
             ch = *end;
             *end = '\0';
             if( !find_keyword( ctx, ptr ) ) {
@@ -1359,7 +1481,7 @@ static ctx_def *init_ctx( char *ctx_name )
 {
     ctx_def             *ctx;
 
-    _new( ctx, 1 );
+    ctx = MemAllocSafe( sizeof( *ctx ) );
     ctx->section_list = NULL;
     if( Ctx_list == NULL ) {
         Ctx_list = ctx;
@@ -1374,8 +1496,7 @@ static ctx_def *init_ctx( char *ctx_name )
     ctx->ctx_id = -1;
     ctx->empty = true;
     ctx->req_by_link = false;
-    _new( ctx->ctx_name, strlen( ctx_name ) + 1 );
-    strcpy( ctx->ctx_name, ctx_name );
+    ctx->ctx_name = MemStrdupSafe( ctx_name );
 
     return( ctx );
 }
@@ -1447,7 +1568,10 @@ static ctx_def *define_ctx( void )
         ctx = init_ctx( ctx_name );
     }
     ctx->title_fmt = title_fmt;
-    add_ctx( ctx, title, keywords, browse_name, head_level );
+    if( ctx->title == NULL ) {
+        ctx->title = MemStrdupSafe( title );
+    }
+    add_ctx( ctx, keywords, browse_name, head_level );
 
     if(( old_ctx != NULL ) && ( old_ctx != ctx ) && ( old_ctx->head_level == 0 )) {
         ptr = old_ctx->ctx_name;
@@ -1478,7 +1602,7 @@ static bool read_ctx_topic( void )
 
     if( ctx == NULL ) {
         ctx = init_ctx( ctx_name );
-        add_ctx( ctx, NULL, NULL, NULL, -1 );
+        add_ctx( ctx, NULL, NULL, -1 );
     }
     Curr_ctx = ctx;
 
@@ -1545,6 +1669,23 @@ static void set_browse_numbers( void )
     }
 }
 
+static void free_browse_list( void )
+/**********************************/
+{
+    browse_def      *browse;
+    browse_ctx      *x1;
+
+    while( (browse = Browse_list) != NULL ) {
+        Browse_list = browse->next;
+        while( (x1 = browse->ctx_list) != NULL ) {
+            browse->ctx_list = x1->next;
+            MemFree( x1 );
+        }
+        MemFree( browse->browse_name );
+        MemFree( browse );
+    }
+}
+
 static void sort_ctx_list( void )
 /*******************************/
 {
@@ -1584,11 +1725,11 @@ bool is_special_topic( ctx_def *ctx, bool dump_popup )
     if( ctx == NULL ) {
         res = false;
     } else {
-        res = ( stricmp( ctx->ctx_name, "table_of_contents" ) == 0 ||
-                stricmp( ctx->ctx_name, "index_of_topics" ) == 0 ||
-                stricmp( ctx->ctx_name, "keyword_search" ) == 0 ||
-                stricmp( ctx->ctx_name, "browse_lists" ) == 0  ||
-                ( ctx->title_fmt == TITLE_FMT_NOLINE && dump_popup ) );
+        res = ( stricmp( ctx->ctx_name, "table_of_contents" ) == 0
+            || stricmp( ctx->ctx_name, "index_of_topics" ) == 0
+            || stricmp( ctx->ctx_name, "keyword_search" ) == 0
+            || stricmp( ctx->ctx_name, "browse_lists" ) == 0
+            || ( ctx->title_fmt == TITLE_FMT_NOLINE && dump_popup ) );
     }
     return( res );
 }
@@ -1714,7 +1855,7 @@ static void output_kw_file( void )
         /*
          * ... we allocate an array of pointers to keywords ...
          */
-        _new( kw, kw_num );
+        kw = MemAllocSafe( kw_num * sizeof( *kw ) );
         /*
          * ... fill it up ...
          */
@@ -1796,7 +1937,7 @@ static void output_kw_file( void )
                 }
             }
         }
-        free( kw );
+        MemFree( kw );
     }
     /*
      * the end
@@ -1930,7 +2071,7 @@ static void output_def_file( void )
         }
         len = strlen( ctx->ctx_name ) + 1;
         if( len > max_len ) {
-            buf = realloc( buf, len );
+            buf = MemRealloc( buf, len );
             max_len = len;
         }
         for( i = 0; i < len; i++ ) {
@@ -1938,7 +2079,7 @@ static void output_def_file( void )
         }
         whp_fprintf( Def_file, "#define %s%-50s\t%d\n", HELP_PREFIX, buf, ctx->ctx_id );
     }
-    free( buf );
+    MemFree( buf );
 }
 
 static void output_hdef_file( void )
@@ -2035,6 +2176,18 @@ static void check_links( void )
     }
 }
 
+static void free_link_list( void )
+/********************************/
+{
+    link_def            *link;
+
+    while( (link = Link_list) != NULL ) {
+        Link_list = link->next;
+        MemFree( link->link_name );
+        MemFree( link );
+    }
+}
+
 void NewList( const char *ptr, int indent, bool list_indent )
 /***********************************************************/
 {
@@ -2115,22 +2268,9 @@ int main( int argc, char *argv[] )
     _argv = argv;
 #endif
 
+    MemInit();
     file = NULL;
     if( setjmp( Jmp_buf ) ) {
-        if( h_file_name != NULL ) {
-            free( h_file_name );
-        }
-        if( Header_File != NULL ) {
-            free( Header_File );
-        }
-        if( Footer_File != NULL ) {
-            free( Footer_File );
-        }
-        if( Help_File != NULL ) {
-            free( Help_File );
-        }
-        free( file );
-
         if( Idx_file != NULL ) {
             fclose( Idx_file );
         }
@@ -2163,9 +2303,9 @@ int main( int argc, char *argv[] )
          * do some big allocs to block out the space
          */
         for( size = 10; size > 0; size-- ) {
-            start_alloc = malloc( size * 1000 * 1024 );
+            start_alloc = MemAlloc( size * 1000 * 1024 );
             if( start_alloc != NULL ) {
-                free( start_alloc );
+                MemFree( start_alloc );
                 break;
             }
         }
@@ -2179,7 +2319,7 @@ int main( int argc, char *argv[] )
             error_quit();
         }
 
-        file = normalize_fname( file, argv[start_arg], EXT_INPUT_FILE );
+        file = normalize_fname( file, argv[start_arg], FEXT_WHP );
 
         Line_num = 0;
         In_file = fopen( file, "r" );
@@ -2191,13 +2331,13 @@ int main( int argc, char *argv[] )
          * this is for the RTF 'Up' button support
          */
         if( Output_type == OUT_RTF ) {
-            Help_File = malloc( strlen( file ) + sizeof( EXT_HLP_FILE ) );
+            Help_File = MemAlloc( strlen( file ) + sizeof( FEXT_HLP ) );
             strcpy( Help_File, file );
-            strcpy( strrchr( Help_File, '.' ), EXT_HLP_FILE );
+            strcpy( strrchr( Help_File, '.' ), FEXT_HLP );
         }
 
         if( Do_index ) {
-            strcpy( strrchr( file, '.' ), EXT_IDX_FILE );
+            strcpy( strrchr( file, '.' ), FEXT_IDX );
             Idx_file = fopen( file, "w" );
             if( Idx_file == NULL ) {
                 printf( "Could not open index file: %s\n", file );
@@ -2206,7 +2346,7 @@ int main( int argc, char *argv[] )
         }
 
         if( Do_keywords ) {
-            strcpy( strrchr( file, '.' ), EXT_KW_FILE );
+            strcpy( strrchr( file, '.' ), FEXT_KW );
             KW_file = fopen( file, "w" );
             if( KW_file == NULL ) {
                 printf( "Could not open index file: %s\n", file );
@@ -2215,7 +2355,7 @@ int main( int argc, char *argv[] )
         }
 
         if( Do_blist ) {
-            strcpy( strrchr( file, '.' ), EXT_BLIST_FILE );
+            strcpy( strrchr( file, '.' ), FEXT_BLT );
             Blist_file = fopen( file, "w" );
             if( Blist_file == NULL ) {
                 printf( "Could not open browse list file: %s\n", file );
@@ -2224,7 +2364,7 @@ int main( int argc, char *argv[] )
         }
 
         if( Do_contents ) {
-            strcpy( strrchr( file, '.' ), EXT_TBL_FILE );
+            strcpy( strrchr( file, '.' ), FEXT_TBL );
             Contents_file = fopen( file, "w" );
             if( Contents_file == NULL ) {
                 printf( "Could not open table of contents file: %s\n", file );
@@ -2234,19 +2374,19 @@ int main( int argc, char *argv[] )
 
         switch( Output_type ) {
         case OUT_RTF:
-            strcpy( Output_file_ext, EXT_OUTRTF_FILE );
+            strcpy( Output_file_ext, FEXT_RTF );
             break;
         case OUT_IPF:
-            strcpy( Output_file_ext, EXT_OUTIPF_FILE );
+            strcpy( Output_file_ext, FEXT_IPF );
             break;
         case OUT_IB:
-            strcpy( Output_file_ext, EXT_OUTIB_FILE );
+            strcpy( Output_file_ext, FEXT_IB );
             break;
         case OUT_HTML:
-            strcpy( Output_file_ext, EXT_OUTHTML_FILE );
+            strcpy( Output_file_ext, FEXT_HTM );
             break;
         case OUT_WIKI:
-            strcpy( Output_file_ext, EXT_OUTWIKI_FILE );
+            strcpy( Output_file_ext, FEXT_WIKI );
             break;
         }
 
@@ -2274,7 +2414,7 @@ int main( int argc, char *argv[] )
             if( h_file_name != NULL ) {
                 In_file = fopen( h_file_name, "r" );
             } else {
-                strcpy( strrchr( file, '.' ), EXT_DEF_FILE );
+                strcpy( strrchr( file, '.' ), FEXT_H );
                 In_file = fopen( file, "r" );
             }
             if( In_file != NULL ) {
@@ -2293,7 +2433,7 @@ int main( int argc, char *argv[] )
                     error_quit();
                 }
             } else {
-                strcpy( strrchr( file, '.' ), EXT_DEF_FILE );
+                strcpy( strrchr( file, '.' ), FEXT_H );
                 Def_file = fopen( file, "w" );
                 if( Def_file == NULL ) {
                     printf( "Could not open define file: %s\n", file );
@@ -2303,7 +2443,7 @@ int main( int argc, char *argv[] )
         }
 
         if( Do_hdef ) {
-            strcpy( strrchr( file, '.' ), EXT_HDEF_FILE );
+            strcpy( strrchr( file, '.' ), FEXT_HH );
             Hdef_file = fopen( file, "w" );
             if( Hdef_file == NULL ) {
                 printf( "Could not open help define file: %s\n", file );
@@ -2362,8 +2502,26 @@ int main( int argc, char *argv[] )
         if( Do_hdef ) {
             output_hdef_file();
         }
+        free_link_list();
+        free_keyword_list();
+        free_browse_list();
+        free_ctx_list();
         rc = 0;
     }
+    if( h_file_name != NULL ) {
+        MemFree( h_file_name );
+    }
+    if( Header_File != NULL ) {
+        MemFree( Header_File );
+    }
+    if( Footer_File != NULL ) {
+        MemFree( Footer_File );
+    }
+    if( Help_File != NULL ) {
+        MemFree( Help_File );
+    }
+    MemFree( file );
 
+    MemFini();
     return( rc );
 }

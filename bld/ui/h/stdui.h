@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -503,75 +503,57 @@ typedef int             CATTR;          /* cursor attributes type */
 #define iseditchar( ev )        ( ( ev >= EV_FIRST_EDIT_CHAR ) && ( ev <= EV_LAST_EDIT_CHAR ) )
 #define iskeyboardchar( ev )    ( ( ev >= EV_FIRST_EVENT ) && ( ev <= EV_LAST_KEYBOARD ) )
 
-#if defined( _M_I86 )
+#if defined( _M_I86 )   /* 16-bit */
     typedef struct pixel {
         unsigned char   ch;
         ATTR            attr;
     } PIXEL;
-    #define __FAR       __far
-    #define HAVE_FAR
     #define UIDBCS
 #elif defined( __NT__ )
     typedef struct pixel {
         unsigned short  ch;
         unsigned short  attr;
     } PIXEL;
-    #define __FAR
-    #undef HAVE_FAR
     #define UIDBCS
 #elif defined( __OS2__ )
     typedef struct pixel {
         unsigned char   ch;
         ATTR            attr;
     } PIXEL;
-    #define __FAR
-    #undef HAVE_FAR
     #define UIDBCS
 #elif defined( __RDOS__ )
     typedef struct pixel {
         unsigned char   ch;
         ATTR            attr;
     } PIXEL;
-    #define __FAR
-    #undef HAVE_FAR
     #undef UIDBCS
 #elif defined( __UNIX__ )
     typedef struct pixel {
         unsigned char   ch;
         ATTR            attr;
     } PIXEL;
-    #define __FAR
-    #undef HAVE_FAR
     #undef UIDBCS
 #elif defined( __NETWARE__ )
     typedef struct pixel {
         unsigned char   ch;
         ATTR            attr;
     } PIXEL;
-  #if 1
-    #define __FAR
-    #undef HAVE_FAR
-  #else
-    #define __FAR       __far   /* ?? on netware probably should be near ?? */
-    #define HAVE_FAR
-  #endif
     #undef UIDBCS
-#elif defined( _M_IX86 )        /* 32-bit DOS */
+#elif defined( __DOS__ )    /* 32-bit DOS */
     typedef struct pixel {
         unsigned char   ch;
         ATTR            attr;
     } PIXEL;
-    #define __FAR       __far
-    #define HAVE_FAR
     #define UIDBCS
 #else
     #error pixel structure not configured for system
 #endif
 
-typedef PIXEL       __FAR *LP_PIXEL;
-typedef char        __FAR *LP_STRING;
-typedef const char  __FAR *LPC_STRING;
-typedef void        __FAR *LP_VOID;
+#if defined( __DOS__ ) || defined( _M_I86 )
+typedef PIXEL       __far *LP_PIXEL;
+#else
+typedef PIXEL       *LP_PIXEL;
+#endif
 
 typedef enum {
     C_OFF,
@@ -668,7 +650,6 @@ extern MONITOR          _FARD *UIData;
 extern void             UIAPI finimouse( void );
 extern bool             UIAPI initmouse( init_mode );
 extern void             UIAPI uiactivatemenus( void );
-extern void             * UIAPI uialloc( size_t );
 extern bool             UIAPI uiattrs( void );
 extern bool             UIAPI uivgaattrs( void );
 extern void             UIAPI uisetblinkattr( bool );
@@ -693,7 +674,6 @@ extern void             UIAPI uifini( void );
 extern void             UIAPI uifinigmouse( void );
 extern void             UIAPI uiflush( void );
 extern void             UIAPI uiflushevent( void );
-extern void             UIAPI uifree( void * );
 extern MOUSETIME        UIAPI uiclock( void );
 extern ui_event         UIAPI uiget( void );
 extern ui_event_list    _FARD * UIAPI uigetlist( void );
@@ -705,7 +685,6 @@ extern bool             UIAPI uiinitgmouse( init_mode );
 extern bool             UIAPI uiinlist( ui_event, ui_event _FARD * );
 extern bool             UIAPI uiinlists( ui_event );
 extern bool             UIAPI uiintoplist( ui_event );
-extern void             * UIAPI uimalloc( size_t );
 extern void             UIAPI uimouse( mouse_func );
 extern void             UIAPI uimouseforceoff( void );
 extern void             UIAPI uimouseforceon( void );
@@ -719,7 +698,6 @@ extern void             UIAPI uiposition( SAREA *, unsigned, unsigned, int, int,
 extern void             UIAPI uiprotect( VSCREEN _FARD * );
 extern void             UIAPI uipushlist( ui_event _FARD * );
 extern void             UIAPI uiputlist( ui_event_list _FARD * );
-extern void             * UIAPI uirealloc( void *, size_t );
 extern void             UIAPI uirefresh( void );
 extern bool             UIAPI uiset80col( void );
 extern SAREA            * UIAPI uisetarea( SAREA *,  VSCREEN _FARD * );
@@ -758,7 +736,7 @@ extern void             UIAPI uivsetactive( VSCREEN _FARD * );
 extern void             UIAPI uivsetcursor( VSCREEN _FARD * );
 extern bool             UIAPI uivshow( VSCREEN _FARD * );
 extern void             UIAPI uivtextput( VSCREEN _FARD *, ORD, ORD, ATTR, const char _FARD *, unsigned );
-extern void             UIAPI uitextfield( VSCREEN _FARD *, ORD, ORD, unsigned, ATTR, LPC_STRING, unsigned );
+extern void             UIAPI uitextfield( VSCREEN _FARD *, ORD, ORD, unsigned, ATTR, const char *, unsigned );
 extern void             UIAPI uimousespeed( unsigned );
 extern unsigned char    UIAPI uicheckshift( void );
 extern ui_event         UIAPI uikeyboardevent( void );
@@ -784,9 +762,6 @@ extern ATTR             UIAPI uisetattr( UIATTR uiattr, ATTR new_attr );
  * Application related functions
  * may be implemented by application, stub functions
  */
-
-extern LP_VOID          UIAPI uifaralloc( size_t );
-extern void             UIAPI uifarfree( LP_VOID );
 
 extern void             UIAPI uistartevent( void );
 extern void             UIAPI uidoneevent( void );

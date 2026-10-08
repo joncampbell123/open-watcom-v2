@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -42,10 +42,6 @@
 #include "clibext.h"
 
 
-#define BEFORE_S        "BEFORE"
-#define AFTER_S         "AFTER"
-#define DEFAULT_S       "DEFAULT"
-
 #define HASH_PRIME      211
 
 /* just for people to copy in */
@@ -73,7 +69,7 @@ FLIST *NewFList( void )
         memset( f, 0, sizeof( *f ) );
         return( f );
     }
-    return( (FLIST *)CallocSafe( sizeof( FLIST ) ) );
+    return( MemCAllocSafe( sizeof( FLIST ) ) );
 }
 
 
@@ -90,13 +86,13 @@ NKLIST *NewNKList( void )
         memset( nk, 0, sizeof( *nk ) );
         return( nk );
     }
-    return( (NKLIST *)CallocSafe( sizeof( NKLIST ) ) );
+    return( MemCAllocSafe( sizeof( NKLIST ) ) );
 }
 
 
 SLIST *NewSList( void )
 /**********************
- * allocate a NKLIST, fill in default values
+ * allocate a SLIST, fill in default values
  */
 {
     SLIST   *slist;
@@ -107,7 +103,7 @@ SLIST *NewSList( void )
         memset( slist, 0, sizeof( *slist ) );
         return( slist );
     }
-    return( (SLIST *)CallocSafe( sizeof( SLIST ) ) );
+    return( MemCAllocSafe( sizeof( SLIST ) ) );
 }
 
 
@@ -124,7 +120,7 @@ TLIST *NewTList( void )
         memset( t, 0, sizeof( *t ) );
         return( t );
     }
-    return( (TLIST *)CallocSafe( sizeof( TLIST ) ) );
+    return( MemCAllocSafe( sizeof( TLIST ) ) );
 }
 
 STATIC TARGET *removeTarget( const char *name )
@@ -141,25 +137,25 @@ void RenameTarget( const char *oldname, const char *newname )
     targ = removeTarget( oldname );
     if( targ != NULL ) {
         if( targ->node.name != NULL ) {
-            FreeSafe( targ->node.name );
+            MemFree( targ->node.name );
         }
-        targ->node.name = FixName( StrDupSafe( newname ) );
+        targ->node.name = FixName( MemStrdupSafe( newname ) );
         AddHashNode( targTab, (HASHNODE *)targ );
     }
 }
 
 
-TARGET *NewTarget( const char *name )
-/************************************
+TARGET *NewTarget( char *name )
+/******************************
  * allocate a newtarget with name, and default values
  */
 {
     TARGET  *new;
 
-    new = CallocSafe( sizeof( *new ) );
+    new = MemCAllocSafe( sizeof( *new ) );
     new->executed = true;
     new->date = OLDEST_DATE;
-    new->node.name = FixName( StrDupSafe( name ) );
+    new->node.name = name;
     AddHashNode( targTab, (HASHNODE *)new );
 
     return( new );
@@ -178,19 +174,18 @@ TARGET *FindTarget( const char *name )
 
 
 #ifdef __WATCOMC__
-#pragma on (check_stack);
+#pragma on( check_stack );
 #endif
 CLIST *DotCList( DotName dot )
 /***********************************
  * find clist associated with dotname
  */
 {
-    char                name[MAX_DOT_NAME];
-    TARGET const        *cur;
+    TARGET const    *cur;
+    char            name[MAX_DOT_NAME];
 
     name[0] = '.';
-    FixName( strcpy( name + 1, DotNames[dot] ) );
-
+    strcpy( name + 1, DotNames[dot] );
     cur = FindTarget( name );
 
     if( cur == NULL
@@ -200,7 +195,7 @@ CLIST *DotCList( DotName dot )
     return( cur->depend->clist );
 }
 #ifdef __WATCOMC__
-#pragma off(check_stack);
+#pragma pop( check_stack );
 #endif
 
 
@@ -215,7 +210,7 @@ DEPEND *NewDepend( void )
         memset( dep, 0, sizeof( *dep ) );
         return( dep );
     }
-    return( (DEPEND *)CallocSafe( sizeof( DEPEND ) ) );
+    return( MemCAllocSafe( sizeof( DEPEND ) ) );
 }
 
 
@@ -230,7 +225,7 @@ CLIST *NewCList( void )
         memset( c, 0, sizeof( *c ) );
         return( c );
     }
-    return( (CLIST *)CallocSafe( sizeof( CLIST ) ) );
+    return( MemCAllocSafe( sizeof( CLIST ) ) );
 }
 
 
@@ -248,9 +243,9 @@ STATIC FLIST *DupFList( const FLIST *old )
     }
 
     head = NewFList();
-    head->fileName = StrDupSafe( old->fileName );
+    head->fileName = MemStrdupSafe( old->fileName );
     if( old->body != NULL ) {
-        head->body = StrDupSafe( old->body );
+        head->body = MemStrdupSafe( old->body );
     } else {
         head->body = NULL;
     }
@@ -259,9 +254,9 @@ STATIC FLIST *DupFList( const FLIST *old )
     cur = head;
     for( old = old->next; old != NULL; old = old->next ) {
         new = NewFList();
-        new->fileName = StrDupSafe( old->fileName );
+        new->fileName = MemStrdupSafe( old->fileName );
         if( old->body != NULL ) {
-            new->body = StrDupSafe( old->body );
+            new->body = MemStrdupSafe( old->body );
         } else {
             new->body = NULL;
         }
@@ -287,13 +282,13 @@ CLIST *DupCList( const CLIST *old )
     }
 
     head = NewCList();
-    head->text       = StrDupSafe( old->text );
+    head->text       = MemStrdupSafe( old->text );
     head->inlineHead = DupFList( old->inlineHead );
 
     cur = head;
     for( old = old->next; old != NULL; old = old->next ) {
         new = NewCList();
-        new->text       = StrDupSafe( old->text );
+        new->text       = MemStrdupSafe( old->text );
         new->inlineHead = DupFList( old->inlineHead );
         cur->next = new;
 
@@ -370,7 +365,7 @@ void FreeNKList( NKLIST *nklist )   /* non-recursive */
     while( nklist != NULL ) {
         cur = nklist;
         nklist = nklist->next;
-        FreeSafe( cur->fileName );
+        MemFree( cur->fileName );
         cur->next = freeNKLists;
         freeNKLists = cur;
     }
@@ -386,10 +381,10 @@ void FreeSList( SLIST *slist )   /* non-recursive */
     while( slist != NULL ) {
         cur = slist;
         if( *cur->targ_path != NULLCHAR ) {
-            FreeSafe( cur->targ_path );
+            MemFree( cur->targ_path );
         }
         if( *cur->dep_path != NULLCHAR ) {
-            FreeSafe( cur->dep_path );
+            MemFree( cur->dep_path );
         }
         KillTarget( cur->cretarg->node.name );
         slist = slist->next;
@@ -410,8 +405,8 @@ void FreeFList( FLIST *flist )   /* non-recursive */
         cur        = flist;
         flist      = flist->next;
         cur->next  = freeFLists;
-        FreeSafe( cur->body );
-        FreeSafe( cur->fileName );
+        MemFree( cur->body );
+        MemFree( cur->fileName );
         freeFLists = cur;
     }
 }
@@ -425,7 +420,7 @@ void FreeCList( CLIST *clist )
     while( clist != NULL ) {
         cur = clist;
         clist = clist->next;
-        FreeSafe( cur->text );
+        MemFree( cur->text );
         FreeFList( cur->inlineHead );
         cur->next = freeCLists;
         freeCLists = cur;
@@ -457,8 +452,8 @@ STATIC void freeTarget( TARGET *targ )
     assert( targ != NULL );
 
     FreeDepend( targ->depend );
-    FreeSafe( targ->node.name );
-    FreeSafe( targ );
+    MemFree( targ->node.name );
+    MemFree( targ );
 }
 
 
@@ -476,10 +471,9 @@ void KillTarget( const char *name )
     }
 }
 
-
 STATIC TARGET *findOrNewTarget( const char *tname, bool mentioned )
 /******************************************************************
- * Return a pointer to a target with name name.  Create target if necessary.
+ * Return a pointer to a target with name tname.  Create target if necessary.
  */
 {
     char    name[_MAX_PATH];
@@ -487,23 +481,49 @@ STATIC TARGET *findOrNewTarget( const char *tname, bool mentioned )
 
     targ = FindTarget( FixName( strcpy( name, tname ) ) );
     if( targ == NULL ) {
-        targ = NewTarget( name );
+        targ = NewTarget( MemStrdupSafe( name ) );
         if( name[0] == '.'
           && ( cisextc( name[1] )
           || ciswildc( name[1] ) ) ) {
             targ->special = true;
-            if( stricmp( name + 1, BEFORE_S ) == 0
-              || stricmp( name + 1, AFTER_S ) == 0 ) {
-                targ->before_after = true;
-            }
-            if( stricmp( name + 1, DEFAULT_S ) == 0 ) {
-                targ->dot_default = true;
-            }
         }
     }
 
     /* mentioned in a makefile */
     targ->mentioned = ( targ->mentioned || mentioned );
+
+    return( targ );
+}
+
+
+STATIC TARGET *findOrNewDotTarget( DotName dot )
+/***********************************************
+ * Return a pointer to a target with name tname.
+ * Create target if necessary.
+ */
+{
+    char    name[MAX_DOT_NAME];
+    TARGET  *targ;
+
+    name[0] = '.';
+    strcpy( name + 1, DotNames[dot] );
+    targ = FindTarget( name );
+    if( targ == NULL ) {
+        targ = NewTarget( MemStrdupSafe( name ) );
+        targ->special = true;
+        targ->mentioned = true;
+        switch( dot ) {
+        case DOT_BEFORE:
+        case DOT_AFTER:
+            targ->before_after = true;
+            break;
+        case DOT_DEFAULT:
+            targ->dot_default = true;
+            break;
+        case DOT_ERROR:
+            break;
+        }
+    }
 
     return( targ );
 }
@@ -565,6 +585,33 @@ bool WildTList( TLIST **list, const char *base, bool mentioned, bool expandWildC
             endOfList = endOfList->next;
         }
         endOfList->next = current;
+    }
+    return( true );
+}
+
+
+bool DotTList( TLIST **list, DotName dot )
+/*****************************************
+ * Build a dot TLIST. Pushes target onto list.
+ */
+{
+    TARGET      *targ;
+    TLIST       *new;
+    TLIST       *endOfList;
+
+    targ = findOrNewDotTarget( dot );
+    new = NewTList();
+    new->target = targ;
+    new->next = NULL;
+
+    if( *list == NULL ) {
+        *list = new;
+    } else {
+        endOfList = *list;
+        while( endOfList->next != NULL ) {
+            endOfList = endOfList->next;
+        }
+        endOfList->next = new;
     }
     return( true );
 }
@@ -769,7 +816,7 @@ STATIC bool cleanupLeftovers( void )
         do {
             dep = freeDepends;
             freeDepends = dep->next;
-            FreeSafe( dep );
+            MemFree( dep );
         } while( freeDepends != NULL );
         return( true );
     }
@@ -777,7 +824,7 @@ STATIC bool cleanupLeftovers( void )
         do {
             t = freeTLists;
             freeTLists = t->next;
-            FreeSafe( t );
+            MemFree( t );
         } while( freeTLists != NULL );
         return( true );
     }
@@ -785,7 +832,7 @@ STATIC bool cleanupLeftovers( void )
         do {
             nk = freeNKLists;
             freeNKLists = nk->next;
-            FreeSafe( nk );
+            MemFree( nk );
         } while( freeNKLists != NULL );
         return( true );
     }
@@ -793,7 +840,7 @@ STATIC bool cleanupLeftovers( void )
         do {
             slist = freeSLists;
             freeSLists = slist->next;
-            FreeSafe( slist );
+            MemFree( slist );
         } while( freeSLists != NULL );
         return( true );
     }
@@ -801,7 +848,7 @@ STATIC bool cleanupLeftovers( void )
         do {
             f = freeFLists;
             freeFLists = f->next;
-            FreeSafe( f );
+            MemFree( f );
         } while( freeFLists != NULL );
         return( true );
     }
@@ -809,7 +856,7 @@ STATIC bool cleanupLeftovers( void )
         do {
             c = freeCLists;
             freeCLists = c->next;
-            FreeSafe( c );
+            MemFree( c );
         } while( freeCLists != NULL );
         return( true );
     }
@@ -853,7 +900,8 @@ void TargetFini( void )
     WalkHashTab( targTab, walkFree, NULL );
     FreeHashTab( targTab );
     targTab = NULL;
-    while( cleanupLeftovers() )
-        ;
+    while( cleanupLeftovers() ) {
+        /* nothing */;
+    }
 #endif
 }

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -80,7 +80,7 @@ static int getNextLine( FILE *fp, line *l )
 
     if( l->size == 0 ) {
         l->size = MIN_LINE_LEN * sizeof( char );
-        l->buff = (char *)MemAlloc( l->size );
+        l->buff = MemAlloc( l->size );
     }
 
     while( (ch = fgetc( fp )) != EOF ) {
@@ -89,9 +89,9 @@ static int getNextLine( FILE *fp, line *l )
         }
         *(l->buff + os) = (char)ch;
         os++;
-        if( os >= l->size ) {       // Buffer getting small.
+        if( l->size <= os ) {       // Buffer getting small.
             l->size += MIN_LINE_LEN * sizeof( char );
-            l->buff = (char *)MemRealloc( l->buff, l->size );
+            l->buff = MemRealloc( l->buff, l->size );
         }
     }
     *(l->buff + os) = '\0';
@@ -135,9 +135,9 @@ static int  compareLines( line *ln1, line *ln2, int fld, int chr )
 
 static void copyLines( line *dest, line *src )
 {
-    if( src->size > dest->size ) {
+    if( dest->size < src->size ) {
         dest->size = src->size;
-        dest->buff = (char *)MemRealloc( dest->buff, dest->size * sizeof(char) );
+        dest->buff = MemRealloc( dest->buff, dest->size * sizeof(char) );
     }
     strcpy( dest->buff, src->buff );
 }

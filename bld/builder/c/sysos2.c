@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2020 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -60,20 +60,20 @@ int SysChdir( const char *dir )
 
     if( dir[0] == '\0' )
         return( 0 );
-    drive = ( dir[1] == ':' ) ? toupper( (unsigned char)dir[0] ) - 'A' + 1 : 0;
     if( dir[1] != '\0' ) {
         len = strlen( dir );
         if( dir[len - 1] == '\\' || dir[len - 1] == '/' ) {
-            if( len > 3 || drive == 0 ) {
+            if( len > 3 || dir[1] != ':' ) {
                 len--;
                 memcpy( tmp_buf, dir, len );
                 tmp_buf[len] = '\0';
                 dir = tmp_buf;
             }
         }
-    }
-    if( drive ) {
-        _chdrive( drive );
+        drive = DRIVE_NUM( dir );
+        if( drive ) {
+            _chdrive( drive );
+        }
     }
     return( chdir( dir ) );
 }
@@ -101,9 +101,7 @@ static int SysRunCommandPipe( const char *cmd, HFILE *readpipe )
     char        *sp;
     int         rc;
 
-    cmdnam = MStrdup( cmd );
-    if( cmdnam == NULL )
-        return( -1 );
+    cmdnam = MemStrdupSafe( cmd );
     sp = strchr( cmdnam, ' ' );
     if( sp != NULL ) {
         *sp = '\0';
@@ -122,7 +120,7 @@ static int SysRunCommandPipe( const char *cmd, HFILE *readpipe )
             }
         }
     }
-    MFree( cmdnam );
+    MemFree( cmdnam );
     return( rc );
 }
 

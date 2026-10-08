@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -222,7 +222,7 @@ static sym_file *NewSymFile( const arch_header *arch, file_type obj_type )
     sfile->next = NULL;
     sfile->impsym = NULL;
     sfile->inlib_offset = 0;
-    sfile->full_name = MemDupStr( arch->name );
+    sfile->full_name = MemStrdup( arch->name );
     sfile->arch.date = arch->date;
     sfile->arch.uid = arch->uid;
     sfile->arch.gid = arch->gid;
@@ -230,13 +230,13 @@ static sym_file *NewSymFile( const arch_header *arch, file_type obj_type )
     sfile->arch.size = arch->size;
     sfile->arch.libtype = arch->libtype;
     if( Options.trim_path ) {
-        sfile->arch.name = MemDupStr( TrimPath( arch->name ) );
+        sfile->arch.name = MemStrdup( TrimPath( arch->name ) );
     } else {
-        sfile->arch.name = MemDupStr( arch->name );
+        sfile->arch.name = MemStrdup( arch->name );
     }
     sfile->name_length = strlen( sfile->arch.name );
     if( arch->ffname != NULL ) {
-        sfile->arch.ffname = MemDupStr( arch->ffname );
+        sfile->arch.ffname = MemStrdup( arch->ffname );
         sfile->ffname_length = strlen( sfile->arch.ffname );
     } else {
         sfile->arch.ffname = NULL;
@@ -328,7 +328,7 @@ static void SortSymbols( void )
             if( sfile->arch.ffname == NULL ) {
                 sfile->arch.ffname = sfile->arch.name;
                 sfile->ffname_length = strlen( sfile->arch.ffname );
-                sfile->arch.name = MemDupStr( TrimPath( sfile->arch.ffname ) );
+                sfile->arch.name = MemStrdup( TrimPath( sfile->arch.ffname ) );
                 sfile->name_length = strlen( sfile->arch.name );
             }
             name_length = sfile->name_length;
@@ -1040,11 +1040,11 @@ void OmfMKImport( const arch_header *arch, importType type,
     Options.omf_found = true;
     CurrFile = NewSymFile( arch, WL_FTYPE_OMF );
     impsym = MemAlloc( sizeof( import_sym ) );
-    impsym->dllName.name = MemDupStr( dllName->name );
+    impsym->dllName.name = MemStrdup( dllName->name );
     impsym->dllName.len = dllName->len;
     impsym->u.omf_coff.ordinal = ordinal;
-    impsym->u.omf_coff.symName = MemDupStr( symName );
-    impsym->u.omf_coff.exportedName = MemDupStr( exportedName );
+    impsym->u.omf_coff.symName = MemStrdup( symName );
+    impsym->u.omf_coff.exportedName = MemStrdup( exportedName );
     impsym->type = type;
     impsym->processor = processor;
     CurrFile->impsym = impsym;
@@ -1066,10 +1066,10 @@ void CoffMKImport( const arch_header *arch, importType type,
     impsym = MemAlloc( sizeof( import_sym ) );
     impsym->type = type;
     impsym->u.omf_coff.ordinal = ordinal;
-    impsym->dllName.name = MemDupStr( dllName->name );
+    impsym->dllName.name = MemStrdup( dllName->name );
     impsym->dllName.len = dllName->len;
-    impsym->u.omf_coff.symName = MemDupStr( symName );
-    impsym->u.omf_coff.exportedName = MemDupStr( exportedName );
+    impsym->u.omf_coff.symName = MemStrdup( symName );
+    impsym->u.omf_coff.exportedName = MemStrdup( exportedName );
     impsym->processor = processor;
     CurrFile->impsym = impsym;
     CurrFile->arch.size = CoffImportSize( impsym );
@@ -1104,7 +1104,7 @@ void ElfMKImport( const arch_header *arch, importType type, long export_size,
     CurrFile = NewSymFile( arch, WL_FTYPE_ELF );
     impsym = MemAlloc( sizeof( import_sym ) );
     impsym->type = type;
-    impsym->dllName.name = MemDupStr( dllName->name );
+    impsym->dllName.name = MemStrdup( dllName->name );
     impsym->dllName.len = dllName->len;
     impsym->u.elf.numsyms = 0;
     impsym->processor = processor;
@@ -1114,7 +1114,7 @@ void ElfMKImport( const arch_header *arch, importType type, long export_size,
     for( i = 0; i < export_size; i++ ) {
         if( export_table[i].exp_symbol ) {
             elfimp = MemAlloc( sizeof( elf_import_sym ) );
-            elfimp->sym.name = MemDupStr( strings + sym_table[export_table[i].exp_symbol].st_name );
+            elfimp->sym.name = MemStrdup( strings + sym_table[export_table[i].exp_symbol].st_name );
             elfimp->sym.len = strlen( elfimp->sym.name );
             elfimp->ordinal = export_table[i].exp_ordinal;
             if( type == ELF ) {
@@ -1307,12 +1307,16 @@ static void ListContentsWlib( void )
     }
 
     if( Options.list_file == NULL ) {
-        Options.list_file = MemDupStr( MakeListName() );
+        Options.list_file = MemStrdup( MakeListName() );
     }
     if( Options.list_file[0] != '\0' ) {
-        fp = fopen( Options.list_file, "w" );
-        if( fp == NULL ) {
-            FatalError( ERR_CANT_OPEN, Options.list_file, strerror( errno ) );
+        if( Options.list_file[0] == '.' && Options.list_file[1] == '\0' ) {
+            fp = stdout;
+        } else {
+            fp = fopen( Options.list_file, "w" );
+            if( fp == NULL ) {
+                FatalError( ERR_CANT_OPEN, Options.list_file, strerror( errno ) );
+            }
         }
     } else {
         fp = NULL;
@@ -1352,7 +1356,11 @@ static void ListContentsWlib( void )
     }
 
     if( fp != NULL ) {
-        fclose( fp );
+        if( fp == stdout ) {
+            fflush( fp );
+        } else {
+            fclose( fp );
+        }
     }
 }
 

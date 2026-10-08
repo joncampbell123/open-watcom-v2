@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2024      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2024-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,11 +34,11 @@
 #include "dwpriv.h"
 #include "dwmem.h"
 
-char *DW_StrDup(
-    dw_client                   cli,
-    const char *                str )
+char *DW_Strdup(
+    dw_client cli,
+    const char *str )
 {
-    size_t                      len;
+    size_t          len;
 
     _Validate( cli != NULL && str != NULL );
 
@@ -48,25 +48,24 @@ char *DW_StrDup(
 
 
 void *DW_FreeLink(
-    dw_client                   cli,
-    void *                      node )
+    dw_client cli,
+    void *node )
 {
-    void *                      p;
+    void            *next;
 
-    p = *(void **)node;
+    next = *(void **)node;
     CLIFree( cli, node );
-    return( p );
+    return( next );
 }
 
 
 void DW_FreeChain(
-    dw_client                   cli,
-    void *                      list )
+    dw_client cli,
+    void *list )
 {
-    void *                      cur;
+    void            *cur;
 
-    while( list != NULL ) {
-        cur = list;
+    while( (cur = list) != NULL ) {
         list = *(void **)list;
         CLIFree( cli, cur );
     }
@@ -74,11 +73,11 @@ void DW_FreeChain(
 
 
 void *DW_ReverseChain(
-    void *                      head )
+    void *head )
 /* reverse a singly linked list (link is first field in structure) */
 {
-    void *                      current;
-    void *                      next;
+    void            *current;
+    void            *next;
 
     current = head;
     head = NULL;

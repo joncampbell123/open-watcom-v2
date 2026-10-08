@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2023      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2023-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -37,30 +37,27 @@
 #include "yaccins.h"
 #include "alloc.h"
 
-enum {
-    ACTION_AMBIGUOUS    = 0x8000,
-    ACTION_SHIFT        = 0x4000,
-    ACTION_REDUCE       = 0x0000,
-    ACTION_STATE        = 0x3fff,
-};
+
+#define ACTION_REDUCE       ACTION_NONE
+#define ACTION_SHIFT        ACTION_FLAG_1
+#define ACTION_AMBIGUOUS    ACTION_FLAG_2
 
 typedef struct {
     short       token;
     short       action;
 } a_entry;
 
-static a_entry *table;
-static unsigned used;
-static unsigned table_size;
+static a_entry      *table;
+static unsigned     used;
+static unsigned     table_size;
+static int          tabcol;
 
-void dump_define( FILE *fp, char *name, int i )
+static void dump_define( FILE *fp, const char *name, int i )
 {
     fprintf( fp, "#define\t%-20s\t%d\n", name, i );
 }
 
-static int tabcol;
-
-static void begin_table( FILE *fp, char *tipe, char *name )
+static void begin_table( FILE *fp, const char *tipe, const char *name )
 {
     fprintf( fp, "static const %s YYFAR %s[] = {", tipe, name );
     tabcol = 0;
@@ -68,12 +65,13 @@ static void begin_table( FILE *fp, char *tipe, char *name )
 
 void puttab( FILE *fp, value_size fits, unsigned i )
 {
-    char *format;
-    unsigned mod;
+    const char      *format;
+    unsigned        mod;
 
     if( fits == FITS_A_BYTE ) {
         if(( i & 0x00ff ) != i ) {
             msg( "value cannot fit into table! (%x)", i );
+            /* never return */
         }
         format = "%3u";
         mod = 20;
@@ -98,9 +96,9 @@ static void end_table( FILE *fp )
 
 static void add_table( short token, short action )
 {
-    if( used == table_size ) {
+    if( table_size == used ) {
         table_size += 64;
-        table = REALLOC( table, table_size, a_entry );
+        table = MemReallocSafe( table, table_size * sizeof( *table ) );
     }
     table[used].token = token;
     table[used].action = action;
@@ -108,96 +106,104 @@ static void add_table( short token, short action )
 }
 
 
-static void dump_reduction( a_reduce_action *rx, unsigned *base )
+static unsigned dump_reduction( a_reduce_action *raction )
 {
-    a_pro *pro;
-    set_size *mp;
+    a_pro           *pro;
+    bitnum          *mp;
+    short           idx;
+    unsigned        size;
 
-    pro = rx->pro;
-    for( mp = Members( rx->follow ); mp-- != setmembers; ) {
-        add_table( *mp, ACTION_REDUCE | pro->pidx );
-        ++(*base);
+    size = 0;
+    pro = raction->pro;
+    for( mp = Members( raction->follow ); mp-- != setmembers; ) {
+        idx = *mp;
+        add_table( idx, pro->pidx | ACTION_REDUCE );
+        ++size;
     }
+    return( size );
 }
 
 void genobj( FILE *fp )
 {
-    int i;
-    int ntoken;
-    int this_token;
-    int any_token;
-    int action;
-    short *p;
-    set_size *mp;
-    a_pro *pro;
-    a_state *state;
-    a_reduce_action *rx;
+    unsigned        i;
+    action_n        sidx;
+    rule_n          pidx;
+    sym_n           sym_idx;
+    int             ntoken;
+    int             any_token;
+    int             action;
+    a_pro           *pro;
+    a_state         *state;
+    a_reduce_action *raction;
     a_reduce_action *default_reduction;
-    a_shift_action *tx;
-    a_sym *sym;
-    an_item *item;
-    unsigned max;
-    unsigned sum;
-    set_size savings;
-    set_size max_savings;
-    unsigned base;
-    unsigned rule_base;
-    short *state_base;
+    a_shift_action  *saction;
+    a_sym           *sym;
+    an_item         *item;
+    unsigned        max;
+    unsigned        sum;
+    unsigned        savings;
+    unsigned        max_savings;
+    unsigned        base;
+    unsigned        rule_base;
+    short           *state_base;
+    unsigned        size;
 
     ntoken = FirstNonTerminalTokenValue();
-    for( i = nterm; i < nsym; ++i ) {
-        symtab[i]->token = ntoken++;
+    for( sym_idx = nterm; sym_idx < nsym; ++sym_idx ) {
+        symtab[sym_idx]->token = ntoken++;
     }
     any_token = ntoken;
-    state_base = CALLOC( nstate, short );
+    state_base = MemCAllocSafe( nstate, sizeof( *state_base ) );
     base = 0;
     max = 0;
     sum = 0;
     used = 0;
     table_size = 0;
     table = NULL;
-    for( i = 0; i < nstate; ++i ) {
-        state_base[i] = base;
-        state = statetab[i];
-        for( tx = state->trans; (sym = tx->sym) != NULL; ++tx ) {
-            add_table( sym->idx, ACTION_SHIFT | tx->state->idx );
+    for( sidx = 0; sidx < nstate; ++sidx ) {
+        state_base[sidx] = base;
+        state = statetab[sidx];
+        for( saction = state->trans; (sym = saction->sym) != NULL; ++saction ) {
+            add_table( sym->idx, saction->state->sidx | ACTION_SHIFT );
             ++base;
         }
         default_reduction = NULL;
         max_savings = 0;
-        for( rx = state->redun; rx->pro != NULL; ++rx ) {
-            if( (savings = Members( rx->follow ) - setmembers) == 0 )
+        for( raction = state->redun; raction->pro != NULL; ++raction ) {
+            savings = Members( raction->follow ) - setmembers;
+            if( savings == 0 )
                 continue;
             if( max_savings < savings ) {
                 max_savings = savings;
                 if( default_reduction != NULL ) {
-                    dump_reduction( default_reduction, &base );
+                    base += dump_reduction( default_reduction );
                 }
-                default_reduction = rx;
+                default_reduction = raction;
             } else {
-                dump_reduction( rx, &base );
+                base += dump_reduction( raction );
             }
         }
         if( default_reduction != NULL ) {
             pro = default_reduction->pro;
-            action = ACTION_REDUCE | pro->pidx;
+            action = pro->pidx | ACTION_REDUCE;
         } else {
-            action = ACTION_SHIFT | 0;
+            action = ACTION_SHIFT;
         }
         add_table( any_token, action );
         ++base;
-        sum += base - state_base[i];
-        if( base - state_base[i] > max ) {
-            max = base - state_base[i];
+        size = base - state_base[sidx];
+        sum += size;
+        if( max < size ) {
+            max = size;
         }
     }
     printf( "avg: %u max: %u\n", sum / nstate, max );
     dump_define( fp, "YYANYTOKEN", any_token );
     dump_define( fp, "YYEOFTOKEN", eofsym->token );
-    dump_define( fp, "YYSTART", startstate->idx );
+    dump_define( fp, "YYSTART", startstate->sidx );
     begin_table( fp, "YYACTTYPE", "yybasetab" );
-    for( i = 0; i < nstate; ++i ) {
-        puttab( fp, FITS_A_WORD, state_base[i] );
+    for( sidx = 0; sidx < nstate; ++sidx ) {
+        puttab( fp, FITS_A_WORD, state_base[sidx] );
     }
     end_table( fp );
     begin_table( fp, "YYCHKTYPE", "yychktab" );
@@ -211,43 +217,43 @@ void genobj( FILE *fp )
     }
     end_table( fp );
     begin_table( fp, "YYPLENTYPE", "yyplentab" );
-    for( i = 0; i < npro; ++i ) {
-        for( item = protab[i]->item; item->p.sym != NULL; ) {
+    for( pidx = 0; pidx < npro; ++pidx ) {
+        for( item = protab[pidx]->items; item->u.sym != NULL; ) {
             ++item;
         }
-        puttab( fp, FITS_A_BYTE, (unsigned)( item - protab[i]->item ) );
+        puttab( fp, FITS_A_BYTE, (unsigned)( item - protab[pidx]->items ) );
     }
     end_table( fp );
     begin_table( fp, "YYPLHSTYPE", "yyplhstab" );
-    for( i = 0; i < npro; ++i ) {
-        puttab( fp, FITS_A_BYTE, protab[i]->sym->token );
+    for( pidx = 0; pidx < npro; ++pidx ) {
+        puttab( fp, FITS_A_BYTE, protab[pidx]->sym->token );
     }
     end_table( fp );
     fprintf( fp, "#ifdef YYDEBUG\n" );
     rule_base = 0;
     begin_table( fp, "unsigned short", "yyrulebase" );
-    for( i = 0; i < npro; ++i ) {
-        for( item = protab[i]->item; item->p.sym != NULL; ) {
+    for( pidx = 0; pidx < npro; ++pidx ) {
+        for( item = protab[pidx]->items; item->u.sym != NULL; ) {
             ++item;
         }
         puttab( fp, FITS_A_WORD, rule_base );
-        rule_base += (int)( item - protab[i]->item );
+        rule_base += (int)( item - protab[pidx]->items );
     }
     end_table( fp );
     begin_table( fp, "YYCHKTYPE", "yyrhstoks" );
-    for( i = 0; i < npro; ++i ) {
-        for( item = protab[i]->item; item->p.sym != NULL; ++item ) {
-            puttab( fp, FITS_A_BYTE, item->p.sym->token );
+    for( pidx = 0; pidx < npro; ++pidx ) {
+        for( item = protab[pidx]->items; item->u.sym != NULL; ++item ) {
+            puttab( fp, FITS_A_BYTE, item->u.sym->token );
         }
     }
     end_table( fp );
     begin_table( fp, "char YYFAR *", "yytoknames" );
     fputc( '\n', fp );
-    for( i = 0; i < nsym; ++i ) {
-        fprintf( fp, "\"%s\",\n", symtab[i]->name );
+    for( sym_idx = 0; sym_idx < nsym; ++sym_idx ) {
+        fprintf( fp, "\"%s\",\n", symtab[sym_idx]->name );
     }
     fprintf( fp, "\"\"" );
     end_table( fp );
     fprintf( fp, "#endif\n" );
-    FREE( table );
+    MemFree( table );
 }

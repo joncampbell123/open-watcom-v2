@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -37,6 +37,7 @@
 #include "uivedit.h"
 #include "uiledit.h"
 #include "uidialog.h"
+#include "memfuncs.h"
 
 #include "clibext.h"
 
@@ -51,17 +52,17 @@ typedef enum {
     R_SEL
 } maction;
 
-bool uigetlistelement( const void *data_handle, unsigned item, char *buff, unsigned buff_len )
+bool uigetlistelement( const char **data, unsigned item, char *buff, unsigned buff_len )
 /* if buffer is shorter then necessary then data is not null terminated
  * caller must handle this if need C null terminated string
  */
 {
-    const char **p;
+    const char  **p;
 
-    if( data_handle == NULL ) {
+    if( data == NULL ) {
         return( false );
     }
-    p = (const char **)data_handle;
+    p = data;
     if( p[item] != NULL && p[0] != NULL ) {
         if( buff_len > 0 ) {
             strncpy( buff, p[item], buff_len );
@@ -89,7 +90,7 @@ void uipaintlistbox( a_list *list )
     }
 
     length = list->box->area.width;
-    buf = (char *)uimalloc( length + 1 );
+    buf = MemAlloc( length + 1 );
     fn_get = list->get;
     if( fn_get == NULL )
         fn_get = uigetlistelement;
@@ -98,7 +99,7 @@ void uipaintlistbox( a_list *list )
         if( list->box->row == i + list->box->line ) {
             uiattr = list->box->uiattr;
         }
-        ok = (*fn_get)( list->data_handle, list->box->line + i, buf, length );
+        ok = (*fn_get)( list->data, list->box->line + i, buf, length );
         /* buf does not have to be null terminated */
         /* terminate it at maximum length */
         buf[length] = '\0';
@@ -115,7 +116,7 @@ void uipaintlistbox( a_list *list )
                      list->box->area.col, list->box->area.width,
                      UIData->attrs[ATTR_NORMAL], "", 0 );
     }
-    uifree( buf );
+    MemFree( buf );
 }
 
 static void setstartline( a_list *list )
@@ -149,7 +150,7 @@ static bool checkitem( a_list *list, int typed, unsigned index )
     fn_get = list->get;
     if( fn_get == NULL )
         fn_get = uigetlistelement;
-    if( (*fn_get)( list->data_handle, index, chr, sizeof( chr ) ) ) {
+    if( (*fn_get)( list->data, index, chr, sizeof( chr ) ) ) {
         first = (unsigned char)chr[0];
         if( isupper( first ) ) {
             first = tolower( first );
@@ -219,23 +220,23 @@ void uiboxpoplist( void )
     uipoplist( /* listboxevents */ );
 }
 
-static unsigned getlistsize( const void *data_handle, UIPICKGETTEXT *fn_get )
+static unsigned getlistsize( const char **data, UIPICKGETTEXT *fn_get )
 {
     unsigned    item;
 
     if( fn_get == NULL )
         fn_get = uigetlistelement;
-    for( item = 0; (*fn_get)( data_handle, item, NULL, 0 ); item++ )
+    for( item = 0; (*fn_get)( data, item, NULL, 0 ); item++ )
         ;
     return( item );
 }
 
 unsigned uilistsize( a_list *list )
 {
-    if( list->data_handle == NULL ) {
+    if( list->data == NULL ) {
         return( 0 );
     }
-    return( getlistsize( list->data_handle, list->get ) );
+    return( getlistsize( list->data, list->get ) );
 }
 
 void uimovelistbox( a_list *list, int row_diff, int col_diff )
@@ -251,7 +252,7 @@ a_list_info *uibeglistbox( VSCREEN *vs, SAREA *area, a_list *list )
     a_list_info     *box;
     unsigned        maxline;
 
-    box = uimalloc( sizeof( a_list_info ) );
+    box = MemAlloc( sizeof( *box ) );
     if( box == NULL ) {
         return( NULL );
     }
@@ -297,7 +298,7 @@ unsigned uiendlistbox( a_list *list )
     uiclose( list->box->vs );   // Shut down VSCREEN
     k = list->box->line;
     uifinigadget( &list->box->gadget );
-    uifree( list->box );
+    MemFree( list->box );
     list->box = NULL;
     return( k );
 }

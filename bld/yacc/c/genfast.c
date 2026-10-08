@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2023      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2023-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -38,16 +38,16 @@
 #include <assert.h>
 #include "yacc.h"
 #include "alloc.h"
+#include "roundmac.h"
 
-enum {
-    ACTION_REDUCE       = 0x8000,
-    ACTION_UNIT         = 0x4000
-};
+
+#define ACTION_UNIT     ACTION_FLAG_1
+#define ACTION_REDUCE   ACTION_FLAG_2
 
 typedef struct {
-    index_n             num_entries;
-    token_n             min;
-    token_n             max;
+    unsigned            num_entries;
+    unsigned            min;
+    unsigned            max;
     action_n            index;
     action_n            *action_vector;
 } av_info;
@@ -57,16 +57,16 @@ typedef struct compressed_action {
     token_n             token;
 } compressed_action;
 
-static index_n insertIntoBitVector( byte **bv, index_n *bs, byte *v, index_n size )
+static unsigned insertIntoBitVector( byte **bv, unsigned *bs, byte *v, unsigned size )
 {
-    index_n     i;
-    index_n     s;
-    index_n     ls;
-    byte        *p;
+    unsigned        i;
+    unsigned        s;
+    unsigned        ls;
+    byte            *p;
 
     if( *bv == NULL ) {
         *bs = size;
-        *bv = MALLOC( size, byte );
+        *bv = MemAllocSafe( size * sizeof( **bv ) );
         memcpy( *bv, v, size );
         return( 0 );
     }
@@ -87,7 +87,7 @@ static index_n insertIntoBitVector( byte **bv, index_n *bs, byte *v, index_n siz
              * bitvector has some common bits with the end of the large vector
              */
             *bs += size - i;
-            p = REALLOC( p, *bs, byte );
+            p = MemReallocSafe( p, *bs * sizeof( *p ) );
             *bv = p;
             memcpy( &p[ls], &v[i], size - i );
             return( ls - i );
@@ -97,28 +97,29 @@ static index_n insertIntoBitVector( byte **bv, index_n *bs, byte *v, index_n siz
      * bitvector has no common bits with large vector
      */
     *bs += size;
-    p = REALLOC( p, *bs, byte );
+    p = MemReallocSafe( p, *bs * sizeof( *p ) );
     *bv = p;
     memcpy( &p[ls], v, size );
     return( ls );
 }
 
-static int actcmp( action_n *actions, compressed_action *ca, index_n num_actions, token_n ntoken )
+static int actcmp( action_n *actions, compressed_action *ca, unsigned num_actions, unsigned ntoken )
 {
-    action_n    a1, a2;
-    index_n     i;
-    token_n     ca_token;
+    action_n        a1;
+    action_n        a2;
+    unsigned        i;
+    unsigned        ca_token;
 
     for( i = 0; i < num_actions; ++ca, ++i ) {
         ca_token = ca->token;
         if( ca_token >= ntoken )
             break;
         a1 = actions[ca_token];
-        if( a1 == ACTION_NULL ) {
+        if( a1 == ACTION_NONE ) {
             continue;
         }
         /*
-         * NB Know a2 != ACTION_NULL
+         * NB Know a2 != ACTION_NONE
          */
         a2 = ca->action;
         if( a1 != a2 ) {
@@ -128,40 +129,38 @@ static int actcmp( action_n *actions, compressed_action *ca, index_n num_actions
     return( 0 );
 }
 
-static void actcpy( action_n *actions, compressed_action *ca, index_n num_actions )
+static void actcpy( action_n *actions, compressed_action *ca, unsigned num_actions )
 {
-    index_n i;
+    unsigned        i;
 
     for( i = 0; i < num_actions; ++ca, ++i ) {
         actions[ca->token] = ca->action;
     }
 }
 
-static action_n *actextend( action_n *a, index_n *psize, token_n incr )
+static action_n *actextend( action_n *a, unsigned *psize, unsigned incr )
 {
-    index_n i;
+    unsigned        i;
+    unsigned        size;
 
     i = *psize;
-    *psize += incr;
-    if( i == 0 ) {
-        a = MALLOC( incr, action_n );
-    } else {
-        a = REALLOC( a, *psize, action_n );
+    size = i + incr;
+    a = MemReallocSafe( a, size * sizeof( *a ) );
+    while( i < size ) {
+        a[i++] = ACTION_NONE;
     }
-    while( i < *psize ) {
-        a[i++] = ACTION_NULL;
-    }
+    *psize = size;
     return( a );
 }
 
-static index_n actcompress( compressed_action *ca, action_n *actions, token_n ntoken )
+static unsigned actcompress( compressed_action *ca, action_n *actions, unsigned ntoken )
 {
-    token_n     token;
-    index_n     num_actions;
+    unsigned        token;
+    unsigned        num_actions;
 
     num_actions = 0;
     for( token = 0; token < ntoken; ++token ) {
-        if( actions[token] != ACTION_NULL ) {
+        if( actions[token] != ACTION_NONE ) {
             ca[num_actions].action = actions[token];
             ca[num_actions].token = token;
             ++num_actions;
@@ -170,14 +169,14 @@ static index_n actcompress( compressed_action *ca, action_n *actions, token_n nt
     return( num_actions );
 }
 
-static index_n insertIntoActionVector( action_n **bv, index_n *bs,
-        compressed_action *ca, index_n num_actions, token_n ntoken )
+static unsigned insertIntoActionVector( action_n **bv, unsigned *bs,
+        compressed_action *ca, unsigned num_actions, unsigned ntoken )
 {
-    index_n  i;
-    index_n  s;
-    index_n  ls;
-    action_n action;
-    action_n *p;
+    unsigned        i;
+    unsigned        s;
+    unsigned        ls;
+    action_n        action;
+    action_n        *p;
 
     if( num_actions == 0 ) {
         /*
@@ -195,10 +194,10 @@ static index_n insertIntoActionVector( action_n **bv, index_n *bs,
         for( i = 0; i < s; ++i ) {
             /*
              * try a quick check with the last element that failed (may fail again!)
-             * we know ca[0].action != ACTION_NULL
+             * we know ca[0].action != ACTION_NONE
              */
             action = p[i + ca[0].token];
-            if( action == ACTION_NULL || action == ca[0].action ) {
+            if( action == ACTION_NONE || action == ca[0].action ) {
                 if( actcmp( &p[i], ca, num_actions, ntoken ) == 0 ) {
                     /*
                      * action vector was found inside large vector
@@ -237,8 +236,8 @@ static index_n insertIntoActionVector( action_n **bv, index_n *bs,
 
 static action_n reduceaction( a_state *state, a_reduce_action *raction )
 {
-    action_n    action;
-    a_pro       *pro;
+    action_n        action;
+    a_pro           *pro;
 
     action = ACTION_REDUCE;
     pro = raction->pro;
@@ -254,15 +253,23 @@ static action_n reduceaction( a_state *state, a_reduce_action *raction )
 
 static int cmp_action( const void *a1, const void *a2 )
 {
-    av_info **p1 = (av_info **)a1;
-    av_info **p2 = (av_info **)a2;
-    av_info *s1 = *p1;
-    av_info *s2 = *p2;
-    token_n n1, n2;
-    token_n ne1, ne2;
-    token_n mx1, mx2;
-    token_n mn1, mn2;
+    av_info         **p1;
+    av_info         **p2;
+    av_info         *s1;
+    av_info         *s2;
+    token_n         n1;
+    token_n         n2;
+    token_n         ne1;
+    token_n         ne2;
+    token_n         mx1;
+    token_n         mx2;
+    token_n         mn1;
+    token_n         mn2;
 
+    p1 = (av_info **)a1;
+    p2 = (av_info **)a2;
+    s1 = *p1;
+    s2 = *p2;
     ne1 = s1->num_entries;
     ne2 = s2->num_entries;
     mx1 = s1->max;
@@ -306,28 +313,28 @@ static int cmp_action( const void *a1, const void *a2 )
     return( 0 );
 }
 
-static action_n *orderActionVectors( action_n **av, token_n ntoken )
+static action_n *orderActionVectors( action_n **av, unsigned ntoken )
 {
-    av_info **a;
-    av_info *p;
-    action_n *actions;
-    index_n num_entries;
-    token_n max;
-    token_n min;
-    token_n token;
-    action_n i;
-    action_n *map;
+    av_info         **a;
+    av_info         *p;
+    action_n        *actions;
+    unsigned        num_entries;
+    unsigned        max;
+    unsigned        min;
+    unsigned        token;
+    action_n        sidx;
+    action_n        *map;
 
-    a = MALLOC( nstate, av_info * );
-    for( i = 0; i < nstate; ++i ) {
-        actions = av[i];
-        p = MALLOC( 1, av_info );
-        a[i] = p;
+    a = MemAllocSafe( nstate * sizeof( *a ) );
+    for( sidx = 0; sidx < nstate; ++sidx ) {
+        actions = av[sidx];
+        p = MemAllocSafe( sizeof( *p ) );
+        a[sidx] = p;
         max = 0;
         min = ntoken;
         num_entries = 0;
         for( token = 0; token < ntoken; ++token ) {
-            if( actions[token] != ACTION_NULL ) {
+            if( actions[token] != ACTION_NONE ) {
                 if( num_entries == 0 ) {
                     min = token;
                 }
@@ -338,68 +345,69 @@ static action_n *orderActionVectors( action_n **av, token_n ntoken )
         p->min = min;
         p->max = max;
         p->num_entries = num_entries;
-        p->index = i;
+        p->index = sidx;
         p->action_vector = actions;
     }
     qsort( a, nstate, sizeof( av_info * ), cmp_action );
-    map = MALLOC( nstate, action_n );
-    for( i = 0; i < nstate; ++i ) {
-        map[i] = a[i]->index;
-        av[i] = a[i]->action_vector;
-        FREE( a[i] );
-        a[i] = NULL;
+    map = MemAllocSafe( nstate * sizeof( *map ) );
+    for( sidx = 0; sidx < nstate; ++sidx ) {
+        map[sidx] = a[sidx]->index;
+        av[sidx] = a[sidx]->action_vector;
+        MemFree( a[sidx] );
+        a[sidx] = NULL;
     }
-    FREE( a );
+    MemFree( a );
     return( map );
 }
 
-void GenFastTables( FILE *fp )
+void genobj_fast( FILE *fp )
 {
-    index_n     i;
-    index_n     j;
-    index_n     asize;
-    token_n     tokval;
-    index_n     vsize;
-    index_n     bsize;
-    action_n    *mapping;
-    value_size  bitv_base_size;
-    byte        *state_vector;
-    byte        *bvector;
+    action_n        sidx;
+    unsigned        j;
+    rule_n          pidx;
+    sym_n           sym_idx;
+    unsigned        asize;
+    token_n         tokval;
+    unsigned        vsize;
+    unsigned        bsize;
+    action_n        *mapping;
+    value_size      bitv_base_size;
+    byte            *state_vector;
+    byte            *bvector;
     compressed_action *ca;
-    index_n     num_actions;
-    set_size    *mp;
-    index_n     *base;
-    index_n     *abase;
-    index_n     *gbase;
-    action_n    *state_actions;
-    action_n    *avector;
-    action_n    **all_actions;
-    a_state     *state;
-    a_shift_action *saction;
+    unsigned        num_actions;
+    bitnum          *mp;
+    unsigned        *base;
+    unsigned        *abase;
+    unsigned        *gbase;
+    action_n        *state_actions;
+    action_n        *avector;
+    action_n        **all_actions;
+    a_state         *state;
+    a_shift_action  *saction;
     a_reduce_action *raction;
-    a_sym       *sym;
-    a_pro       *pro;
-    an_item     *item;
-    index_n     empty_actions;
-    action_n    *defaction;
-    action_n    state_idx;
-    token_n     ntoken_term;
-    token_n     ntoken_all;
-
+    a_sym           *sym;
+    a_pro           *pro;
+    an_item         *item;
+    unsigned        empty_actions;
+    action_n        *defaction;
+    action_n        state_sidx;
+    unsigned        ntoken_term;
+    unsigned        ntoken_all;
 
     ntoken_term = FirstNonTerminalTokenValue();
     ntoken_all = ntoken_term;
-    for( i = nterm; i < nsym; ++i ) {
-        symtab[i]->token = ntoken_all++;
+    for( sym_idx = nterm; sym_idx < nsym; ++sym_idx ) {
+        symtab[sym_idx]->token = ntoken_all++;
     }
 
     bvector = NULL;
     bsize = 0;
-    vsize = _RoundUpBitVector( ntoken_term, 8 );
-    state_vector = MALLOC( vsize, byte );
-    base = CALLOC( nstate, index_n );
-    for( i = 0; i < nstate; ++i ) {
-        state = statetab[i];
+    vsize = __ROUND_UP_SIZE_TO( ntoken_term, 8 );
+    state_vector = MemAllocSafe( vsize * sizeof( *state_vector ) );
+    base = MemCAllocSafe( nstate, sizeof( *base ) );
+    for( sidx = 0; sidx < nstate; ++sidx ) {
+        state = statetab[sidx];
         memset( state_vector, 0, vsize );
         /*
          * iterate over all shifts in state
@@ -418,7 +426,7 @@ void GenFastTables( FILE *fp )
                 continue;
             }
             tokval = sym->token;
-            state_vector[tokval >> 3] |= 1 << ( tokval & 0x07 );
+            SetBit( state_vector, tokval, 8 );
         }
         /*
          * iterate over all reductions in state
@@ -427,22 +435,23 @@ void GenFastTables( FILE *fp )
             if( state->default_reduction == raction )
                 continue;
             for( mp = Members( raction->follow ); mp-- != setmembers; ) {
-                tokval = symtab[*mp]->token;
-                state_vector[tokval >> 3] |= 1 << ( tokval & 0x07 );
+                sym_idx = *mp;
+                tokval = symtab[sym_idx]->token;
+                SetBit( state_vector, tokval, 8 );
             }
         }
-        base[i] = insertIntoBitVector( &bvector, &bsize, state_vector, vsize );
+        base[sidx] = insertIntoBitVector( &bvector, &bsize, state_vector, vsize );
     }
-    FREE( state_vector );
+    MemFree( state_vector );
 
-    defaction = CALLOC( nstate, action_n );
-    all_actions = MALLOC( nstate, action_n * );
-    for( i = 0; i < nstate; ++i ) {
-        state = statetab[i];
-        state_actions = MALLOC( ntoken_term, action_n );
-        all_actions[i] = state_actions;
+    defaction = MemCAllocSafe( nstate, sizeof( *defaction ) );
+    all_actions = MemAllocSafe( nstate * sizeof( *all_actions ) );
+    for( sidx = 0; sidx < nstate; ++sidx ) {
+        state = statetab[sidx];
+        state_actions = MemAllocSafe( ntoken_term * sizeof( *state_actions ) );
+        all_actions[sidx] = state_actions;
         for( j = 0; j < ntoken_term; ++j ) {
-            state_actions[j] = ACTION_NULL;
+            state_actions[j] = ACTION_NONE;
         }
         /*
          * iterate over all shifts in state
@@ -450,45 +459,46 @@ void GenFastTables( FILE *fp )
         for( saction = state->trans; (sym = saction->sym) != NULL; ++saction ) {
             if( sym->pro != NULL )
                 continue;
-            state_idx = saction->state->idx;
+            state_sidx = saction->state->sidx;
             if( saction->is_default ) {
-                defaction[i] = state_idx;
+                defaction[sidx] = state_sidx;
                 continue;
             }
-            state_actions[sym->token] = state_idx;
+            state_actions[sym->token] = state_sidx;
         }
         /*
          * iterate over all reductions in state
          */
         for( raction = state->redun; (pro = raction->pro) != NULL; ++raction ) {
             if( state->default_reduction == raction ) {
-                defaction[i] = reduceaction( state, raction );
+                defaction[sidx] = reduceaction( state, raction );
                 continue;
             }
             for( mp = Members( raction->follow ); mp-- != setmembers; ) {
-                state_actions[symtab[*mp]->token] = reduceaction( state, raction );
+                sym_idx = *mp;
+                state_actions[symtab[sym_idx]->token] = reduceaction( state, raction );
             }
         }
     }
     mapping = orderActionVectors( all_actions, ntoken_term );
     avector = NULL;
     asize = 0;
-    ca = CALLOC( ntoken_term, compressed_action );
-    abase = CALLOC( nstate, set_size );
-    for( i = 0; i < nstate; ++i ) {
-        num_actions = actcompress( ca, all_actions[i], ntoken_term );
-        abase[mapping[i]] = insertIntoActionVector( &avector, &asize, ca, num_actions, ntoken_term );
-        FREE( all_actions[i] );
-        all_actions[i] = NULL;
+    ca = MemCAllocSafe( ntoken_term, sizeof( *ca ) );
+    abase = MemCAllocSafe( nstate, sizeof( *abase ) );
+    for( sidx = 0; sidx < nstate; ++sidx ) {
+        num_actions = actcompress( ca, all_actions[sidx], ntoken_term );
+        abase[mapping[sidx]] = insertIntoActionVector( &avector, &asize, ca, num_actions, ntoken_term );
+        MemFree( all_actions[sidx] );
+        all_actions[sidx] = NULL;
     }
-    FREE( mapping );
-    FREE( ca );
-    for( i = 0; i < nstate; ++i ) {
-        state = statetab[i];
-        state_actions = MALLOC( ntoken_all, action_n );
-        all_actions[i] = state_actions;
+    MemFree( mapping );
+    MemFree( ca );
+    for( sidx = 0; sidx < nstate; ++sidx ) {
+        state = statetab[sidx];
+        state_actions = MemAllocSafe( ntoken_all * sizeof( *state_actions ) );
+        all_actions[sidx] = state_actions;
         for( j = 0; j < ntoken_all; ++j ) {
-            state_actions[j] = ACTION_NULL;
+            state_actions[j] = ACTION_NONE;
         }
         /*
          * iterate over all shifts in state
@@ -496,31 +506,31 @@ void GenFastTables( FILE *fp )
         for( saction = state->trans; (sym = saction->sym) != NULL; ++saction ) {
             if( sym->pro == NULL )
                 continue;
-            state_actions[sym->token] = saction->state->idx;
+            state_actions[sym->token] = saction->state->sidx;
         }
     }
     mapping = orderActionVectors( all_actions, ntoken_all );
-    ca = CALLOC( ntoken_all, compressed_action );
-    gbase = CALLOC( nstate, set_size );
-    for( i = 0; i < nstate; ++i ) {
-        num_actions = actcompress( ca, all_actions[i], ntoken_all );
-        gbase[mapping[i]] = insertIntoActionVector( &avector, &asize, ca, num_actions, ntoken_all );
-        FREE( all_actions[i] );
-        all_actions[i] = NULL;
+    ca = MemCAllocSafe( ntoken_all, sizeof( *ca ) );
+    gbase = MemCAllocSafe( nstate, sizeof( *gbase ) );
+    for( sidx = 0; sidx < nstate; ++sidx ) {
+        num_actions = actcompress( ca, all_actions[sidx], ntoken_all );
+        gbase[mapping[sidx]] = insertIntoActionVector( &avector, &asize, ca, num_actions, ntoken_all );
+        MemFree( all_actions[sidx] );
+        all_actions[sidx] = NULL;
     }
-    FREE( mapping );
-    FREE( ca );
+    MemFree( mapping );
+    MemFree( ca );
 
-    FREE( all_actions );
+    MemFree( all_actions );
 
     putambigs( fp, NULL );
 
     putnum( fp, "YYNOACTION", 0 );
     putnum( fp, "YYEOFTOKEN", eofsym->token );
     putnum( fp, "YYERRTOKEN", errsym->token );
-    putnum( fp, "YYSTART", startstate->idx );
-    putnum( fp, "YYSTOP", eofsym->state->idx );
-    putnum( fp, "YYERR", errstate->idx );
+    putnum( fp, "YYSTART", startstate->sidx );
+    putnum( fp, "YYSTOP", eofsym->state->sidx );
+    putnum( fp, "YYERR", errstate->sidx );
     putnum( fp, "YYUSED", nstate );
     if( keyword_id_low != 0 && default_shiftflag ) {
         putnum( fp, "YYKEYWORD_ID_LOW", keyword_id_low );
@@ -529,76 +539,76 @@ void GenFastTables( FILE *fp )
 
     putcomment( fp, "index by state to get default action for state" );
     begtab( fp, "YYACTIONTYPE", "yydefaction" );
-    for( i = 0; i < nstate; ++i ) {
-        puttab( fp, FITS_A_WORD, defaction[i] );
+    for( sidx = 0; sidx < nstate; ++sidx ) {
+        puttab( fp, FITS_A_WORD, defaction[sidx] );
     }
     endtab( fp );
-    FREE( defaction );
+    MemFree( defaction );
     bitv_base_size = FITS_A_WORD;
     if( bsize < 257 ) {
         bitv_base_size = FITS_A_BYTE;
     }
     putcomment( fp, "index by state to get offset into bit vector" );
     begtab( fp, "YYBITBASETYPE", "yybitbase" );
-    for( i = 0; i < nstate; ++i ) {
-        puttab( fp, bitv_base_size, base[i] );
+    for( sidx = 0; sidx < nstate; ++sidx ) {
+        puttab( fp, bitv_base_size, base[sidx] );
     }
     endtab( fp );
     putcomment( fp, "index by token (from state base) to see if token is valid in state" );
     begtab( fp, "YYBITTYPE", "yybitcheck" );
-    for( i = 0; i < bsize; ++i ) {
-        puttab( fp, FITS_A_BYTE, bvector[i] );
+    for( j = 0; j < bsize; ++j ) {
+        puttab( fp, FITS_A_BYTE, bvector[j] );
     }
     endtab( fp );
     putcomment( fp, "index by state to get offset into action vector" );
     begtab( fp, "YYACTIONBASETYPE", "yyactionbasetab" );
-    for( i = 0; i < nstate; ++i ) {
-        puttab( fp, FITS_A_WORD, abase[i] );
+    for( sidx = 0; sidx < nstate; ++sidx ) {
+        puttab( fp, FITS_A_WORD, abase[sidx] );
     }
     endtab( fp );
     putcomment( fp, "index by state to get offset into action vector" );
     begtab( fp, "YYACTIONBASETYPE", "yygotobase" );
-    for( i = 0; i < nstate; ++i ) {
-        puttab( fp, FITS_A_WORD, gbase[i] );
+    for( sidx = 0; sidx < nstate; ++sidx ) {
+        puttab( fp, FITS_A_WORD, gbase[sidx] );
     }
     endtab( fp );
     putcomment( fp, "index by token (from state base) to get action for state" );
     empty_actions = 0;
     begtab( fp, "YYACTIONTYPE", "yyactiontab" );
-    for( i = 0; i < asize; ++i ) {
-        if( avector[i] == ACTION_NULL ) {
+    for( j = 0; j < asize; ++j ) {
+        if( avector[j] == ACTION_NONE ) {
             ++empty_actions;
         }
-        puttab( fp, FITS_A_WORD, avector[i] );
+        puttab( fp, FITS_A_WORD, avector[j] );
     }
     endtab( fp );
     putcomment( fp, "index by rule to get length of rule" );
     begtab( fp, "YYPLENTYPE", "yyplentab" );
-    for( i = 0; i < npro; ++i ) {
-        for( item = protab[i]->items; item->p.sym != NULL; ) {
+    for( pidx = 0; pidx < npro; ++pidx ) {
+        for( item = protab[pidx]->items; item->u.sym != NULL; ) {
             ++item;
         }
-        puttab( fp, FITS_A_BYTE, (unsigned)( item - protab[i]->items ) );
+        puttab( fp, FITS_A_BYTE, (unsigned)( item - protab[pidx]->items ) );
     }
     endtab( fp );
     putcomment( fp, "index by rule to get left hand side token" );
     begtab( fp, "YYPLHSTYPE", "yyplhstab" );
-    for( i = 0; i < npro; ++i ) {
-        puttab( fp, FITS_A_WORD, protab[i]->sym->token );
+    for( pidx = 0; pidx < npro; ++pidx ) {
+        puttab( fp, FITS_A_WORD, protab[pidx]->sym->token );
     }
     endtab( fp );
 
-    FREE( base );
-    FREE( abase );
-    FREE( gbase );
-    FREE( bvector );
-    FREE( avector );
+    MemFree( gbase );
+    MemFree( abase );
+    MemFree( base );
+    MemFree( avector );
+    MemFree( bvector );
 
     dumpstatistic( "bytes used in tables", bytesused );
-    dumpstatistic( "table space utilization", 100 - ( empty_actions * 100L / asize ) );
+    dumpstatistic( "table space utilization", 100 - ( empty_actions * 100 / asize ) );
 
     puttokennames( fp, 0, FITS_A_WORD );
 
-    FREE( protab );
-    FREE( symtab );
+    MemFree( protab );
+    MemFree( symtab );
 }

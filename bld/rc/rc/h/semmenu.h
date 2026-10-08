@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -37,9 +37,6 @@
 
 /**** Constant Definitions ****/
 
-#define RES_HEADER_VERSION     1
-#define RES_HEADER_SIZE        4
-
 /**** Semantic structures ****/
 
 typedef enum MenuItemType {
@@ -62,28 +59,28 @@ typedef struct MenuItemPopupData {
     MenuExItemPopup         menuExData;
 } MenuItemPopupData;
 
-typedef struct FullMenu {
-    struct FullMenuItem     *head;
-    struct FullMenuItem     *tail;
-} FullMenu;
+typedef struct FullMenuWIN {
+    struct FullMenuItemWIN  *head;
+    struct FullMenuItemWIN  *tail;
+} FullMenuWIN;
 
-typedef FullMenu    *FullMenuPtr;
+typedef FullMenuWIN     *FullMenuPtrWIN;
 
 typedef struct FullMenuItemPopup {
     MenuItemPopupData       item;
-    FullMenuPtr             submenu;
+    FullMenuPtrWIN          submenu;
 } FullMenuItemPopup;
 
-typedef struct FullMenuItem {
-    struct FullMenuItem     *next;
-    struct FullMenuItem     *prev;
-    bool                    UseUnicode;
+typedef struct FullMenuItemWIN {
+    struct FullMenuItemWIN  *next;
+    struct FullMenuItemWIN  *prev;
+    bool                    iswin32;
     bool                    IsPopup;
     union {
         FullMenuItemPopup   popup;
         MenuItemNormalData  normal;
     } item;
-} FullMenuItem;
+} FullMenuItemWIN;
 
 typedef struct FullMenuOS2 {
     struct FullMenuItemOS2  *head;

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2017-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2017-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -44,16 +44,18 @@
 #include "aui.h"
 #include "sampinfo.h"
 #include "memutil.h"
-#include "clibext.h"
+#include "wpmutil.h"
 #include "getsamps.h"
-#include "madinter.h"
+#include "wpmadcli.h"
 #include "utils.h"
 #include "wphelp.h"
-#include "dipinter.h"
+#include "wpdipcli.h"
 #include "clrsamps.h"
 #include "rptsamps.h"
 #include "wpstart.h"
 #include "wpdata.h"
+
+#include "clibext.h"
 
 
 STATIC bool     procCmd( char * );
@@ -143,7 +145,6 @@ void WPInit( void )
     int         cmd_len;
     char        *cmd_line;
 
-    WPMemOpen();
     SamplePath[0] = 0;
     InitPaths();
     wp_env = getenv( "WPROF" );
@@ -151,10 +152,10 @@ void WPInit( void )
         procCmd( wp_env );
     }
     cmd_len = _bgetcmd( NULL, 0 ) + 1;
-    cmd_line = ProfAlloc( cmd_len );
+    cmd_line = MemAlloc( cmd_len );
     _bgetcmd( cmd_line, cmd_len );
     do_report = procCmd( cmd_line );
-    ProfFree( cmd_line );
+    MemFree( cmd_line );
     WndInit( "Open Watcom Profiler" );
     WPWndInitDone = true;
     InitMADInfo();
@@ -177,7 +178,6 @@ void WPFini( void )
     WndFini();
     WPDipFini();
     FiniMADInfo();
-    WPMemClose();
 }
 
 
@@ -244,7 +244,7 @@ STATIC bool procCmd( char * cmd )
                 cmd = eatAlphaNum( cmd );
                 if( *cmd == NULLCHAR || cmd-rover == 0 ) {
                     if( WProfDips != NULL ) {
-                        ProfFree( WProfDips );
+                        MemFree( WProfDips );
                         WProfDips = NULL;
                         WProfDipSize = 0;
                     }
@@ -257,7 +257,7 @@ STATIC bool procCmd( char * cmd )
                     } else {
                         old_len--;
                     }
-                    WProfDips = ProfRealloc( WProfDips, WProfDipSize );
+                    WProfDips = MemRealloc( WProfDips, WProfDipSize );
                     memcpy( WProfDips + old_len, rover, name_len );
                     old_len += name_len;
                     WProfDips[old_len++] = NULLCHAR;

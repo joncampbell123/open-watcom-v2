@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,7 +34,6 @@
 #include "coderep.h"
 #include "score.h"
 #include "freelist.h"
-#include "_cfloat.h"
 #include "spawn.h"
 #include "memout.h"
 #include "data.h"
@@ -92,13 +91,13 @@ static  void    ScoreSeed( block *blk, block *son, byte index )
 }
 
 
-static  void    CopyList( score *frm, score *to,
+static  void    CopyList( score_hdl frm, score_hdl to,
                           list_head **sc_heads, int i )
 /*****************************************************/
 {
     score_list  *first;
     score_list  *new_sc;
-    score       *next;
+    score_hdl   next;
 
     if( to[i].list == NULL ) {
         to[i].list = *sc_heads;
@@ -120,8 +119,8 @@ static  void    CopyList( score *frm, score *to,
 }
 
 
-static  void    ScoreCopy( score *other_scoreboard, score *scoreboard )
-/*********************************************************************/
+static  void    ScoreCopy( score_hdl other_scoreboard, score_hdl scoreboard )
+/***************************************************************************/
 {
     list_head   **sc_heads;
     int         i;
@@ -194,7 +193,7 @@ static  void    InitZero( void )
     ScZero->class       = SC_N_CONSTANT;
     ScZero->offset      = 0;
     ScZero->symbol.u.p  = NULL;
-    ScZero->index_reg   = NO_INDEX;
+    ScZero->reg_index   = NO_INDEX;
     ScZero->base        = NULL;
 }
 
@@ -255,7 +254,7 @@ static  void    ConstSizes( void )
 
     for( cons = Names[N_CONSTANT]; cons != NULL; cons = cons->n.next_name ) {
         if( cons->c.const_type == CONS_ABSOLUTE ) {
-            if( CFIsU16( cons->c.value ) ) {
+            if( CFIsU16( cons->c.u.cfval ) ) {
                 cons->n.size = 2;
             } else {
                 cons->n.size = 4;

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -107,7 +107,7 @@ static comdat_info * AllocCDatInfo( void )
         info = FreedInfos;
         FreedInfos = info->next;
     } else {
-        _Pass1Alloc( info, sizeof( comdat_info ) );
+        info = Pass1Alloc( sizeof( comdat_info ) );
     }
     info->pieces = NULL;
     return( info );
@@ -129,7 +129,7 @@ static comdat_piece * AllocCDatPiece( void )
         piece = FreedPieces;
         FreedPieces = piece->next;
     } else {
-        _Pass1Alloc( piece, sizeof( comdat_piece ) );
+        piece = Pass1Alloc( sizeof( comdat_piece ) );
     }
     memset( piece, 0, sizeof( comdat_piece ) );
     return( piece );
@@ -140,7 +140,7 @@ static void FreeCDatPiece( void * piec )
 {
     comdat_piece *piece = piec;
     if( piece->free_data ) {
-        _LnkFree( piece->data );
+        MemFree( piece->data );
     }
     piece->next = FreedPieces;
     FreedPieces = piece;
@@ -157,14 +157,14 @@ static unsigned_32 GetLeaf( void )
     if( leaf <= COMDEF_LEAF_SIZE ) {
         value = leaf;
     } else if( leaf == COMDEF_LEAF_2 ) {
-        value = MGET_U16_UN( ObjBuff );
+        value = MGET_LE_U16_UN( ObjBuff );
         ObjBuff += sizeof( unsigned_16 );
     } else if( leaf == COMDEF_LEAF_3 ) {
-        value = MGET_U16_UN( ObjBuff );
+        value = MGET_LE_U16_UN( ObjBuff );
         ObjBuff += sizeof( unsigned_16 );
         value += ( (unsigned_32)*ObjBuff++ ) << 16;
     } else if( leaf == COMDEF_LEAF_4 ) {
-        value = MGET_U32_UN( ObjBuff );
+        value = MGET_LE_U32_UN( ObjBuff );
         ObjBuff += sizeof( unsigned_32 );
     }
     return( value );
@@ -182,11 +182,13 @@ static byte COMDEF_bits( void )
             break;
         // none of these are generated for Dwarf debug info so
         // we should not get confused when we are 16-bit
-        if( seg->isuninit || seg->iscdat || seg->iscode ) {
+        if( seg->isuninit
+          || seg->iscdat
+          || seg->iscode ) {
             return( seg->bits );
         }
     }
-    return( (ObjFormat & FMT_32BIT_REC) ? BITS_32 : BITS_16 );
+    return( (ObjFormat & OBJFMT_32BIT_REC) ? BITS_32 : BITS_16 );
 }
 
 void ProcComdef( bool isstatic )
@@ -244,8 +246,9 @@ void ProcLinsym( void )
     }
     if( !IS_SYM_COMDAT( sym ) )
         return;
-    is32bit = ( (ObjFormat & FMT_32BIT_REC) != 0 );
-    if( sym->mod == CurrMod && (sym->info & SYM_DEAD) == 0 ) {
+    is32bit = ( (ObjFormat & OBJFMT_32BIT_REC) != 0 );
+    if( sym->mod == CurrMod
+      && (sym->info & SYM_DEAD) == 0 ) {
         DBIAddLines( sym->p.seg, ObjBuff, EOObjRec - ObjBuff, is32bit );
     }
 }
@@ -314,7 +317,8 @@ static void AddToLinkerComdat( symbol *sym )
         sym->addr.off = 0;
         sect = Root;
 #ifdef _EXE
-        if( (FmtData.type & MK_OVERLAYS) && (alloc & 1) != 0 ) {
+        if( (FmtData.type & MK_OVERLAYS)
+          && (alloc & 1) != 0 ) {
             sect = NonSect;             /* data in an overlaid app */
         }
 #endif
@@ -322,7 +326,8 @@ static void AddToLinkerComdat( symbol *sym )
     } else {
         class = leader->class;
         seglen = CAlign( leader->size, align ) + sdata->length;
-        if( seglen > 0xFFFF && align <= 1 ) {
+        if( seglen > 0xFFFF
+          && align <= 1 ) {
             sdata->u.name = GetNewName();
             sym->addr.off = 0;
         } else {
@@ -347,14 +352,14 @@ static offset CountIDBlock( unsigned_8 **buffptr )
     unsigned_16 count;
 
     buff = *buffptr;
-    if( ObjFormat & FMT_MS_386 ) {
-        _TargU32toHost( MGET_U32( buff ), repeat );
+    if( ObjFormat & OBJFMT_MS_386 ) {
+        repeat = MGET_LE_U32_UN( buff );
         buff += sizeof( unsigned_32 );
     } else {
-        _TargU16toHost( MGET_U16( buff ), repeat );
+        repeat = MGET_LE_U16_UN( buff );
         buff += sizeof( unsigned_16 );
     }
-    _TargU16toHost( MGET_U16( buff ), count );
+    count = MGET_LE_U16_UN( buff );
     buff += sizeof( unsigned_16 );
     if( count == 0 ) {  // this is followed by actual data
         repeat *= *buff;
@@ -396,7 +401,7 @@ static bool CheckSameComdat( void *info, void *sym )
 /***********************************************************/
 {
     if( (symbol *)sym == ((comdat_info *)info)->sym ) {
-        LnkMsg( LOC_REC+ERR+MSG_INTERNAL, "s", "duplicate comdat found" );
+        LnkMsg( ERR+LOC_REC+MSG_INTERNAL, "s", "duplicate comdat found" );
         LnkMsg( ERR+MSG_INTERNAL, "s", ((symbol *)sym)->name );
     }
     return( false );
@@ -413,7 +418,7 @@ void ProcComdat( void )
     comdat_piece *      piece;
     offset              dataoff;
     segdata *           sdata;
-    segnode *           seg;
+    segnode *           snode;
     list_of_names *     symname;
     symbol *            sym;
     size_t              namelen;
@@ -434,11 +439,11 @@ void ProcComdat( void )
         usealign = false;
         align = OMFAlignTab[align];
     }
-    if( ObjFormat & FMT_32BIT_REC ) {
-        _TargU32toHost( MGET_U32_UN( ObjBuff ), dataoff );
+    if( ObjFormat & OBJFMT_32BIT_REC ) {
+        dataoff = MGET_LE_U32_UN( ObjBuff );
         ObjBuff += sizeof( unsigned_32 );
     } else {
-        _TargU16toHost( MGET_U16_UN( ObjBuff ), dataoff );
+        dataoff = MGET_LE_U16_UN( ObjBuff );
         ObjBuff += sizeof( unsigned_16 );
     }
     SkipIdx();  /* not interested in the type index */
@@ -447,9 +452,9 @@ void ProcComdat( void )
         SkipIdx();                              /* get public base */
         segidx = GetIdx();
         if( segidx != 0 ) {
-            seg = (segnode *) FindNode( SegNodes, segidx );
+            snode = (segnode *)FindNode( SegNodes, segidx );
             if( usealign ) {
-                align = seg->entry->align;
+                align = snode->entry->align;
             }
         } else {
             BadObject();        // do not support absolute comdats
@@ -473,7 +478,7 @@ void ProcComdat( void )
         piece->length = EOObjRec - ObjBuff;
     }
     if( !CacheIsPerm() ) {
-        _ChkAlloc( piece->data, piece->length );
+        piece->data = MemAllocSafe( piece->length );
         memcpy( piece->data, ObjBuff, piece->length );
         piece->free_data = true;
     } else {
@@ -488,11 +493,11 @@ void ProcComdat( void )
         sdata->length = piece->length;
         sdata->combine = COMBINE_ADD;
         sdata->iscdat = true;
-        sdata->isabs = ( seg == NULL );
+        sdata->isabs = ( snode == NULL );
         sdata->align = align;
-        sdata->u.leader = seg->entry->u.leader;
-        sdata->iscode = ( (seg->info & SEG_CODE) != 0 );
-        sdata->bits = ( ObjFormat & FMT_32BIT_REC ) ? BITS_32 : BITS_16;
+        sdata->u.leader = snode->entry->u.leader;
+        sdata->iscode = ( (snode->info & SEGINF_CODE) != 0 );
+        sdata->bits = ( ObjFormat & OBJFMT_32BIT_REC ) ? BITS_32 : BITS_16;
         info = AllocCDatInfo();
         info->sdata = sdata;
         info->sym = sym;
@@ -505,13 +510,14 @@ void ProcComdat( void )
         RingAppend( &CDatList, info );
         if( IS_SYM_COMDAT( sym ) ) {
             CheckComdatSym( sym, info->flags & ~SYM_DEAD );
-        } else if( !(IS_SYM_REGULAR( sym ) && (sym->info & SYM_DEFINED)) ) {
+        } else if( !(IS_SYM_REGULAR( sym )
+          && (sym->info & SYM_DEFINED)) ) {
             if( sym->info & SYM_DEFINED ) {
                 sym = HashReplace( sym );
             }
             ClearSymUnion( sym );
             if( alloc == 0 ) {  /* explicit */
-                seg->entry->u.leader->info |= SEG_LXDATA_SEEN;
+                snode->entry->u.leader->info |= SEGINF_LXDATA_SEEN;
                 RingAppend( &sdata->u.leader->pieces, sdata );
                 Ring2Append( &CurrMod->segs, sdata );
 #if 0
@@ -526,10 +532,11 @@ void ProcComdat( void )
             info->flags &= ~SYM_DEAD;
         }
     }
-    if( (info->flags & SYM_DEAD) && (LinkFlags & LF_INC_LINK_FLAG) == 0 ) {
-        ObjFormat |= FMT_IGNORE_FIXUPP;
+    if( (info->flags & SYM_DEAD)
+      && (LinkFlags & LF_INC_LINK_FLAG) == 0 ) {
+        ObjFormat |= OBJFMT_IGNORE_FIXUPP;
     } else {
-        ObjFormat &= ~(FMT_IGNORE_FIXUPP | FMT_IS_LIDATA);
+        ObjFormat &= ~(OBJFMT_IGNORE_FIXUPP | OBJFMT_IS_LIDATA);
     }
     SetCurrSeg( info->sdata, dataoff, piece->data );
 }

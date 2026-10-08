@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,7 +34,7 @@
 #include <errno.h>
 #include "global.h"
 #include "rcerrors.h"
-#include "autodep.h"
+#include "depinfo.h"
 #include "semantic.h"
 #include "rcrtns.h"
 #include "depend.h"
@@ -43,15 +43,9 @@
 #include "clibext.h"
 
 
-typedef struct {
-    uint_32             time;       /* file's time taken from stat */
-    uint_16             len;        /* sizeof the name array */
-    char                name[1];    /* dynamic array */
-} ResDepInfo;
-
 typedef struct DepNode {
     struct DepNode      *next;
-    ResDepInfo          info;       /* this must be the last element because it contains a dynamic array */
+    DepInfo             info;       /* this must be the last element because it contains a dynamic array */
 } DepNode;
 
 static DepNode          *depList;
@@ -66,7 +60,7 @@ bool AddDependency( const char *fname )
 
     if( CmdLineParms.GenAutoDep ) {
         cmp = 0;
-        name = RESALLOC( _MAX_PATH );
+        name = MemAllocSafe( _MAX_PATH );
         _fullpath( name, fname, _MAX_PATH );
         for( cur = &depList; *cur != NULL; cur = &(*cur)->next ) {
             cmp = strcmp( name, (*cur)->info.name );
@@ -77,18 +71,18 @@ bool AddDependency( const char *fname )
         if( *cur == NULL
           || cmp != 0 ) {
             len = strlen( name ) + 1;
-            new = RESALLOC( sizeof( DepNode ) - 1 + len );
+            new = MemAllocSafe( sizeof( DepNode ) - 1 + len );
             new->next = *cur;
             new->info.len = (uint_16)len;
             memcpy( new->info.name, name, len );
             *cur = new;
         }
-        RESFREE( name );
+        MemFree( name );
     }
     return( false );
 }
 
-static void writeOneNode( ResDepInfo *cur )
+static void writeOneNode( DepInfo *cur )
 {
     RawDataItem         item;
 
@@ -98,7 +92,7 @@ static void writeOneNode( ResDepInfo *cur )
     item.WriteNull = false;
 
     /*
-     * write out time
+     * write out time stamp
      */
 #ifdef __BIG_ENDIAN__
     item.Item.Num = cur->time >> 16;
@@ -129,9 +123,9 @@ static void writeOneNode( ResDepInfo *cur )
 
 static void writeDepListEOF( void )
 {
-    ResDepInfo  eof;
+    DepInfo     eof;
 
-    memset( &eof, 0, sizeof( ResDepInfo ) );
+    memset( &eof, 0, sizeof( DepInfo ) );
     writeOneNode( &eof );
 }
 
@@ -142,7 +136,7 @@ static void freeDepList( void )
 
     for( cur = depList; cur != NULL; cur = next ) {
         next = cur->next;
-        RESFREE( cur );
+        MemFree( cur );
     }
 }
 
@@ -150,8 +144,8 @@ bool WriteDependencyRes( void )
 {
     DepNode             *cur;
     ResLocation         loc;
-    WResID              *nameid;
-    WResID              *typeid;
+    WResID              *res_id;
+    WResID              *type_id;
     struct stat         file_info;
 
     if( CmdLineParms.GenAutoDep ) {
@@ -166,9 +160,9 @@ bool WriteDependencyRes( void )
         }
         writeDepListEOF();
         loc.len = SemEndResource( loc.start );
-        nameid = WResIDFromStr( DEP_LIST_NAME );
-        typeid = WResIDFromNum( DEP_LIST_TYPE );
-        SemAddResourceAndFree( nameid, typeid, MEMFLAG_MOVEABLE | MEMFLAG_DISCARDABLE, loc );
+        res_id = WResIDFromStr( DEP_LIST_NAME );
+        type_id = WResIDFromNum( DEP_LIST_TYPE );
+        SemAddResourceAndFree( res_id, type_id, DEFAULT_FLAGS_MD, loc );
     }
     freeDepList();
     return( false );

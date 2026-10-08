@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -102,14 +102,14 @@ WStringBlock *WInsertStringData( WStringEditInfo *einfo, uint_16 id,
 
     if( ok ) {
         if( block->block.String[id & 0xf] == NULL ) {
-            block->block.String[id & 0xf] = WResIDNameFromStr( text );
-            block->symbol[id & 0xf] = WStrDup( symbol );
+            block->block.String[id & 0xf] = WResStringIDNameFromStr( text );
+            block->symbol[id & 0xf] = WStrdup( symbol );
             einfo->info->modified = true;
         } else {
             if( WQueryReplaceString( einfo->edit_dlg ) ) {
-                WRMemFree( block->block.String[id & 0xf] );
-                block->block.String[id & 0xf] = WResIDNameFromStr( text );
-                block->symbol[id & 0xf] = WStrDup( symbol );
+                MemFree( block->block.String[id & 0xf] );
+                block->block.String[id & 0xf] = WResStringIDNameFromStr( text );
+                block->symbol[id & 0xf] = WStrdup( symbol );
                 einfo->info->modified = true;
                 *replace = true;
             } else {
@@ -202,11 +202,11 @@ bool WInsertStringEntry( WStringEditInfo *einfo )
     }
 
     if( symbol != NULL ) {
-        WRMemFree( symbol );
+        MemFree( symbol );
     }
 
     if( text != NULL ) {
-        WRMemFree( text );
+        MemFree( text );
     }
 
     return( ok );
@@ -270,7 +270,7 @@ bool WAddEditWinLBoxEntry( WStringEditInfo *einfo, WStringBlock *block, uint_16 
         ++idlen;
         idtext[idlen] = '\0';
         tlen = strlen( text );
-        lbtext = (char *)WRMemAlloc( tlen + idlen + 4 );
+        lbtext = MemAlloc( tlen + idlen + 4 );
         ok = (lbtext != NULL);
     }
 
@@ -286,15 +286,15 @@ bool WAddEditWinLBoxEntry( WStringEditInfo *einfo, WStringBlock *block, uint_16 
     }
 
     if( n != NULL ) {
-        WRMemFree( n );
+        MemFree( n );
     }
 
     if( text != NULL ) {
-        WRMemFree( text );
+        MemFree( text );
     }
 
     if( lbtext != NULL ) {
-        WRMemFree( lbtext );
+        MemFree( lbtext );
     }
 
     return( ok );

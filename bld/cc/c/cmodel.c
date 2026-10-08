@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -57,15 +57,15 @@ static bool EqualChar( int c )
 
 static size_t get_token_len( const char *start )
 {
-    char        c;
+    int         ch;
     const char  *src;
 
-    for( src = start; (c = *src) != '\0'; ++src ) {
-        if( EqualChar( c ) )
+    for( src = start; (ch = *(unsigned char *)src) != '\0'; ++src ) {
+        if( EqualChar( ch ) )
             break;
-        if( c == ' ' )
+        if( ch == ' ' )
             break;
-        if( CmdScanSwitchChar( c ) ) {
+        if( CmdScanSwitchChar( ch ) ) {
             break;
         }
     }
@@ -184,7 +184,7 @@ void AddUndefMacro( const char *str )
         if( !MacroDel( str ) ) {
             uname = (undef_names *)CMemAlloc( sizeof( undef_names ) );
             uname->next = UndefNames;
-            uname->name = CMemStrDup( str );
+            uname->name = CMemStrdup( str );
             UndefNames = uname;
         }
     }
@@ -280,7 +280,7 @@ void InitModInfo( void )
     UndefNames = NULL;
     WholeFName = NULL;
     ObjectFileName = NULL;
-    ErrorFileName = CMemStrDup( "*" );
+    ErrorFileName = CMemStrdup( "*" );
     DependFileName = NULL;
     DependForceSlash = 0;
     ModuleName = NULL;

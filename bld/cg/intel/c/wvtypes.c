@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -44,6 +44,7 @@
 #include "x86dbsup.h"
 #include "dbsupp.h"
 #include "wvsupp.h"
+#include "i64.h"
 
 
 #define MAX_TYPE_SIZE   (1024 * 16)
@@ -95,8 +96,8 @@ static  uint    SignedSizeClass64( signed_64 val )
 {
     uint        class;
 
-    if( val.u._32[I64HI32] == 0 || val.u._32[I64HI32] == -1 ) {
-        class = SignedSizeClass( val.u._32[I64LO32] );
+    if( I64High( val ) == 0 || I64High( val ) == -1 ) {
+        class = SignedSizeClass( I64Low( val ) );
     } else {
         class = 3;
     }
@@ -233,14 +234,14 @@ dbg_type        WVLocCharBlock( dbg_loc loc, cg_type len_type )
 }
 
 
-dbg_type    WVFtnArray( back_handle dims, cg_type lo_bound_tipe, cg_type num_elts_tipe, int off, dbg_type base )
-/**************************************************************************************************************/
+dbg_type    WVFtnArray( back_handle dims, cg_type lo_bound_tipe, cg_type num_elems_tipe, int off, dbg_type base )
+/***************************************************************************************************************/
 {
     temp_buff   temp;
 
     NewType( &temp, WT_ARRAY + FORTRAN_TYPE );
     BuffByte( GetScalar( lo_bound_tipe ) );
-    BuffByte( GetScalar( num_elts_tipe ) );
+    BuffByte( GetScalar( num_elems_tipe ) );
     BuffBack( dims, off );
     BuffIndex( base );
     EndType( true );
@@ -334,7 +335,7 @@ dbg_type    WVEndArray( dbg_array ar )
             break;
         case DIM_VAR:
             ret = WVFtnArray( dim->u.var.dims, dim->u.var.lo_bound_tipe,
-                     dim->u.var.num_elts_tipe, dim->u.var.off, ar->base );
+                     dim->u.var.num_elems_tipe, dim->u.var.off, ar->base );
             ar->base = ret;
             break;
 
@@ -394,7 +395,7 @@ static  void    AddField( field_any **owner, field_any *field )
 
     strt = field->member.b_strt;
     off  = field->member.u.off;
-    for(;;) {
+    for( ;; ) {
         curr = *owner;
         if( curr == NULL )
             break;
@@ -447,7 +448,7 @@ dbg_type        WVEndStruct( dbg_struct st )
     BuffDWord( st->size );
     EndType( true );
     SortFields( st );
-    for(;;) {
+    for( ;; ) {
         field = st->list;
         if( field == NULL )
             break;
@@ -521,7 +522,7 @@ dbg_type        WVEndEnum( dbg_enum en )
     BuffWord( en->num );
     BuffByte( GetScalar( en->tipe ) );
     EndType( true );
-    for(;;) {
+    for( ;; ) {
         cons = en->list;
         if( cons == NULL )
             break;
@@ -529,10 +530,10 @@ dbg_type        WVEndEnum( dbg_enum en )
         class = SignedSizeClass64( val );
         BuffStart( &temp, WT_ENUMERATED + ENUM_BYTE + class );
         if( class == 3 ) {
-            BuffValue( val.u._32[I64LO32], 2 );
-            BuffValue( val.u._32[I64HI32], 2 );
+            BuffValue( U64Low( val ), 2 );
+            BuffValue( U64High( val ), 2 );
         } else {
-            BuffValue( val.u._32[I64LO32], class );
+            BuffValue( U64Low( val ), class );
         }
         BuffString( cons->len, cons->name );
         EndType( false );
@@ -558,7 +559,7 @@ dbg_type        WVEndProc( dbg_proc pr )
     proc_type = TypeIdx;
     BuffIndex( pr->ret );
     BuffByte( pr->num );
-    for(;;) {
+    for( ;; ) {
         parm = pr->list;
         if( parm == NULL )
             break;

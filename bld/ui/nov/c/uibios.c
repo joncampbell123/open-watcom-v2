@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -39,6 +40,7 @@
 #include "uimouse.h"
 #include "uinlm.h"
 #include "uicurshk.h"
+#include "memfuncs.h"
 
 
 int     ScreenHandle;       // used by uikeyb.c and uicurs.c as well
@@ -111,7 +113,7 @@ bool intern initbios( void )
     if( initmonitor() ) {
 
         size = UIData->width * UIData->height;
-        UIData->screen.origin = (LP_PIXEL)uimalloc( size * sizeof( PIXEL ) );
+        UIData->screen.origin = MemAlloc( sizeof( *UIData->screen.origin ) * size );
         for( i = 0; i < size; ++i ) {
             UIData->screen.origin[i].ch = ' ';
             UIData->screen.origin[i].attr = 7;
@@ -153,7 +155,7 @@ void intern finibios( void )
     uifinicursor();
     finikeyboard();
     finimonitor();
-    uifree( (void *)UIData->screen.origin );
+    MemFree( (void *)UIData->screen.origin );
 
 }
 
@@ -162,11 +164,21 @@ void intern finibios( void )
 void intern physupdate( SAREA *area )
 /***********************************/
 {
-    int i;
+    int         i;
+    LP_PIXEL    ptr;
+    uisize      row;
+    uisize      height;
+    uisize      incr;
 
-    for( i = area->row; i < area->row + area->height; ++i ) {
-        CopyToScreenMemory( 1, area->width, (void *)( UIData->screen.origin + i * UIData->width + area->col ), area->col, i );
-    } /* end for */
+    incr = UIData->width;
+    row = area->row;
+    ptr = UIData->screen.origin + row * incr + area->col;
+    height = area->height;
+    while( height-- > 0 ) {
+        CopyToScreenMemory( 1, area->width, (void *)ptr, area->col, row );
+        row++;
+        ptr += incr;
+    }
 
 } /* end physupdate */
 

@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -31,32 +32,34 @@
 
 
 #include "layer0.h"
+#include <string.h>
 #include "wres.h"
 #include "write.h"
 #include "reserr.h"
 #include "wresrtns.h"
+
 
 bool WResFileInit( FILE *fp )
 /***************************/
 /* Writes the initial file header out to the file. Later, when WResWriteDir */
 /* is called the real header will be written out */
 {
-    WResHeader  head;
+    WResHeader      header;
+    WResExtHeader   extheader;
 
-    head.Magic[0] = WRESMAGIC0;
-    head.Magic[1] = WRESMAGIC1;
-    head.DirOffset = 0;
-    head.NumResources = 0;
-    head.NumTypes = 0;
-    head.WResVer = WRESVERSION;
+    header.Magic[0] = WRESMAGIC0;
+    header.Magic[1] = WRESMAGIC1;
+    header.DirOffset = 0;
+    header.NumResources = 0;
+    header.NumTypes = 0;
+    header.WResVer = WRESVERSION;
 
     /* write the empty record out at the begining of the file */
     if( WRESSEEK( fp, 0, SEEK_SET ) )
         return( WRES_ERROR( WRS_SEEK_FAILED ) );
-    if( WResWriteHeaderRecord( &head, fp ) )
+    if( WResWriteHeader( &header, fp ) )
         return( true );
-    /* leave room for the extended header */
-    if( WRESSEEK( fp, sizeof( WResExtHeader ), SEEK_CUR ) )
-        return( WRES_ERROR( WRS_SEEK_FAILED ) );
-    return( false );
+    /* write the empty extended header */
+    memset( &extheader, 0, sizeof( extheader ) );
+    return( WResWriteExtHeader( &extheader, fp ) );
 } /* WResFileInit */

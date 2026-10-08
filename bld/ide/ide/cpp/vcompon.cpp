@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -55,7 +55,6 @@
 
 #include "objautod.h"
 #include "ide.rh"
-#include "autodep.h"
 
 #include "clibext.h"
 
@@ -331,9 +330,9 @@ bool VComponent::newItem( WFileName& fn, bool warn, bool mark, unsigned owner )
     if( fn.size() > 0 ) {
         WFileName cwd;
         _component->filename().path( cwd, true );
-        size_t len = cwd.size();
+        std::size_t len = cwd.size();
         if( len > 0 ) {
-            if( strnicmp( cwd, fn, len ) == 0 ) {
+            if( ::strnicmp( cwd, fn, len ) == 0 ) {
                 fn.chop( len );
             }
         }
@@ -591,12 +590,10 @@ void VComponent::mIncludedItems( WMenuItem* )
         data.comp = _component;
         startWait();
         _parent->setStatus( "Scanning result file..." );
-        walk_status stat = WalkOBJAutoDep( (char*)(const char*)resf,
-            captureName, &data );
+        walk_status stat = WalkOBJAutoDep( (char*)(const char*)resf, captureName, &data );
 #ifndef __OS2__
         if( stat == ADW_NOT_AN_OBJ ) {
-            stat = WalkRESAutoDep( (char*)(const char*)resf,
-                captureName, &data );
+            stat = WalkRESAutoDep( (char*)(const char*)resf, captureName, &data );
         }
 #endif
         _parent->setStatus( NULL );
@@ -805,9 +802,9 @@ void WEXPORT VComponent::bActionComponent( WWindow* b )
 void VComponent::actionError( MItem* item, const WString& actionName )
 {
     WString t;
-    for( size_t i = 0; i < actionName.size(); i++ ) {
+    for( std::size_t i = 0; i < actionName.size(); i++ ) {
         if( actionName[i] != '&' ) {
-            t.concat( (char)tolower( actionName[i] ) );
+            t.concat( (char)std::tolower( actionName[i] ) );
         }
     }
     WMessageDialog::messagef( this, MsgError, MsgOk, _viperError, "You cannot %s '%s'", (const char*)t, (const char*)*item );

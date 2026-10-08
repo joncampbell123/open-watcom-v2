@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -39,16 +39,14 @@
 #include "guixdlg.h"
 
 
-typedef const char  **lb_data;
-
 static bool FillInEmptyList( a_list *list )
 {
     list->choice = 0;
-    list->data_handle = (const void *)GUIMemAlloc( sizeof( char * ) );
-    if( list->data_handle == NULL ) {
+    list->data = MemAlloc( sizeof( *list->data ) );
+    if( list->data == NULL ) {
         return( false );
     }
-    ((lb_data)list->data_handle)[0] = NULL;
+    list->data[0] = NULL;
     return( true );
 }
 
@@ -65,28 +63,28 @@ bool GUIClearListBox( a_list *list )
 bool GUIListBoxDeleteItem( a_list *list, int choice )
 {
     int         num_items;
-    lb_data     old_data;
-    lb_data     new_data;
+    data_handle old_data;
+    data_handle new_data;
     int         i;
 
     num_items = GUIListSize( list );
     if( choice >= num_items ) {
         return( false );
     }
-    new_data = (lb_data)GUIMemAlloc( sizeof( char * ) * num_items );
+    new_data = MemAlloc( sizeof( *new_data ) * num_items );
     if( new_data == NULL ) {
         return( false );
     }
-    old_data = (lb_data)list->data_handle;
+    old_data = list->data;
     for( i = 0; i < choice; i++ ) {
         new_data[i] = old_data[i];
     }
-    GUIMemFree( (void *)old_data[choice] );
+    MemFree( (void *)old_data[choice] );
     for( i = choice; i < num_items; i++ ) {
         new_data[i] = old_data[i + 1];
     }
-    GUIMemFree( (void *)old_data );
-    list->data_handle = (const void *)new_data;
+    MemFree( (void *)old_data );
+    list->data = new_data;
     if( choice >= GUIListSize( list )  ) {
         list->choice = 0;
     }
@@ -98,18 +96,18 @@ void GUIFreeList( a_list *list, bool free_list )
 {
     int         num_items;
     int         i;
-    lb_data     data;
+    data_handle data;
 
     num_items = GUIListSize( list );
-    data = (lb_data)list->data_handle;
+    data = list->data;
     for( i = 0; i < num_items; i++ ) {
-        GUIMemFree( (void *)data[i] );
+        MemFree( (void *)data[i] );
     }
-    GUIMemFree( (void *)data );
+    MemFree( (void *)data );
     list->choice = 0;
-    list->data_handle = NULL;
+    list->data = NULL;
     if( free_list ) {
-        GUIMemFree( list );
+        MemFree( list );
     }
 }
 
@@ -125,12 +123,12 @@ a_list *GUICreateListBox( void )
 {
     a_list      *list;
 
-    list = (a_list *)GUIMemAlloc( sizeof( a_list ) );
+    list = MemAlloc( sizeof( *list ) );
     if( list == NULL ) {
         return( NULL );
     }
     if( !GUIFillInListBox( list ) ) {
-        GUIMemFree( list );
+        MemFree( (void *)list );
         list = NULL;
     }
     return( list );
@@ -145,15 +143,15 @@ a_list *GUICreateEditMLE( const char *text )
     char        *absolute_end;
     #define     MLE_NEWLINE     "\r\n"
 
-    list = (a_list *)GUIMemAlloc( sizeof( a_list ) );
+    list = MemAlloc( sizeof( *list ) );
     if( list == NULL ) {
         return( NULL );
     }
     if( !GUIFillInListBox( list ) ) {
-        GUIMemFree( list );
+        MemFree( (void *)list );
         list = NULL;
     } else {
-        text_copy = GUIStrDup( text );
+        text_copy = MemStrdup( text );
         line = text_copy;
         absolute_end = text_copy + strlen( text_copy );
         end = strstr( line, MLE_NEWLINE );
@@ -169,7 +167,7 @@ a_list *GUICreateEditMLE( const char *text )
             }
         }
         GUIListBoxAddText( list, line, -1 );
-        GUIMemFree( text_copy );
+        MemFree( text_copy );
     }
     return( list );
 }
@@ -179,107 +177,88 @@ int GUIListSize( a_list *list )
     return( uilistsize( list ) );
 }
 
-static lb_data ResizeList( a_list *list, unsigned num_to_add, int *choice )
+static data_handle ResizeList( a_list *list, unsigned num_to_add, int *choice )
 {
     int         num_items;
-    lb_data     old_data;
-    lb_data     new_data;
+    data_handle old_data;
+    data_handle new_data;
 
     num_items = GUIListSize( list );
-    new_data = (lb_data)GUIMemAlloc( ( num_items + num_to_add + 1 ) * sizeof( char * ) );
+    new_data = MemAlloc( sizeof( *new_data ) * ( num_items + num_to_add + 1 ) );
     if( new_data == NULL ) {
-        return( NULL );
+        return( new_data );
     }
     if( *choice == -1 ) {
         *choice = num_items;
     }
-    old_data = (lb_data)list->data_handle;
+    old_data = list->data;
     if( old_data != NULL ) {
-        memcpy( (void *)new_data, old_data, *choice * sizeof( char * ) );
-        memcpy( (void *)&new_data[*choice + num_to_add], &old_data[*choice], ( num_items - *choice ) * sizeof( char * ) );
+        memcpy( (void *)new_data, old_data, sizeof( char * ) * *choice );
+        memcpy( (void *)&new_data[*choice + num_to_add], &old_data[*choice], sizeof( char * ) * ( num_items - *choice ) );
     }
     new_data[num_items + num_to_add] = NULL;
     return( new_data );
 }
 
-
-static bool AddString( lb_data data, const char *text, int choice )
-{
-    size_t  length;
-    char    *str;
-
-    if( text != NULL ) {
-        length = strlen( text );
-        str = (char *)GUIMemAlloc( length + 1 );
-        if( str == NULL ) {
-            GUIMemFree( (void *)data );
-            return( false );
-        }
-        strcpy( str, text );
-    } else {
-        str = (char *)GUIMemAlloc( sizeof( char ) );
-        if( str == NULL ) {
-            GUIMemFree( (void *)data );
-            return( false );
-        }
-        str[0] = '\0';
-    }
-    data[choice] = str;
-    return( true );
-}
-
 bool GUIListBoxAddText( a_list *list, const char *text, int choice )
 {
-    lb_data     new_data;
-    lb_data     old_data;
+    data_handle new_data;
+    data_handle old_data;
 
-    old_data = (lb_data)list->data_handle;
+    old_data = list->data;
     new_data = ResizeList( list, 1, &choice );
     if( new_data == NULL ) {
         return( false );
     }
-    if( !AddString( new_data, text, choice ) ) {
+    if( text == NULL )
+        text = "";
+    new_data[choice] = MemStrdup( text );
+    if( new_data[choice] == NULL ) {
+        MemFree( (void *)new_data );
         return( false );
     }
-    GUIMemFree( (void *)old_data );
-    list->data_handle = (const void *)new_data;
+    MemFree( (void *)old_data );
+    list->data = new_data;
     uiupdatelistbox( list );
     return( true );
 }
 
-bool GUIListBoxAddTextList( a_list *list, int num_items, const void *data_handle, GUIPICKGETTEXT *getstring )
+bool GUIListBoxAddTextList( a_list *list, int num_items, data_handle data, GUIPICKGETTEXT *getstring )
 {
     int         i;
-    lb_data     old_data;
-    lb_data     new_data;
+    data_handle old_data;
+    data_handle new_data;
     int         choice;
+    const char  *text;
 
     choice = -1;
-    old_data = (lb_data)list->data_handle;
+    old_data = list->data;
     new_data = ResizeList( list, num_items, &choice );
     if( new_data == NULL ) {
         return( false );
     }
     for( i = 0; i < num_items; i++ ) {
-        if( !AddString( new_data, getstring( data_handle, i ), choice + i ) ) {
+        text = getstring( data, i );
+        if( text == NULL )
+            text = "";
+        new_data[choice + i] = MemStrdup( text );
+        if( new_data[choice + i] == NULL ) {
+            MemFree( (void *)new_data );
             return( false );
         }
     }
-    GUIMemFree( (void *)old_data );
-    list->data_handle = (const void *)new_data;
+    MemFree( (void *)old_data );
+    list->data = new_data;
     uiupdatelistbox( list );
     return( true );
 }
 
 char *GUIGetListBoxText( a_list *list, int choice, bool get_curr )
 {
-    lb_data     data;
-
-    data = (lb_data)list->data_handle;
     if( get_curr ) {
         choice = list->choice;
     }
-    return( GUIStrDup( data[choice] ) );
+    return( MemStrdup( list->data[choice] ) );
 }
 
 bool GUIListGetCurr( a_list *list, int *choice )

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -103,12 +103,10 @@ static ATTR mnu_attr_hot_curr = 0;
 
 bool GUIXSetColours( gui_window *wnd, int num_attrs, gui_colour_set *colours )
 {
-    size_t  size;
     int     i;
     ATTR    *attrs;
 
-    size = sizeof( ATTR ) * num_attrs;
-    attrs = (ATTR *)GUIMemAlloc( size );
+    attrs = MemAlloc( sizeof( *attrs ) * num_attrs );
     if( attrs != NULL ) {
         wnd->attrs = attrs;
         wnd->num_attrs = num_attrs;

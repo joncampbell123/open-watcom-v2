@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2019 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,10 +34,8 @@
 #ifndef MEMORY_MANAGER_INCLUDED
 #define MEMORY_MANAGER_INCLUDED
 
-extern char     *MemStrDup(const char *);
-extern void     *MemMalloc(int);
-extern void     *MemRealloc(void*,int);
-extern void     MemFree(void *);
+#include "memfuncs.h"
+
 extern void     InitMem( void );
 extern void     FiniMem( void );
 

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -79,9 +79,12 @@ static bool ReadBuffer( FCB *fcb )
 {
     size_t      read_amount;
 
-    if( fcb->fp == NULL ) {          /* in-memory buffer */
+    if( fcb->fp == NULL ) {
+        /*
+         * null device or in-memory buffer
+         */
         CloseSrcFile( fcb );
-        return( false );
+        return( true );
     }
     if( fcb->src_end == notFilled + 1 ) {
         /*
@@ -118,11 +121,7 @@ static bool ReadBuffer( FCB *fcb )
     read_amount = fread( fcb->src_buf + 1, 1, SRC_BUF_SIZE, fcb->fp );
     fcb->src_end += read_amount;            // mark end of buffer
     fcb->src_buf[1 + read_amount] = '\0';
-    if( fcb->src_end[-1] == DOS_EOF_CHAR ) {
-        read_amount--;
-        fcb->src_end--;
-        fcb->src_buf[1 + read_amount] = '\0';
-    } else if( read_amount == SRC_BUF_SIZE ) {
+    if( read_amount == SRC_BUF_SIZE ) {
         /*
          * full buffer was read, no EOL check
          *

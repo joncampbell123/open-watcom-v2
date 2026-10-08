@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -33,14 +34,26 @@
 #ifndef WRMEM_INCLUDED
 #define WRMEM_INCLUDED
 
+#ifndef TRMEM
+    #define TRMEM
+    #include "trmem.h"
+    #undef TRMEM
+#else
+    #include "trmem.h"
+#endif
+
 /****************************************************************************/
 /* function prototypes                                                      */
 /****************************************************************************/
-WRDLLENTRY extern void *   WRAPI WRMemAlloc( size_t );
-WRDLLENTRY extern void     WRAPI WRMemFree( void * );
-WRDLLENTRY extern void *   WRAPI WRMemRealloc( void *, size_t );
-WRDLLENTRY extern int      WRAPI WRMemValidate( void * );
-WRDLLENTRY extern int      WRAPI WRMemChkRange( void *, size_t );
+WRDLLENTRY extern void *   WRAPI WRMemAlloc( size_t, _trmem_who );
+WRDLLENTRY extern void *   WRAPI WRMemAllocSafe( size_t, _trmem_who );
+WRDLLENTRY extern char *   WRAPI WRMemStrdup( const char *, _trmem_who );
+WRDLLENTRY extern char *   WRAPI WRMemStrdupSafe( const char *, _trmem_who );
+WRDLLENTRY extern void *   WRAPI WRMemRealloc( void *, size_t, _trmem_who );
+WRDLLENTRY extern void *   WRAPI WRMemReallocSafe( void *, size_t, _trmem_who );
+WRDLLENTRY extern void     WRAPI WRMemFree( void *, _trmem_who );
+WRDLLENTRY extern int      WRAPI WRMemValidate( void *, _trmem_who );
+WRDLLENTRY extern int      WRAPI WRMemChkRange( void *, size_t, _trmem_who );
 WRDLLENTRY extern void     WRAPI WRMemPrtUsage( void );
 
 #endif

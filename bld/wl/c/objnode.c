@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -69,12 +69,12 @@ static void *MakeArray( unsigned size )
 {
     nodearray_handle    nodes;
 
-    _ChkAlloc( nodes, sizeof( nodearray ) );
+    nodes = MemAllocSafe( sizeof( nodearray ) );
     nodes->num = 0;
     nodes->elsize = size;
     nodes->arraymax = 0;
     size *= NODE_ARRAY_SIZE;
-    _ChkAlloc( nodes->array[0], size );
+    nodes->array[0] = MemAllocSafe( size );
     memset( nodes->array[0], 0, size );
     return( nodes );
 }
@@ -95,9 +95,9 @@ static void BurnNodeArray( nodearray_handle list )
     unsigned    index;
 
     for( index = 0; index <= list->arraymax; index++ ) {
-        _LnkFree( list->array[index] );
+        MemFree( list->array[index] );
     }
-    _LnkFree( list );
+    MemFree( list );
 }
 
 void BurnNodes( void )
@@ -123,7 +123,7 @@ static void AllocNewArray( nodearray_handle list )
 
     list->arraymax++;
     size = list->elsize * NODE_ARRAY_SIZE;
-    _ChkAlloc( list->array[list->arraymax], size );
+    list->array[list->arraymax] = MemAllocSafe( size );
     memset( list->array[list->arraymax], 0, size );
 }
 
@@ -186,7 +186,7 @@ static void ReleaseNamelist( void *node, void *dummy )
 {
     /* unused parameters */ (void)dummy;
 
-    _LnkFree( *((void **)node) );
+    MemFree( *((void **)node) );
 }
 
 static void IterateNodeArray( char *narray, void (*fn)(void *, void *),
@@ -316,8 +316,8 @@ list_of_names *MakeListName( char *name, size_t len )
 {
     list_of_names   *new;
 
-    _ChkAlloc( new, sizeof( list_of_names ) + len );
-    new->next_name = NULL;
+    new = MemAllocSafe( sizeof( list_of_names ) + len );
+    new->next = NULL;
     memcpy( new->name, name, len );
     new->name[len] = '\0';
     return( new );
@@ -326,7 +326,7 @@ list_of_names *MakeListName( char *name, size_t len )
 unsigned long BadObjFormat( void )
 /***************************************/
 {
-    LnkMsg( FTL+MSG_BAD_OBJECT, "s", CurrMod->f.source->infile->name );
+    LnkMsg( FTL+MSG_BAD_OBJECT, "s", CurrMod->u1.source->infile->name );
     return( 0 );
 }
 

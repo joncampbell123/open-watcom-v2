@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,6 +35,7 @@
 #include "errcod.h"
 #include "opr.h"
 #include "fmemmgr.h"
+#include "namecod.h"
 #include "recog.h"
 #include "ferror.h"
 #include "insert.h"
@@ -48,24 +49,12 @@
 
 
 static  const STMT  CSWords[] = {
-        0,
-        PR_IF,
-        PR_ELSEIF,
-        PR_ELSE,
-        PR_GUESS,
-        PR_ADMIT,
-        PR_SELECT,
-        PR_CASE,
-        PR_OTHERWISE,
-        PR_ATEND,
-        PR_REMBLK,
-        PR_LOOP,
-        PR_WHILE,
-        PR_DO,
-        PR_GOTO,
-        PR_DO       // DO WHILE
+    #define CSTYP(id,stmt) stmt,
+    CSTYPES
+    #undef CSTYP
 };
 
+static block_num    BlockNum;       // for controlling unstructured branches
 
 csnode  *NewCSNode( size_t label_len )
 {
@@ -73,7 +62,7 @@ csnode  *NewCSNode( size_t label_len )
 
     csnode  *csptr;
 
-    csptr = FMemAlloc( sizeof( csnode ) + label_len );
+    csptr = MemAllocSafe( sizeof( csnode ) + label_len );
     csptr->link = NULL;
     csptr->typ = CS_EMPTY_LIST;
     csptr->cs_info.do_parms = NULL;
@@ -82,7 +71,7 @@ csnode  *NewCSNode( size_t label_len )
     csptr->branch = 0;
     csptr->bottom = 0;
     csptr->block = 0;
-    csptr->label = NULLCHAR;
+    csptr->label[0] = NULLCHAR;
     return( csptr );
 }
 
@@ -92,13 +81,18 @@ void InitCSList(void)
     CSHead = NewCSNode( 0 );
 }
 
+block_num   NextBlock( void )
+{
+    return( ++BlockNum );
+}
+
 void CSPurge(void)
 {
     if( CSHead != NULL ) {
         while( CSHead->typ != CS_EMPTY_LIST ) {
             DelCSNode();
         }
-        FMemFree( CSHead );
+        MemFree( CSHead );
         CSHead = NULL;
     }
 }
@@ -108,7 +102,7 @@ itnode *GetBlockLabel(void)
     itnode      *citnode;
 
     citnode = CITNode;
-    while(  citnode->link->opr != OPR_TRM ) {
+    while( citnode->link->opr != OPR_TRM ) {
         citnode = citnode->link;
     }
     if( citnode->opr != OPR_COL ) {
@@ -117,11 +111,10 @@ itnode *GetBlockLabel(void)
     return( citnode );
 }
 
-void    AddCSNode( byte typ )
+void    AddCSNode( cstype typ )
 {
     csnode      *new_cs_node;
     itnode      *label;
-    char        *label_ptr;
     size_t      label_len;
 
     if( typ == CS_REMOTEBLOCK ) {
@@ -134,10 +127,9 @@ void    AddCSNode( byte typ )
     new_cs_node->link = CSHead;
     CSHead = new_cs_node;
     CSHead->typ = typ;
-    CSHead->block = ++BlockNum;
-    label_ptr = &CSHead->label;
-    memcpy( label_ptr, label->opnd, label_len );
-    label_ptr[label_len] = NULLCHAR;
+    CSHead->block = NextBlock();
+    memcpy( CSHead->label, label->opnd, label_len );
+    CSHead->label[label_len] = NULLCHAR;
 }
 
 void DelCSNode(void)
@@ -149,8 +141,10 @@ void DelCSNode(void)
     if( CSHead->typ != CS_EMPTY_LIST ) {
         old = CSHead;
         CSHead = CSHead->link;
-        if( ( old->typ == CS_SELECT ) || ( old->typ == CS_CASE ) ||
-            ( old->typ == CS_OTHERWISE ) || ( old->typ == CS_COMPUTED_GOTO ) ) {
+        if( ( old->typ == CS_SELECT )
+          || ( old->typ == CS_CASE )
+          || ( old->typ == CS_OTHERWISE )
+          || ( old->typ == CS_COMPUTED_GOTO ) ) {
             for( currcase = old->cs_info.cases; currcase != NULL; currcase = next ) {
                 next = currcase->link;
                 if( old->typ != CS_COMPUTED_GOTO ) {
@@ -160,37 +154,37 @@ void DelCSNode(void)
                         FreeLabel( currcase->label.g_label );
                     }
                 }
-                FMemFree( currcase );
+                MemFree( currcase );
             }
         } else if( old->typ == CS_DO ) {
-            FMemFree( old->cs_info.do_parms );
+            MemFree( old->cs_info.do_parms );
         }
-        FMemFree( old );
+        MemFree( old );
     }
 }
 
 void CSNoMore(void)
 {
-    if( RecNOpn() ) {
+    if( RecNoOpn() ) {
         AdvanceITPtr();
     }
-    ReqEOS();
+    ReqEOSOpr();
 }
 
 void ColonLabel(void)
 {
-    if( RecColon() ) {
-        if( !RecName() ) {
+    if( RecColonOpr() ) {
+        if( !RecNameOpn() ) {
             Error( SP_BAD_LABEL );
         }
         AdvanceITPtr();
     }
-    ReqEOS();
+    ReqEOSOpr();
 }
 
 void BlockLabel(void)
 {
-    if( RecNOpn() ) {
+    if( RecNoOpn() ) {
         AdvanceITPtr();
         ColonLabel();
     } else {
@@ -203,7 +197,7 @@ void Match(void)
     if( CSHead->typ == CS_EMPTY_LIST ) {
         StmtErr( SP_INCOMPLETE );
     } else {
-        StmtPtrErr( SP_UNMATCHED, StmtKeywords[ CSWords[ CSHead->typ ] ] );
+        StmtPtrErr( SP_UNMATCHED, StmtKeywords[CSWords[CSHead->typ]] );
     }
 }
 
@@ -212,17 +206,17 @@ void CSExtn(void)
     StmtExtension( SP_STRUCTURED_EXT );
 }
 
-bool CheckCSList( byte typ )
+bool CheckCSList( cstype typ )
 {
-    byte        head_typ;
+    cstype      head_typ;
 
-    for(;;) {
+    for( ;; ) {
         head_typ = CSHead->typ;
         if( head_typ == typ )
             break;
         if( head_typ == CS_EMPTY_LIST )
             break;
-        Error( SP_UNFINISHED, StmtKeywords[ CSWords[ head_typ ] ] );
+        Error( SP_UNFINISHED, StmtKeywords[CSWords[head_typ]] );
         DelCSNode();
     }
     return( head_typ == typ );
@@ -237,13 +231,13 @@ void CSCond( label_id label )
 {
 // Process a control structure condition (e.g. WHILE( cond )DO).
 
-    if( RecNOpn() ) {
+    if( RecNoOpn() ) {
         AdvanceITPtr();
-        if( ReqOpenParen() ) {
+        if( ReqOpenParenOpr() ) {
             GBoolExpr();
             GBrFalse( label );
             AdvanceITPtr();
-            ReqCloseParen();
+            ReqCloseParenOpr();
         }
     } else {
         Error( PC_NO_OPENPAREN );

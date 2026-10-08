@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -42,14 +43,14 @@
 #include "wresdefn.h"
 
 bool DumpContents( WResTypeInfo *type, WResResInfo *res,
-                    WResLangInfo *lang, FILE *fp, WResTargetOS res_os )
+                WResLangInfo *langinfo, FILE *fp, WResTargetOS res_os )
 /*********************************************************************/
 {
     bool    error;
 
     res = res;
-    fprintf( stdout, "\tOffset: 0x%08lx  Length: 0x%08lx\n",
-            lang->Offset, lang->Length );
+    fprintf( stdout, "\tOffset: 0x%08x  Length: 0x%08x\n",
+            langinfo->Offset, langinfo->Length );
 
     if( type->TypeName.IsName ) {
         /* it is not one of the predefined types */
@@ -58,27 +59,27 @@ bool DumpContents( WResTypeInfo *type, WResResInfo *res,
         switch( type->TypeName.ID.Num ) {
         case RESOURCE2INT( RT_MENU ):
             if( res_os == WRES_OS_WIN16 ) {
-                error = DumpMenu( lang->Offset, lang->Length, fp );
+                error = DumpMenu( langinfo->Offset, langinfo->Length, fp );
             } else {
                 error = false;
             }
             break;
         case RESOURCE2INT( RT_DIALOG ):
             if( res_os == WRES_OS_WIN16 ) {
-                error = DumpDialog( lang->Offset, lang->Length, fp );
+                error = DumpDialog( langinfo->Offset, langinfo->Length, fp );
             } else {
                 error = false;
             }
             break;
         case RESOURCE2INT( RT_GROUP_ICON ):
-            error = DumpIconGroup( lang->Offset, lang->Length, fp );
+            error = DumpIconGroup( langinfo->Offset, langinfo->Length, fp );
             break;
         case RESOURCE2INT( RT_GROUP_CURSOR ):
-            error = DumpCursorGroup( lang->Offset, lang->Length, fp );
+            error = DumpCursorGroup( langinfo->Offset, langinfo->Length, fp );
             break;
         case RESOURCE2INT( RT_STRING ):
             if( res_os == WRES_OS_WIN16 ) {
-                error = DumpString( lang->Offset, lang->Length, fp );
+                error = DumpString( langinfo->Offset, langinfo->Length, fp );
             } else {
                 error = false;
             }

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -117,7 +117,7 @@ static void AddMessageText( char *str )
     } else {
         len = strlen( MsgText );
     }
-    MsgText = DbgRealloc( MsgText, len + strlen( str ) + 1 );
+    MsgText = MemRealloc( MsgText, len + strlen( str ) + 1 );
     StrCopyDst( str, MsgText + len );
 }
 
@@ -153,13 +153,13 @@ bool SetMsgText( char *message, unsigned *conditions )
         DEBUGGER_COMMAND_SKIP( message, EXECUTE );
         if( InCall == 0 ) {
             cmds = AllocCmdList( "go/keep", sizeof( "go/keep" ) - 1 );
-            PushCmdList( cmds );
-            TypeInpStack( INP_HOOK );
+            if( PushCmdList( cmds ) )
+                TypeInpStack( INP_HOOK );
             FreeCmdList( cmds );
         }
         cmds = AllocCmdList( message, strlen( message ) );
-        PushCmdList( cmds );
-        TypeInpStack( INP_HOOK );
+        if( PushCmdList( cmds ) )
+            TypeInpStack( INP_HOOK );
         FreeCmdList( cmds );
         *conditions |= COND_STOP;
         return( false );
@@ -237,7 +237,7 @@ static bool RecordMsgText( unsigned *conditions )
         }
         if( MsgText != NULL ) {
             DUIDlgTxt( MsgText );
-            DbgFree( MsgText );
+            MemFree( MsgText );
             MsgText = NULL;
         }
         *p2++ = '\n';
@@ -451,7 +451,7 @@ static void DisplayMsgText( void )
 {
     if( MsgText != NULL ) {
         DUIDlgTxt( MsgText );
-        DbgFree( MsgText );
+        MemFree( MsgText );
         MsgText = NULL;
     }
 }
@@ -466,7 +466,7 @@ bool ReportTrap( unsigned conditions, bool stack_cmds )
         p = StrCopyDst( LIT_ENG( Task_Exception ), TxtBuff );
         if( MsgText != NULL )
             StrCopyDst( MsgText, p );
-        MsgText = DbgRealloc( MsgText, strlen( TxtBuff ) + 1 );
+        MsgText = MemRealloc( MsgText, strlen( TxtBuff ) + 1 );
         StrCopyDst( TxtBuff, MsgText );
         DUIMsgBox( MsgText );
     }

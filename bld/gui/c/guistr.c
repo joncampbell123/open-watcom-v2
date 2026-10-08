@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2024-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2024-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -48,7 +48,7 @@ static const char *GUIGetInternalLiteralString( gui_res_id id )
             GUIStrTextBuffer[0] = '\0';
         }
     }
-    return( GUIStrDup( GUIStrTextBuffer ) );
+    return( MemStrdup( GUIStrTextBuffer ) );
 }
 
 bool GUIInitInternalStringTable( void )
@@ -64,7 +64,7 @@ bool GUIInitInternalStringTable( void )
 
 bool GUIFiniInternalStringTable( void )
 {
-    #define pick( a, b, c ) GUIMemFree( (void *)LIT_GUI( a ) );
+    #define pick( a, b, c ) MemFree( (void *)LIT_GUI( a ) );
     #include "gui.msg"
     #undef pick
 

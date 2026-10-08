@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -30,11 +31,11 @@
 ****************************************************************************/
 
 
-#include <assert.h>
-#include <string.h>
-#include <ctype.h>
-#include <stdio.h>  // error reporting via printf
-#include <stdlib.h>
+#include <cassert>
+#include <cstring>
+#include <cctype>
+#include <cstdio>  // error reporting via printf
+#include <cstdlib>
 
 #include "chbffile.h"
 #include "scanner.h"
@@ -42,8 +43,16 @@
 const char * const   Scanner::_SpecialCharacters = ",{}|:()@#;";
 
 
-Scanner::Scanner( const char * fileName, short t_string, short t_number, short t_ident, const TokenStruct *tokens, int tokcnt )
-//-----------------------------------------------------------------------------------------------------------------------------
+static void my_clear( std::vector<char*> *vec )
+{
+    for (std::size_t i = 0; i < vec->size(); ++i) {
+        delete[] (*vec)[i];
+    }
+    vec->clear();
+}
+
+Scanner::Scanner( const char * fileName, short t_string, short t_number, short t_ident, const TokenStruct *tokens, idx_type tokcnt )
+//----------------------------------------------------------------------------------------------------------------------------------
 {
     _file = new CheckedBufferedFile( fileName );
     _strings = new std::vector<char *>;
@@ -62,19 +71,21 @@ Scanner::Scanner( const char * fileName, short t_string, short t_number, short t
 Scanner::~Scanner()
 //-----------------
 {
+    my_clear( _identifiers );
     delete _identifiers;
+    my_clear( _strings );
     delete _strings;
     delete _file;
 }
 
-const char * Scanner::getString( int idx )
-//----------------------------------------
+const char * Scanner::getString( idx_type idx )
+//---------------------------------------------
 {
     return (*_strings)[idx];
 }
 
-const char * Scanner::getIdent( int idx )
-//---------------------------------------
+const char * Scanner::getIdent( idx_type idx )
+//--------------------------------------------
 {
     return (*_identifiers)[idx];
 }
@@ -90,8 +101,8 @@ bool Scanner::error( char const * errStr )
 
     buffer[nRead - 1] = '\0';
 
-    fprintf( stderr, "%s: %s\n", _file->getFileName(), errStr );
-    fprintf( stderr, "near <%s>\n", buffer );
+    std::fprintf( stderr, "%s: %s\n", _file->getFileName(), errStr );
+    std::fprintf( stderr, "near <%s>\n", buffer );
 
     return false;       // don't continue
 }
@@ -118,7 +129,7 @@ void Scanner::gobble()
 // eat whitespaces. When done,
 // _current contains a non-white space
 {
-    while( isspace( _current ) ) {
+    while( std::isspace( _current ) ) {
         get();
     }
 }
@@ -126,13 +137,13 @@ void Scanner::gobble()
 bool Scanner::isSpecial()
 //-----------------------
 {
-    return( strchr( _SpecialCharacters, _current ) != NULL );
+    return( std::strchr( _SpecialCharacters, _current ) != NULL );
 }
 
 bool Scanner::isSpace()
 //---------------------
 {
-    return( isspace( _current ) != 0 );
+    return( std::isspace( _current ) != 0 );
 }
 
 bool Scanner::isQuote()
@@ -150,13 +161,13 @@ bool Scanner::isEOF()
 bool Scanner::isDigit()
 //---------------------
 {
-    return( isdigit( _current ) != 0 );
+    return( std::isdigit( _current ) != 0 );
 }
 
 bool Scanner::isHexDigit()
 //------------------------
 {
-    return( isxdigit( _current ) != 0 );
+    return( std::isxdigit( _current ) != 0 );
 }
 
 void Scanner::readDecimal( YYSTYPE & lval )
@@ -175,7 +186,7 @@ void Scanner::readDecimal( YYSTYPE & lval )
     assert( bufPos < MaxBufLen );
 
     buffer[bufPos] = '\0';
-    lval = (YYSTYPE) atoi( buffer );
+    lval.flags = std::strtol( buffer, NULL, 10 );
 }
 
 void Scanner::readHex( YYSTYPE & lval )
@@ -196,7 +207,7 @@ void Scanner::readHex( YYSTYPE & lval )
     assert( bufPos < MaxBufLen );
 
     buffer[bufPos] = '\0';
-    lval = (YYSTYPE) strtol( buffer, NULL, 16 );
+    lval.flags = std::strtol( buffer, NULL, 16 );
 }
 
 void Scanner::readQuotedString( YYSTYPE & lval )
@@ -223,10 +234,10 @@ void Scanner::readQuotedString( YYSTYPE & lval )
 
     buffer[bufPos] = '\0';
 
-    dupStr = new char [strlen( buffer ) + 1];
-    strcpy( dupStr, buffer );
+    dupStr = new char[std::strlen( buffer ) + 1];
+    std::strcpy( dupStr, buffer );
 
-    lval = (YYSTYPE)_strings->size();
+    lval.idx = _strings->size();
     _strings->push_back( dupStr );
 }
 
@@ -248,7 +259,7 @@ short Scanner::getToken( YYSTYPE & lval )
     }
 
     if( isSpecial() ) {
-        special = (char) _current;
+        special = (char)_current;
         get();                      // set up for next call
         return special;   // <-------- early return
     }
@@ -260,13 +271,13 @@ short Scanner::getToken( YYSTYPE & lval )
 
     if( _current == '0' ) {
         get();
-        if( toupper( _current ) == 'X' ) {
+        if( std::toupper( _current ) == 'X' ) {
             readHex( lval );
         } else {
             if( isDigit() ) {
                 readDecimal( lval );
             } else {
-                lval = 0;
+                lval.flags = 0;
             }
         }
         return _T_Number;   // <-------- early return
@@ -296,7 +307,7 @@ short Scanner::getToken( YYSTYPE & lval )
 static int CompareTokens( const void * lhs, const void * rhs )
 //------------------------------------------------------------
 {
-    return strcmp( (const char *) lhs, ((const TokenStruct *)rhs)->name );
+    return std::strcmp( (const char *) lhs, ((const TokenStruct *)rhs)->name );
 }
 
 short Scanner::tokenValue( const char * tok, YYSTYPE & lval )
@@ -305,18 +316,17 @@ short Scanner::tokenValue( const char * tok, YYSTYPE & lval )
     TokenStruct * res;
     char *  dupStr;
 
-    res = (TokenStruct *)bsearch( tok, _tokens, _tokcnt, sizeof( TokenStruct ), &CompareTokens );
+    res = (TokenStruct *)std::bsearch( tok, _tokens, _tokcnt, sizeof( TokenStruct ), &CompareTokens );
 
     if( res ) {
         return res->token;
     } else {
-        dupStr = new char [strlen( tok ) + 1];
-        strcpy( dupStr, tok );
+        dupStr = new char[std::strlen( tok ) + 1];
+        std::strcpy( dupStr, tok );
 
-        lval = (YYSTYPE)_identifiers->size();
+        lval.idx = _identifiers->size();
         _identifiers->push_back( dupStr );
 
         return _T_Ident;
     }
 }
-

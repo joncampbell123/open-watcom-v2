@@ -84,7 +84,7 @@ static bool lastChanceSave( HWND hwnd )
     title = IEAllocRCString( WIE_CLOSETITLE );
     text = IEAllocRCString( WIE_QUERYIMAGESAVE );
     if( text != NULL ) {
-        msg_text = (char *)MemAlloc( strlen( text ) + strlen( filename ) + 1 );
+        msg_text = MemAlloc( strlen( text ) + strlen( filename ) + 1 );
         if( msg_text != NULL ) {
             sprintf( msg_text, text, filename );
             retcode = _wpi_messagebox( HMainWindow, msg_text, title,
@@ -228,7 +228,7 @@ WPI_MRESULT CALLBACK DrawAreaWinProc( HWND hwnd, WPI_MSG msg,
             HideViewWindow( hwnd );
             DeleteActiveImage();
             ClearImageText();
-            SendMessage( ClientWindow, WM_MDINEXT, (WPARAM)(LPVOID)hwnd, 0L );
+            SendMessage( ClientWindow, WM_MDINEXT, (WPARAM)hwnd, 0 );
             wasicon = true;
 #endif
         }

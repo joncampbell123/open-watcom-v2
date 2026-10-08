@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,26 +36,52 @@
 #include "reserr.h"
 #include "wresrtns.h"
 
-bool WResReadHeaderRecord( WResHeader *header, FILE *fp )
-/*******************************************************/
+
+bool WResReadHeader( WResHeader *header, FILE *fp )
+/*************************************************/
 {
-    size_t          numread;
+    bool        error;
 
     if( WRESSEEK( fp, 0, SEEK_SET ) )
         return( WRES_ERROR( WRS_SEEK_FAILED ) );
-    if( (numread = WRESREAD( fp, header, sizeof( WResHeader ) )) != sizeof( WResHeader ) )
-        return( WRES_ERROR( WRESIOERR( fp, numread ) ? WRS_READ_FAILED : WRS_READ_INCOMPLETE ) );
-    if( WRESSEEK( fp, 0, SEEK_SET ) )
-        return( WRES_ERROR( WRS_SEEK_FAILED ) );
-    return( false );
+    error = false;
+    header->Magic[0] = ResReadUint32( &error, fp );
+    if( error )
+        return( true );
+    header->Magic[1] = ResReadUint32( &error, fp );
+    if( error )
+        return( true );
+    header->DirOffset = ResReadUint32( &error, fp );
+    if( error )
+        return( true );
+    header->NumResources = ResReadUint16( &error, fp );
+    if( error )
+        return( true );
+    header->NumTypes = ResReadUint16( &error, fp );
+    if( error )
+        return( true );
+    header->WResVer = ResReadUint16( &error, fp );
+    return( error );
 }
 
-bool WResReadExtHeader( WResExtHeader *head, FILE *fp )
-/*****************************************************/
+bool WResReadExtHeader( WResExtHeader *extheader, FILE *fp )
+/**********************************************************/
 {
-    size_t      numread;
+    bool        error;
 
-    if( (numread = WRESREAD( fp, head, sizeof( WResExtHeader ) )) != sizeof( WResExtHeader ) )
-        return( WRES_ERROR( WRESIOERR( fp, numread ) ? WRS_READ_FAILED : WRS_READ_INCOMPLETE ) );
-    return( false );
+    error = false;
+    extheader->TargetOS = ResReadUint16( &error, fp );
+    if( error )
+        return( true );
+    extheader->reserved[0] = ResReadUint16( &error, fp );
+    if( error )
+        return( true );
+    extheader->reserved[1] = ResReadUint16( &error, fp );
+    if( error )
+        return( true );
+    extheader->reserved[2] = ResReadUint16( &error, fp );
+    if( error )
+        return( true );
+    extheader->reserved[3] = ResReadUint16( &error, fp );
+    return( error );
 }

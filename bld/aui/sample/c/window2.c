@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -53,18 +53,18 @@ typedef struct {
 
 #define TITLE_SIZE 2
 static gui_menu_struct W2PopUp[] = {
-    { "&Say",       MENU_W2_SAY,    GUI_STYLE_MENU_ENABLED },
-    { "&Top",       MENU_W2_TOP,    GUI_STYLE_MENU_ENABLED },
-    { "&Bottom",    MENU_W2_BOTTOM, GUI_STYLE_MENU_ENABLED },
-    { "&New Title", MENU_W2_TITLE,  GUI_STYLE_MENU_ENABLED },
-    { "&Open 1",    MENU_W2_OPEN1,  GUI_STYLE_MENU_ENABLED },
+    { "&Say",       MENU_W2_SAY,    GUI_STYLE_MENU_ENABLED, NULL, GUI_NO_MENU },
+    { "&Top",       MENU_W2_TOP,    GUI_STYLE_MENU_ENABLED, NULL, GUI_NO_MENU },
+    { "&Bottom",    MENU_W2_BOTTOM, GUI_STYLE_MENU_ENABLED, NULL, GUI_NO_MENU },
+    { "&New Title", MENU_W2_TITLE,  GUI_STYLE_MENU_ENABLED, NULL, GUI_NO_MENU },
+    { "&Open 1",    MENU_W2_OPEN1,  GUI_STYLE_MENU_ENABLED, NULL, GUI_NO_MENU },
 };
 
 static gui_menu_struct W2AltPopUp[] = {
-    { "&New Title", MENU_W2_TITLE,  GUI_STYLE_MENU_ENABLED },
-    { "&Open 1",    MENU_W2_OPEN1,  GUI_STYLE_MENU_ENABLED },
-    { "&Say",       MENU_W2_SAY,    GUI_STYLE_MENU_ENABLED },
-    { "&Top",       MENU_W2_TOP,    GUI_STYLE_MENU_ENABLED },
+    { "&New Title", MENU_W2_TITLE,  GUI_STYLE_MENU_ENABLED, NULL, GUI_NO_MENU },
+    { "&Open 1",    MENU_W2_OPEN1,  GUI_STYLE_MENU_ENABLED, NULL, GUI_NO_MENU },
+    { "&Say",       MENU_W2_SAY,    GUI_STYLE_MENU_ENABLED, NULL, GUI_NO_MENU },
+    { "&Top",       MENU_W2_TOP,    GUI_STYLE_MENU_ENABLED, NULL, GUI_NO_MENU },
 };
 
 static void WNDCALLBACK Pos( a_window wnd, int pos )
@@ -241,7 +241,7 @@ static bool WNDCALLBACK W2WndEventProc( a_window wnd, gui_event gui_ev, void *pa
         WndSetRepaint( wnd );
         return( true );
     case GUI_DESTROY :
-        WndFree( w2 );
+        MemFree( w2 );
         return( true );
     default :
         break;
@@ -267,7 +267,7 @@ static wnd_info W2Info = {
     W2NextRow,
     NoNotify,
     ChkUpdate,
-    PopUp( W2PopUp )
+    GUI_MENU_ARRAY( W2PopUp )
 };
 
 a_window W2Open( void )
@@ -276,7 +276,7 @@ a_window W2Open( void )
     a_window    wnd;
     wnd_create_struct   info;
 
-    w2 = WndMustAlloc( WORD_SIZE * sizeof( char * ) + sizeof( *w2 ) );
+    w2 = MemAllocSafe( WORD_SIZE * sizeof( char * ) + sizeof( *w2 ) );
     WndInitCreateStruct( &info );
     info.scroll_style &= ~GUI_VDRAG;
     info.title = "window with a title";

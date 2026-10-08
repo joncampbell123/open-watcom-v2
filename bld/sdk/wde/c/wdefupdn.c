@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -95,7 +95,9 @@ static bool     WdeUpDnDefineHook( HWND, UINT, WPARAM, LPARAM, DialogStyle );
 /* static variables                                                         */
 /****************************************************************************/
 static HINSTANCE                WdeApplicationInstance;
+#ifdef __WINDOWS__
 static DISPATCH_FN              *WdeUpDnDispatch;
+#endif
 static WdeDialogBoxControl      *WdeDefaultUpDn = NULL;
 static int                      WdeUpDnWndExtra;
 static WNDPROC                  WdeOriginalUpDnProc;
@@ -136,7 +138,7 @@ OBJPTR WdeMakeUpDn( OBJPTR parent, RECT *obj_rect, OBJPTR handle,
 
     new = WdeUDCreate( parent, obj_rect, handle, id, WdeDefaultUpDn );
 
-    WRMemFree( GETCTL_TEXT( WdeDefaultUpDn ) );
+    MemFree( GETCTL_TEXT( WdeDefaultUpDn ) );
     SETCTL_TEXT( WdeDefaultUpDn, NULL );
 
     return( new );
@@ -154,13 +156,17 @@ OBJPTR WdeUDCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle,
         return( NULL );
     }
 
-    new = (WdeUpDnObject *)WRMemAlloc( sizeof( WdeUpDnObject ) );
+    new = MemAlloc( sizeof( WdeUpDnObject ) );
     if( new == NULL ) {
         WdeWriteTrail( "WdeUpDnCreate: Object malloc failed" );
         return( NULL );
     }
 
+#ifdef __WINDOWS__
     OBJ_DISPATCHER_SET( new, WdeUpDnDispatch );
+#else
+    OBJ_DISPATCHER_SET( new, WdeUpDnDispatcher );
+#endif
     new->object_id = id;
     if( handle == NULL ) {
         new->object_handle = (OBJPTR)new;
@@ -172,21 +178,21 @@ OBJPTR WdeUDCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle,
 
     if( new->control == NULL ) {
         WdeWriteTrail( "WdeUpDnCreate: CONTROL_OBJ not created!" );
-        WRMemFree( new );
+        MemFree( new );
         return( NULL );
     }
 
     if( !Forward( new->object_handle, SET_OBJECT_INFO, info, NULL ) ) {
         WdeWriteTrail( "WdeUpDnCreate: SET_OBJECT_INFO failed!" );
         Destroy( new->control, false );
-        WRMemFree( new );
+        MemFree( new );
         return( NULL );
     }
 
     if( !Forward( new->object_handle, CREATE_WINDOW, NULL, NULL ) ) {
         WdeWriteTrail( "WdeUpDnCreate: CREATE_WINDOW failed!" );
         Destroy( new->control, false );
-        WRMemFree( new );
+        MemFree( new );
         return( NULL );
     }
 
@@ -253,14 +259,18 @@ bool WdeUpDnInit( bool first )
     SETCTL_TEXT( WdeDefaultUpDn, NULL );
     SETCTL_CLASSID( WdeDefaultUpDn, WdeStrToControlClass( WUPDOWN_CLASS ) );
 
+#ifdef __WINDOWS__
     WdeUpDnDispatch = MakeProcInstance_DISPATCHER( WdeUpDnDispatcher, WdeGetAppInstance() );
+#endif
     return( true );
 }
 
 void WdeUpDnFini( void )
 {
     WdeFreeDialogBoxControl( &WdeDefaultUpDn );
+#ifdef __WINDOWS__
     FreeProcInstance_DISPATCHER( WdeUpDnDispatch );
+#endif
 }
 
 bool WdeUpDnDestroy( WdeUpDnObject *obj, bool *flag, bool *p2 )
@@ -272,7 +282,7 @@ bool WdeUpDnDestroy( WdeUpDnObject *obj, bool *flag, bool *p2 )
         return( false );
     }
 
-    WRMemFree( obj );
+    MemFree( obj );
 
     return( true );
 }
@@ -299,7 +309,7 @@ bool WdeUpDnCopyObject( WdeUpDnObject *obj, WdeUpDnObject **new, OBJPTR handle )
         return( false );
     }
 
-    *new = (WdeUpDnObject *)WRMemAlloc( sizeof( WdeUpDnObject ) );
+    *new = MemAlloc( sizeof( WdeUpDnObject ) );
 
     if( *new == NULL ) {
         WdeWriteTrail( "WdeUpDnCopyObject: Object malloc failed" );
@@ -316,7 +326,7 @@ bool WdeUpDnCopyObject( WdeUpDnObject *obj, WdeUpDnObject **new, OBJPTR handle )
 
     if( !CopyObject( obj->control, &(*new)->control, (*new)->object_handle ) ) {
         WdeWriteTrail( "WdeUpDnCopyObject: Control not created!" );
-        WRMemFree( *new );
+        MemFree( *new );
         return( false );
     }
 

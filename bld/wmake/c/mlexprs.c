@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -94,13 +94,13 @@ STATIC MTOKEN_T lexLongFilePathName( STRM_T s, MTOKEN_T tok )
         UnGetCHR( s );
     }
 
-    CurAttr.u.ptr = StrDupSafe( file );
+    CurAttr.u.ptr = MemStrdupSafe( file );
     return( tok );
 }
 
 
 #ifdef __WATCOMC__
-#pragma on (check_stack);
+#pragma on( check_stack );
 #endif
 MTOKEN_T LexPath( STRM_T s )
 /*********************************
@@ -209,14 +209,14 @@ MTOKEN_T LexPath( STRM_T s )
         }
 
         if( dquote ) {
-            FreeSafe( FinishVec( vec ) );
+            MemFree( FinishVec( vec ) );
             PrtMsg( FTL | LOC | ERROR_STRING_OPEN );
             ExitFatal();
             /* never return */
         }
 
         if( pos == _MAX_PATH ) {
-            FreeSafe( FinishVec( vec ) );
+            MemFree( FinishVec( vec ) );
             PrtMsg( FTL | LOC | MAXIMUM_TOKEN_IS, _MAX_PATH - 1 ); // NOTREACHED
             ExitFatal();
             /* never return */
@@ -240,12 +240,12 @@ MTOKEN_T LexPath( STRM_T s )
     return( TOK_PATH );
 }
 #ifdef __WATCOMC__
-#pragma off(check_stack);
+#pragma pop( check_stack );
 #endif
 
 
 #ifdef __WATCOMC__
-#pragma on (check_stack);
+#pragma on( check_stack );
 #endif
 STATIC MTOKEN_T lexFileName( STRM_T s )
 /**************************************
@@ -303,11 +303,11 @@ STATIC MTOKEN_T lexFileName( STRM_T s )
         UnGetCHR( ':' );            /* push back the colon */
     }
 
-    CurAttr.u.ptr = StrDupSafe( file );
+    CurAttr.u.ptr = MemStrdupSafe( file );
     return( TOK_FILENAME );
 }
 #ifdef __WATCOMC__
-#pragma off(check_stack);
+#pragma pop( check_stack );
 #endif
 
 
@@ -331,9 +331,6 @@ STATIC bool checkDotName( const char *str )
     }
 
     CurAttr.u.dotname = (DotName)( (const char **)key - DotNames );
-
-    assert( DOT_MIN < CurAttr.u.dotname
-        && CurAttr.u.dotname < DOT_MAX );
 
     return( true );
 }
@@ -362,7 +359,7 @@ STATIC char *getCurlPath( void )
         } else if( pos == _MAX_PATH ) {
             PrtMsg( WRN | LOC | PATH_TOO_LONG );
         }
-        return( StrDupSafe( path ) );
+        return( MemStrdupSafe( path ) );
     }
     UnGetCHR( s );
     return( "" );
@@ -370,7 +367,7 @@ STATIC char *getCurlPath( void )
 
 
 #ifdef __WATCOMC__
-#pragma on (check_stack);
+#pragma on( check_stack );
 #endif
 STATIC MTOKEN_T lexDotName( void )
 /*********************************
@@ -396,11 +393,11 @@ STATIC MTOKEN_T lexDotName( void )
     pos  = 0;
 
     if( *targ_path != NULLCHAR ) {
-        FreeSafe( targ_path );
+        MemFree( targ_path );
         targ_path = "";
     }
     if( *dep_path != NULLCHAR ) {
-        FreeSafe( dep_path );
+        MemFree( dep_path );
         dep_path = "";
     }
     dep_path = getCurlPath();
@@ -480,11 +477,11 @@ STATIC MTOKEN_T lexDotName( void )
       && checkDotName( ext ) ) {
         return( TOK_DOTNAME );
     }
-    CurAttr.u.ptr = StrDupSafe( ext );
+    CurAttr.u.ptr = MemStrdupSafe( ext );
     return( ret );
 }
 #ifdef __WATCOMC__
-#pragma off(check_stack);
+#pragma pop( check_stack );
 #endif
 
 
@@ -499,7 +496,7 @@ STATIC MTOKEN_T lexCmd( void )
 
 
 #ifdef __WATCOMC__
-#pragma on (check_stack);
+#pragma on( check_stack );
 #endif
 STATIC bool checkMacro( STRM_T s )
 /*********************************
@@ -552,11 +549,11 @@ STATIC bool checkMacro( STRM_T s )
     if( ws ) {
         UnGetCHR( ' ' );
     }
-    InsString( StrDupSafe( mac + 1 ), true );
+    InsString( MemStrdupSafe( mac + 1 ), true );
     return( false );
 }
 #ifdef __WATCOMC__
-#pragma off(check_stack);
+#pragma pop( check_stack );
 #endif
 
 
@@ -564,7 +561,7 @@ STATIC char *deMacroDoubleQuote( bool start_dquote )
 /***************************************************
  * This procedure takes care of double quotes in the stream
  * Note: each double quote must be paired with a double quote in the
- * input stream or this will expand until the EOL a backlash double
+ * input stream or this will expand until the EOL a backslah double
  * quote will be considered as a non-double quote.
  */
 {
@@ -582,7 +579,7 @@ STATIC char *deMacroDoubleQuote( bool start_dquote )
     if( s == '\n'
       || s == STRM_END
       || s == STRM_MAGIC ) {
-        return( CharToStrSafe( NULLCHAR ) );
+        return( CharToStringSafe( NULLCHAR ) );
     }
 
     in_dquote = start_dquote;
@@ -608,7 +605,7 @@ STATIC char *deMacroDoubleQuote( bool start_dquote )
                         buffer[pos] = NULLCHAR;
                         UnGetCHR( s );
                         UnGetCHR( STRM_TMP_LEX_START );
-                        return( StrDupSafe( buffer ) );
+                        return( MemStrdupSafe( buffer ) );
                     }
                     in_dquote = true;
                 } else {
@@ -622,7 +619,7 @@ STATIC char *deMacroDoubleQuote( bool start_dquote )
                         UnGetCHR( s );
                         UnGetCHR( STRM_TMP_LEX_START );
                     }
-                    return( StrDupSafe( buffer ) );
+                    return( MemStrdupSafe( buffer ) );
                 }
             }
             if( !in_dquote ) {
@@ -634,7 +631,7 @@ STATIC char *deMacroDoubleQuote( bool start_dquote )
                         buffer[pos] = NULLCHAR;
                         UnGetCHR( s );
                         UnGetCHR( STRM_TMP_LEX_START );
-                        return( StrDupSafe( buffer ) );
+                        return( MemStrdupSafe( buffer ) );
                     }
                 } else {
                     if( !in_word ) {
@@ -645,7 +642,7 @@ STATIC char *deMacroDoubleQuote( bool start_dquote )
                             buffer[pos] = NULLCHAR;
                             UnGetCHR( s );
                             UnGetCHR( STRM_TMP_LEX_START );
-                            return( StrDupSafe( buffer ) );
+                            return( MemStrdupSafe( buffer ) );
                         }
                         in_word = true;
                     }
@@ -661,7 +658,7 @@ STATIC char *deMacroDoubleQuote( bool start_dquote )
         }
 
         buffer[pos] = NULLCHAR;
-        p = StrDupSafe( buffer );
+        p = MemStrdupSafe( buffer );
     } else {
 
         p = DeMacro( MAC_WS );
@@ -674,7 +671,7 @@ STATIC char *deMacroDoubleQuote( bool start_dquote )
                      */
                     if( current != p ) {
                         UnGetCHR( STRM_MAGIC );
-                        InsString( StrDupSafe( current ), true );
+                        InsString( MemStrdupSafe( current ), true );
                         UnGetCHR( STRM_TMP_LEX_START );
                         *current = NULLCHAR;
                         return( p );
@@ -687,7 +684,7 @@ STATIC char *deMacroDoubleQuote( bool start_dquote )
                     current++;
                     if( *current != NULLCHAR ) {
                         UnGetCHR( STRM_MAGIC );
-                        InsString( StrDupSafe( current ), true );
+                        InsString( MemStrdupSafe( current ), true );
                         UnGetCHR( STRM_TMP_LEX_START );
                         *current = NULLCHAR;
                     }
@@ -716,11 +713,11 @@ STATIC char *deMacroDoubleQuote( bool start_dquote )
     UnGetCHR( s );
     OutString = StartVec();
     WriteVec( OutString, p );
-    FreeSafe( p );
+    MemFree( p );
     WriteVec( OutString, buffer );
     p = deMacroDoubleQuote( true );
     WriteVec( OutString, p );
-    FreeSafe( p );
+    MemFree( p );
     return( FinishVec( OutString ) );
 }
 
@@ -768,7 +765,7 @@ MTOKEN_T LexParser( STRM_T s )
         case STRM_MAGIC:
             p = deMacroDoubleQuote( false );  /* expand to next white space */
             if( *p == NULLCHAR ) {  /* already at ws */
-                FreeSafe( p );
+                MemFree( p );
                 s = EatWhite();     /* eat the ws */
                 if( s == '\n' ) {
                     atstart = true;

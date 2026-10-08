@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2019 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -30,15 +30,19 @@
 ****************************************************************************/
 
 
-#include <stdlib.h>
-#include <stdio.h>
+/*
+ * this code needs to be compiled with C++ compiler -of+ option
+ *
+ * appropriate C code use #pragma aux ... __frame to do same
+ * for some unknown reason this doesn't work for C++ compiler now
+ */
+#include <cstdlib>
+#include <cstdio>
 #include "hcmem.h"
-
-#ifdef TRMEM
-
 #include "trmem.h"
 
-static _trmem_hdl TrHdl;
+
+#ifdef TRMEM
 
 #ifdef __WATCOMC__
 #pragma initialize 40;
@@ -46,15 +50,21 @@ static _trmem_hdl TrHdl;
 
 static Memory bogus;    // just need to get the ctors called
 
+extern "C" {
+
+static _trmem_hdl TrHdl = _TRMEM_HDL_NONE;
+
 //
 //  PrintLine   -- output function used by the memory tracker.
 //
 
-void PrintLine( void *parm, const char *buf, size_t len )
+void PrintLine( void *parm, const char *buf, std::size_t len )
 {
     /* unused parameters */ (void)parm; (void)len;
 
-    fprintf( stdout, "%s\n", buf );
+    std::fprintf( stdout, "%s\n", buf );
+}
+
 }
 
 //
@@ -66,45 +76,47 @@ void PrintLine( void *parm, const char *buf, size_t len )
 
 // temporary fix for bug in OW 1.9 C++ compiler
 
-void *my_malloc( size_t size )
+extern "C" {
+
+void *my_malloc( std::size_t size )
 {
-    return( malloc( size ) );
+    return( std::malloc( size ) );
 }
 
 void my_free( void *p )
 {
-    return( free( p ) );
+    return( std::free( p ) );
 }
 
-void *my_realloc( void *p, size_t size )
+void *my_realloc( void *p, std::size_t size )
 {
-    return( realloc( p, size ) );
+    return( std::realloc( p, size ) );
+}
+
 }
 
 Memory::Memory()
 {
-    TrHdl = _trmem_open( my_malloc, my_free, my_realloc, NULL, NULL, PrintLine,
-            _TRMEM_ALLOC_SIZE_0 | _TRMEM_REALLOC_SIZE_0 | _TRMEM_REALLOC_NULL |
-            _TRMEM_FREE_NULL | _TRMEM_OUT_OF_MEMORY | _TRMEM_CLOSE_CHECK_FREE );
+    TrHdl = _trmem_open( my_malloc, my_free, my_realloc, _TRMEM_NO_STRDUP,
+            NULL, PrintLine, _TRMEM_DEF );
 }
 
-#else
+#else /* __WATCOMC__ != 1290 */
 
 Memory::Memory()
 {
-    TrHdl = _trmem_open( malloc, free, realloc, NULL, NULL, PrintLine,
-            _TRMEM_ALLOC_SIZE_0 | _TRMEM_REALLOC_SIZE_0 | _TRMEM_REALLOC_NULL |
-            _TRMEM_FREE_NULL | _TRMEM_OUT_OF_MEMORY | _TRMEM_CLOSE_CHECK_FREE );
+    TrHdl = _trmem_open( std::malloc, std::free, std::realloc, _TRMEM_NO_STRDUP,
+            NULL, PrintLine, _TRMEM_DEF );
 }
 
-#endif
+#endif /* __WATCOMC__ == 1290 */
 
 Memory::~Memory()
 {
     _trmem_close( TrHdl );
 }
 
-#endif
+#endif  /* TRMEM */
 
 void mem_statistic()
 {
@@ -117,16 +129,20 @@ void mem_statistic()
 //  new -- global allocator with hooks into the memory tracker.
 //
 
-void *operator new( size_t size )
+#ifdef __WATCOMC__
+void *operator new( std::size_t size )
+#else
+void *operator new( std::size_t size ) throw(std::bad_alloc)
+#endif
 {
     void *p;
 
 #ifdef TRMEM
-    p = _trmem_alloc( size, HCMemerr, TrHdl );
+    p = _trmem_alloc( size, _TRMEM_WHO( 1 ), TrHdl );
 #else
-    p = malloc( size );
+    p = std::malloc( size );
 #endif
-    return p;
+    return( p );
 }
 
 
@@ -134,14 +150,14 @@ void *operator new( size_t size )
 //  renew -- global realloc function with hooks into the memory tracker.
 //
 
-void *renew( void *p, size_t size )
+void *renew( void *p, std::size_t size )
 {
 #ifdef TRMEM
-    p = _trmem_realloc( p, size, HCMemerr, TrHdl );
+    p = _trmem_realloc( p, size, _TRMEM_WHO( 2 ), TrHdl );
 #else
-    p = realloc( p, size );
+    p = std::realloc( p, size );
 #endif
-    return p;
+    return( p );
 }
 
 
@@ -149,14 +165,18 @@ void *renew( void *p, size_t size )
 //  delete  -- global deallocator with hooks into the memory tracker.
 //
 
+#ifdef __WATCOMC__
 void operator delete( void *p )
+#else
+void operator delete( void *p ) throw()
+#endif
 {
     if( p == NULL )
         return;
 #ifdef TRMEM
-    _trmem_free( p, HCMemerr, TrHdl );
+    _trmem_free( p, _TRMEM_WHO( 3 ), TrHdl );
 #else
-    free( p );
+    std::free( p );
 #endif
 }
 
@@ -167,7 +187,7 @@ void operator delete( void *p )
 
 const unsigned Pool::BLOCK_SIZE = 1024;
 
-Pool::Pool( size_t size, unsigned b_size )
+Pool::Pool( std::size_t size, unsigned b_size )
     : _block( b_size ? b_size : BLOCK_SIZE ),
       _size( size > sizeof( void * ) ? size : sizeof( void * ) )
 {
@@ -222,7 +242,7 @@ void *Pool::get()
     }
     result = _pfree;
     _pfree = *((void **)_pfree);
-    return result;
+    return( result );
 }
 
 

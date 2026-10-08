@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -32,6 +32,7 @@
 
 
 #ifndef __DIALOG_H__
+#define __DIALOG_H__
 
 #ifdef __WATCOMC__
 // ignore "temporary object used to initialize non-constant reference" warning
@@ -55,14 +56,14 @@
 class Dialog {
 
 public:
-                                        Dialog( const char * name, Rect rect );
+                                        Dialog( const char *name, Rect rect );
                                         ~Dialog();
 
-            size_t                      addRect( const Rect & r );
-            void                        setCaption( const char * text );
-            void                        setFont( int ptsize, const char * text );
-            void                        setStyle( long style );
-            void                        addControl( const char * text, const char * id, const char * cls, long style, int rect );
+            idx_type                    addRect( const Rect & r );
+            void                        setCaption( const char *text );
+            void                        setFont( int ptsize, const char *text );
+            void                        setStyle( unsigned long style );
+            void                        addControl( const char *text, const char *id, const char *cls, unsigned long style, idx_type idx_rect );
             Control *                   findControl( Control & ctrl );
             Rect &                      getRect() { return( _rect ); };
             const char *                getCaption() { return( _caption ); };
@@ -75,13 +76,12 @@ private:
             int                         _fontSize;
             const char *                _fontName;
 
-            uint_32                     _style;
+            unsigned long               _style;
 
             std::vector<Rect>           *_rectangles;
             std::vector<Control>        *_controls;
 };
 
 
-#define __DIALOG_H__
 #endif
 

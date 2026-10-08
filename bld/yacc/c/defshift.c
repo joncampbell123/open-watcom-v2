@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2023      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2023-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -38,10 +38,14 @@
 #include "yaccins.h"
 #include "alloc.h"
 
-unsigned keyword_id_low;
-unsigned keyword_id_high;
-unsigned nStates;
-unsigned nActions;
+
+typedef unsigned    freq_n;
+
+unsigned    keyword_id_low;
+unsigned    keyword_id_high;
+
+static unsigned    nStates;
+static unsigned    nActions;
 
 static bool okToConsider( a_sym *sym )
 {
@@ -54,14 +58,14 @@ static bool okToConsider( a_sym *sym )
     return( true );
 }
 
-static void doState( a_state *state, unsigned *state_freq, bool *all_used, unsigned range_size )
+static void doState( a_state *state, freq_n *state_freq, bool *all_used, unsigned range_size )
 {
     unsigned        i;
-    unsigned        max;
-    action_n        max_state_idx;
+    freq_n          max;
     a_shift_action  *saction;
-    a_sym           *shift_sym;
-    index_n         state_idx;
+    a_sym           *sym;
+    action_n        sidx;
+    action_n        max_sidx;
 
     if( IsDead( state ) ) {
         return;
@@ -80,11 +84,11 @@ static void doState( a_state *state, unsigned *state_freq, bool *all_used, unsig
     /*
      * find shift state frequencies
      */
-    for( saction = state->trans; (shift_sym = saction->sym) != NULL; ++saction ) {
-        if( ! okToConsider( shift_sym ) )
+    for( saction = state->trans; (sym = saction->sym) != NULL; ++saction ) {
+        if( !okToConsider( sym ) )
             continue;
-        all_used[shift_sym->token - keyword_id_low] = true;
-        ++state_freq[saction->state->idx];
+        all_used[sym->token - keyword_id_low] = true;
+        ++state_freq[saction->state->sidx];
     }
     /*
      * verify entire range of tokens shift somewhere
@@ -97,13 +101,13 @@ static void doState( a_state *state, unsigned *state_freq, bool *all_used, unsig
     /*
      * find which state had the highest frequency
      */
-    max_state_idx = 0;
-    max = state_freq[0];
-    for( state_idx = 1; state_idx < nstate; ++state_idx ) {
-        unsigned test = state_freq[state_idx];
-        if( test > max ) {
+    max_sidx = 0;
+    max = 0;
+    for( sidx = 0; sidx < nstate; ++sidx ) {
+        freq_n test = state_freq[sidx];
+        if( max < test ) {
             max = test;
-            max_state_idx = state_idx;
+            max_sidx = sidx;
         }
     }
     if( max == 0 ) {
@@ -113,10 +117,10 @@ static void doState( a_state *state, unsigned *state_freq, bool *all_used, unsig
     /*
      * mark tokens used to shift to highest frequency state
      */
-    for( saction = state->trans; (shift_sym = saction->sym) != NULL; ++saction ) {
-        if( ! okToConsider( shift_sym ) )
+    for( saction = state->trans; (sym = saction->sym) != NULL; ++saction ) {
+        if( !okToConsider( sym ) )
             continue;
-        if( saction->state->idx == max_state_idx ) {
+        if( saction->state->sidx == max_sidx ) {
             saction->is_default = true;
             ++nActions;
         }
@@ -126,19 +130,19 @@ static void doState( a_state *state, unsigned *state_freq, bool *all_used, unsig
 void MarkDefaultShifts( void )
 /****************************/
 {
-    unsigned range_size;
-    unsigned *state_freq;
-    bool *all_used;
-    int i;
+    unsigned        range_size;
+    freq_n          *state_freq;
+    bool            *all_used;
+    action_n        sidx;
 
-    state_freq = MALLOC( nstate, unsigned );
+    state_freq = MemAllocSafe( nstate * sizeof( *state_freq ) );
     range_size = ( keyword_id_high - keyword_id_low ) + 1;
-    all_used = MALLOC( range_size, bool );
-    for( i = 0; i < nstate; ++i ) {
-        doState( statetab[i], state_freq, all_used, range_size );
+    all_used = MemAllocSafe( range_size * sizeof( *all_used ) );
+    for( sidx = 0; sidx < nstate; ++sidx ) {
+        doState( statetab[sidx], state_freq, all_used, range_size );
     }
-    FREE( state_freq );
-    FREE( all_used );
+    MemFree( all_used );
+    MemFree( state_freq );
     dumpstatistic( "default shift optimization states", nStates );
     dumpstatistic( "default shift optimization actions", nActions );
 }

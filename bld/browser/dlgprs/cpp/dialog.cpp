@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -30,7 +31,7 @@
 ****************************************************************************/
 
 
-#include <stdio.h>      // printf debugging
+#include <cstdio>      // printf debugging
 #include <algorithm>
 
 #include "dialog.h"
@@ -56,8 +57,8 @@ Dialog::~Dialog()
     delete _controls;
 }
 
-size_t Dialog::addRect( const Rect & r )
-//--------------------------------------
+idx_type Dialog::addRect( const Rect & r )
+//----------------------------------------
 {
     _rectangles->push_back( r );
     return( _rectangles->size() - 1 );
@@ -69,23 +70,23 @@ void Dialog::setCaption( const char * text )
     _caption = text;
 }
 
-void Dialog::setFont( int ptsize, const char * text )
-//---------------------------------------------------
+void Dialog::setFont( int ptsize, const char *text )
+//--------------------------------------------------
 {
     _fontSize = ptsize;
     _fontName = text;
 }
 
-void Dialog::setStyle( long style )
-//---------------------------------
+void Dialog::setStyle( unsigned long style )
+//------------------------------------------
 {
     _style = style;
 }
 
-void Dialog::addControl( const char * text, const char * id, const char *cls, long style, int rect )
-//--------------------------------------------------------------------------------------------------
+void Dialog::addControl( const char *text, const char *id, const char *cls, unsigned long style, idx_type idx_rect )
+//------------------------------------------------------------------------------------------------------------------
 {
-    Rect &       r( (*_rectangles)[ rect ] );
+    Rect &       r( (*_rectangles)[idx_rect] );
 
     /* unused parameters */ (void)cls; (void)style;
 

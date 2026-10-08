@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -33,25 +34,28 @@
 #include "layer0.h"
 #include "util.h"
 
-long WResIDToNum( const WResID * num )
-/************************************/
-/* return the value in a string if it is a number, -1 otherwise */
+
+long WResIDToNum( const WResID *id )
+/***********************************
+ * return the value in a string if it is a number, -1 otherwise
+ */
 {
-    if( num != NULL && !num->IsName ) {
-        return( num->ID.Num );
+    if( id != NULL && !id->IsName ) {
+        return( id->ID.Num );
     } else {
         return( -1 );
     }
-} /* WResIDToNum */
+}
 
 
-long WResHelpIDToNum( const WResHelpID * num )
-/************************************/
-/* return the value in a string if it is a number, -1 otherwise */
+long WResHelpIDToNum( const WResHelpID *help_id )
+/************************************************
+ * return the value in a string if it is a number, -1 otherwise
+ */
 {
-    if( num != NULL && !num->IsName ) {
-        return( num->ID.Num );
+    if( help_id != NULL && !help_id->IsName ) {
+        return( help_id->ID.Num );
     } else {
         return( -1 );
     }
-} /* WResHelpIDToNum */
+}

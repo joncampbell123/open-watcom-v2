@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -36,10 +37,26 @@
 #include "sslint.h"
 
 
+typedef struct token_entry {
+    struct token_entry  *link;
+    const char          *name;
+    unsigned            value;
+    unsigned            len;
+} token_entry;
+
+typedef struct {
+    token_entry *head;
+    unsigned    len;
+} token_list;
+
+token_list      Keywords;
+token_list      Delimiters;
+token_list      Exports;
+
 symbol          *SymLst;
 
 
-static bool LookupAndAdd( class typ, symbol **ptr )
+static bool LookupAndAdd( ssl_class typ, symbol **ptr )
 {
     symbol      **owner;
     symbol      *curr;
@@ -57,14 +74,11 @@ static bool LookupAndAdd( class typ, symbol **ptr )
             return( false );
         }
     }
-    curr = calloc( 1, sizeof( symbol ) );
-    if( curr == NULL )
-        Error( "out of memory" );
+    curr = MemAllocSafe( sizeof( symbol ) );
+    memset( curr, 0, sizeof( symbol ) );
     *owner = curr;
     curr->link = NULL;
-    curr->name = malloc( TokenLen + 1 );
-    if( curr->name == NULL )
-        Error( "out of memory" );
+    curr->name = MemAllocSafe( TokenLen + 1 );
     strcpy( curr->name, TokenBuff );
     curr->alias = NULL;
     curr->typ = typ;
@@ -73,7 +87,7 @@ static bool LookupAndAdd( class typ, symbol **ptr )
 }
 
 
-symbol  *NewSym( class typ )
+symbol  *NewSym( ssl_class typ )
 {
     symbol      *curr;
     if( !LookupAndAdd( typ, &curr ) ) {
@@ -84,20 +98,18 @@ symbol  *NewSym( class typ )
 
 void NewAlias( symbol *sym )
 {
-    sym->alias = malloc( TokenLen + 1 );
-    if( sym->alias == NULL )
-        Error( "out of memory" );
+    sym->alias = MemAllocSafe( TokenLen + 1 );
     strcpy( sym->alias, TokenBuff );
 }
 
 
-symbol *Lookup( class typ )
+symbol *Lookup( ssl_class typ )
 {
     symbol      *curr;
 
     if( LookupAndAdd( typ, &curr ) ) {
         if( typ == CLASS_RULE ) {
-            curr->v.rule.lbl = GenNewLbl();
+            curr->v.rule.lbl = NewLabel();
         } else {
             Error( "'%s' not previously defined", TokenBuff );
         }
@@ -116,37 +128,21 @@ symbol *Lookup( class typ )
     return( curr );
 }
 
-typedef struct token_entry {
-    struct token_entry  *link;
-    char                *name;
-    unsigned            value;
-    unsigned            len;
-} token_entry;
-
-typedef struct {
-    token_entry *head;
-    unsigned    len;
-} token_list;
-
-token_list      Keywords;
-token_list      Delimiters;
-token_list      Exports;
-
-static void AddToList( token_list *list, char *name, unsigned value )
+static void AddToList( token_list *list, const char *name, unsigned value )
 {
     unsigned    len;
     token_entry **owner;
     token_entry *curr;
     token_entry *new;
 
-    len = strlen( name ) + ( sizeof( char ) + sizeof( unsigned short ) );
+    len = (unsigned)( strlen( name ) + sizeof( char ) + sizeof( short ) );
     list->len += len;
     for( owner = &list->head; (curr = *owner) != NULL; owner = &curr->link ) {
         if( len > curr->len ) {
             break;
         }
     }
-    new = malloc( sizeof( token_entry ) );
+    new = MemAllocSafe( sizeof( token_entry ) );
     new->link = curr;
     *owner = new;
     new->name = name;
@@ -155,7 +151,7 @@ static void AddToList( token_list *list, char *name, unsigned value )
 }
 
 
-static void AddToken( char *name, unsigned value )
+static void AddToken( const char *name, unsigned value )
 {
     if( name == NULL )
         return;
@@ -167,10 +163,10 @@ static void AddToken( char *name, unsigned value )
 }
 
 
-static void OutList( char *name, token_list *list )
+static void OutList( const char *name, token_list *list )
 {
-    token_entry *curr;
-    char        *ptr;
+    token_entry     *curr;
+    const char      *ptr;
 
     OutStartSect( name, list->len + 1 );
     for( curr = list->head; curr != NULL; curr = curr->link ) {
@@ -182,6 +178,18 @@ static void OutList( char *name, token_list *list )
     }
     OutByte( '\0' );
     OutEndSect();
+}
+
+
+static void FreeList( token_entry *tentry )
+{
+    token_entry *next;
+
+    while( tentry != NULL ) {
+        next = tentry->link;
+        MemFree( tentry );
+        tentry = next;
+    }
 }
 
 
@@ -241,7 +249,7 @@ void DumpSymTbl(void)
             }
             break;
         case CLASS_ENUMS:
-           Dump( "ENUM:   [%4d] %s >> %s\n", curr->v.enums.value,
+            Dump( "ENUM:   [%4d] %s >> %s\n", curr->v.enums.value,
                 curr->name, curr->v.enums.type->name );
             break;
         }
@@ -249,4 +257,26 @@ void DumpSymTbl(void)
     OutList( "Keywords", &Keywords );
     OutList( "Delims", &Delimiters );
     OutList( "Exports", &Exports );
+}
+
+void FreeSymTbl( void )
+{
+    symbol      *curr;
+
+    /*
+     * free all lists
+     */
+    FreeList( Keywords.head );
+    FreeList( Delimiters.head );
+    FreeList( Exports.head );
+    /*
+     * free all symbols
+     */
+    while( (curr = SymLst) != NULL ) {
+        SymLst = SymLst->link;
+        MemFree( curr->name );
+        if( curr->alias != NULL )
+            MemFree( curr->alias );
+        MemFree( curr );
+    }
 }

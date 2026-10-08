@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -167,8 +167,8 @@ static BITMAPFILEHEADER2 *fillFileHeader( img_node *node )
 {
     BITMAPFILEHEADER2   *fileheader;
 
-    fileheader = MemAlloc( sizeof( BITMAPFILEHEADER2 ) );
-    memset( fileheader, 0, sizeof( BITMAPFILEHEADER2 ) );
+    fileheader = MemAlloc( sizeof( *fileheader ) );
+    memset( fileheader, 0, sizeof( *fileheader ) );
 
     if( node->imgtype == ICON_IMG ) {
         fileheader->usType = BFT_COLORICON;
@@ -502,9 +502,15 @@ static bool getSavePalName( char *fname )
     of.lpstrTitle = "Save Colour Palette File";
     of.lpstrInitialDir = initialDir;
     of.Flags = OFN_SHOWHELP | OFN_OVERWRITEPROMPT | OFN_ENABLEHOOK;
+#ifdef __WINDOWS__
     of.lpfnHook = MakeProcInstance_OFNHOOK( SaveOFNHookProc, Instance );
+#else
+    of.lpfnHook = SaveOFNHookProc;
+#endif
     ok = ( GetSaveFileName( &of ) != 0 );
+#ifdef __WINDOWS__
     FreeProcInstance_OFNHOOK( of.lpfnHook );
+#endif
     return( ok );
 
 } /* getSavePalName */

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -46,13 +46,13 @@
 #include "clibext.h"
 
 
-#define PREFIX_SIZE     8
+#define DIRECTIVE_SIZE  8
 
 #define IDEFN(x)        IdeCbs->x
 
 typedef struct {
     IDEInfoType type;
-    char        prefix[PREFIX_SIZE + 1];
+    char        directive[DIRECTIVE_SIZE + 1];
     bool        retry;
 } extra_cmd_info;
 
@@ -134,7 +134,8 @@ void WriteStdOutInfo( const char *str, unsigned level, const char *symbol )
     if( IdeCbs != NULL ) {
         IdeMsgInit( &info, SeverityMap[(level & CLASS_MSK) >> NUM_SHIFT], str );
         msgclass = level & CLASS_MSK;
-        if( msgclass != BANNER && msgclass >= (WRN & CLASS_MSK) ) {
+        if( msgclass != BANNER
+          && msgclass >= (WRN & CLASS_MSK) ) {
             IdeMsgSetMsgNo( &info, CalcMsgNum( level ) );
             IdeMsgSetHelp( &info, "wlnkerrs.hlp", level & NUM_MSK );
         }
@@ -150,7 +151,8 @@ char * GetEnvString( const char *envname )
 {
     char *retval;
 
-    if( IdeCbs == NULL || InitInfo.ignore_env )
+    if( IdeCbs == NULL
+      || InitInfo.ignore_env )
         return( NULL );
     IDEFN( GetInfo )( IdeHdl, IDE_GET_ENV_VAR, (IDEGetInfoWParam)envname, (IDEGetInfoLParam)&retval );
     return( retval );
@@ -160,14 +162,14 @@ void GetExtraCommands( void )
 /***************************/
 {
     extra_cmd_info const    *cmd;
-    char                    buff[_MAX_PATH + PREFIX_SIZE];
+    char                    buff[_MAX_PATH + DIRECTIVE_SIZE];
     char                    *p;
 
     if( !InitInfo.cmd_line_has_files ) {
-        for( cmd = ExtraCmds; cmd->prefix[0] != '\0'; ++cmd ) {
+        for( cmd = ExtraCmds; cmd->directive[0] != '\0'; ++cmd ) {
             for( ;; ) {
-                memcpy( buff, cmd->prefix, PREFIX_SIZE );
-                p = buff + PREFIX_SIZE;
+                memcpy( buff, cmd->directive, DIRECTIVE_SIZE );
+                p = buff + DIRECTIVE_SIZE;
                 if( IDEFN( GetInfo )( IdeHdl, cmd->type, (IDEGetInfoWParam)NULL, (IDEGetInfoLParam)p ) )
                     break;
                 if( DoBuffCmdParse( buff ) )

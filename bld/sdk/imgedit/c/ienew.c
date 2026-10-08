@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2020 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,7 +34,9 @@
 #include "imgedit.h"
 #include "iconinfo.h"
 #include "jdlg.h"
-#include "wclbproc.h"
+#ifdef __WINDOWS__
+    #include "wclbproc.h"
+#endif
 #include "pathgrp2.h"
 
 #include "clibext.h"
@@ -131,7 +133,7 @@ WPI_DLGRESULT CALLBACK SelBitmapDlgProc( HWND hwnd, WPI_MSG msg, WPI_PARAM1 wpar
                 title = IEAllocRCString( WIE_NOTE );
                 text = IEAllocRCString( WIE_DIMENSIONSBETWEEN );
                 if( text != NULL ) {
-                    msg_text = (char *)MemAlloc( strlen( text ) + 20 + 1 );
+                    msg_text = MemAlloc( strlen( text ) + 20 + 1 );
                     if( msg_text != NULL ) {
                         sprintf( msg_text, text, MIN_DIM, MAX_DIM );
                         MessageBox( hwnd, msg_text, title, MB_OK | MB_ICONINFORMATION );
@@ -227,7 +229,7 @@ WPI_DLGRESULT CALLBACK SelCursorDlgProc( HWND hwnd, UINT msg, WPARAM wparam, LPA
         } else {
             SendMessage( hlistbox, LB_INSERTSTRING, 0, (LPARAM)(LPCSTR)"Monochrome, 32x32" );
         }
-        SendMessage( hlistbox, LB_SETCURSEL, 0, 0L );
+        SendMessage( hlistbox, LB_SETCURSEL, 0, 0 );
         ret = true;
         break;
 
@@ -238,7 +240,7 @@ WPI_DLGRESULT CALLBACK SelCursorDlgProc( HWND hwnd, UINT msg, WPARAM wparam, LPA
     case WM_COMMAND:
         switch( LOWORD( wparam ) ) {
         case IDOK:
-            index = (int)SendMessage( hlistbox, LB_GETCURSEL, 0, 0L );
+            index = (int)SendMessage( hlistbox, LB_GETCURSEL, 0, 0 );
             if( index == 0 ) {
                 imgWidth = 32;
                 imgHeight = 32;
@@ -302,7 +304,6 @@ static void initializeImage( img_node *node, const char *filename )
  */
 bool NewImage( image_type img_type, const char *filename )
 {
-    WPI_DLGPROC         dlgproc;
     INT_PTR             button_type;
     short               width;
     short               height;
@@ -319,10 +320,15 @@ bool NewImage( image_type img_type, const char *filename )
     }
 
     if( img_type == UNDEF_IMG ) {
-        dlgproc = _wpi_makedlgprocinstance( SelImgDlgProc, Instance );
-        button_type = _wpi_dialogbox( HMainWindow, dlgproc, Instance, SELECTIMAGE, 0L );
-        _wpi_freedlgprocinstance( dlgproc );
-
+#ifdef __WINDOWS__
+        {
+            WPI_DLGPROC dlgproc = _wpi_makedlgprocinstance( SelImgDlgProc, Instance );
+            button_type = _wpi_dialogbox( HMainWindow, dlgproc, Instance, SELECTIMAGE, 0L );
+            _wpi_freedlgprocinstance( dlgproc );
+        }
+#else
+        button_type = _wpi_dialogbox( HMainWindow, SelImgDlgProc, Instance, SELECTIMAGE, 0L );
+#endif
         if( button_type == DLGID_CANCEL ) {
             return( false );
         }
@@ -335,9 +341,15 @@ bool NewImage( image_type img_type, const char *filename )
     ok = true;
     switch( imgType ) {
     case BITMAP_IMG:
-        dlgproc = _wpi_makedlgprocinstance( SelBitmapDlgProc, Instance );
-        button_type = _wpi_dialogbox( HMainWindow, dlgproc, Instance, BITMAPTYPE, 0L );
-        _wpi_freedlgprocinstance( dlgproc );
+#ifdef __WINDOWS__
+        {
+            WPI_DLGPROC dlgproc = _wpi_makedlgprocinstance( SelBitmapDlgProc, Instance );
+            button_type = _wpi_dialogbox( HMainWindow, dlgproc, Instance, BITMAPTYPE, 0L );
+            _wpi_freedlgprocinstance( dlgproc );
+        }
+#else
+        button_type = _wpi_dialogbox( HMainWindow, SelBitmapDlgProc, Instance, BITMAPTYPE, 0L );
+#endif
         if( button_type == DLGID_CANCEL ) {
             imgType = UNDEF_IMG;
             imageCount--;
@@ -379,9 +391,15 @@ bool NewImage( image_type img_type, const char *filename )
         imgHeight = height;
         bitCount = bcount;
 #else
-        dlgproc = MakeProcInstance_DLG( SelCursorDlgProc, Instance );
-        button_type = JDialogBox( Instance, "CURSORTYPE", HMainWindow, dlgproc );
-        FreeProcInstance_DLG( dlgproc );
+  #ifdef __WINDOWS__
+        {
+            WPI_DLGPROC dlgproc = MakeProcInstance_DLG( SelCursorDlgProc, Instance );
+            button_type = JDialogBox( Instance, "CURSORTYPE", HMainWindow, dlgproc );
+            FreeProcInstance_DLG( dlgproc );
+        }
+  #else
+        button_type = JDialogBox( Instance, "CURSORTYPE", HMainWindow, SelCursorDlgProc );
+  #endif
         if( button_type == IDCANCEL ) {
             imgType = UNDEF_IMG;
             ok = false;

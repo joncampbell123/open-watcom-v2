@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -189,12 +189,12 @@ static void MakeListItem( name_list **list, const char *item, size_t len )
 {
     name_list *entry;
 
-    entry = MemAlloc( sizeof( name_list ) + len );
+    entry = MemAllocSafe( sizeof( name_list ) + len );
     entry->next = NULL;
     entry->lnameidx = 0;
     memcpy( entry->name, item, len );
     *(entry->name + len) = '\0';
-    LinkList( (void **)list, entry );
+    AppendList( (void **)list, entry );
 }
 
 static bool ProcClass( const char *item, size_t len )
@@ -229,7 +229,7 @@ static bool ProcExclude( const char *item, size_t len )
     while( len > 0 ) {
         switch( ExcludeState ) {
         case EX_NONE:
-            ExEntry = MemAlloc( sizeof( exclude_list ) + len );
+            ExEntry = MemAllocSafe( sizeof( exclude_list ) + len );
             ExEntry->next = NULL;
             ExEntry->segidx = 0;
             ExEntry->lnameidx = 0;
@@ -262,7 +262,7 @@ static bool ProcExclude( const char *item, size_t len )
             if( ExcludeState == EX_GOT_COLON ) {
                 ExEntry->end_off += ExEntry->start_off;
             }
-            LinkList( (void **)&ExcludeList, ExEntry );
+            AppendList( (void **)&ExcludeList, ExEntry );
             ExcludeState = EX_NONE;
             return( true );     // want a list separator after this.
         }
@@ -279,7 +279,7 @@ static void ProcessOption( const char ***argv )
     NewOption = true;
     (**argv)++;        // skip the switch character.
     item = **argv;
-    option = (char)tolower( (unsigned char)*item );
+    option = (char)tolower( *(unsigned char *)item );
     switch( option ) {
     case 'c':           // class list.
         ProcList( ProcClass, argv );
@@ -295,7 +295,7 @@ static void ProcessOption( const char ***argv )
         (*argv)++;
         break;
     default:
-        printf( "option not recognized: %c\n", item[0] );
+        printf( "option not recognized: %c\n", *(unsigned char *)item );
         (*argv)++;
     }
 }
@@ -319,7 +319,8 @@ static void ReplaceExt( char *name, const char *new_ext, bool force )
     pgroup2     pg;
 
     _splitpath2( name, pg.buffer, &pg.drive, &pg.dir, &pg.fname, &pg.ext );
-    if( force || pg.ext[0] == '\0' ) {
+    if( force
+      || pg.ext[0] == '\0' ) {
         _makepath( name, pg.drive, pg.dir, pg.fname, new_ext );
     }
 }
@@ -388,7 +389,8 @@ static void ProcFile( const char *fname )
     for( ;; ) {
         CleanRecStuff();
         ftype = ReadRec();
-        if( ftype == ENDLIBRARY || ftype == ENDFILE ) {
+        if( ftype == ENDLIBRARY
+          || ftype == ENDFILE ) {
             break;
         } else if( ftype == LIBRARY ) {
             Warning( "exclude option does not apply to libraries" );
@@ -444,7 +446,8 @@ static void ProcessFiles( const char **argv )
 
     while( *argv != NULL ) {
         item = *argv;
-        if( *item == '-' || *item == '/' ) {
+        if( *item == '-'
+          || *item == '/' ) {
             ProcessOption( &argv );
         } else {
             printf( "Processing file '%s'\n", item );
@@ -460,15 +463,15 @@ typedef struct _node {      // structure used for list traversal routines.
     struct _node    *next;
 } node;
 
-void LinkList( void **in_head, void *newnode )
-/********************************************/
-/* Link a new node into a linked list (new node goes at the end of the list) */
+void AppendList( void **in_head, void *newnode )
+/***********************************************
+ * Link a new node into a linked list (new node goes at the end of the list)
+ */
 {
     node                **owner;
 
-    for( owner = (node **)in_head; *owner != NULL; ) {
-        owner = &(*owner)->next;
-    }
+    for( owner = (node **)in_head; *owner != NULL; owner = (node **)&(*owner)->next )
+        /* nothing */;
     *owner = newnode;
 }
 
@@ -565,11 +568,12 @@ int main(int argc, char **argv )
     InputBuffer = InitRecStuff();
     InFile = NULL;
     OutFile = NULL;
-    ClassList = MemAlloc( sizeof( name_list ) + sizeof( DEF_CLASS ) - 1 );
+    ClassList = MemAllocSafe( sizeof( name_list ) + sizeof( DEF_CLASS ) - 1 );
     ClassList->next = NULL;
     ClassList->lnameidx = 0;
     memcpy( ClassList->name, DEF_CLASS, sizeof( DEF_CLASS ) - 1 );
-    if( ( argc < 2 ) || ( argv[1][0] == '?' ) ) {
+    if( ( argc < 2 )
+      || ( argv[1][0] == '?' ) ) {
         printf( "%s", HelpMsg );
     } else {
         argv++;     // skip the program name

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -32,7 +32,10 @@
 
 
 #include "wclient.hpp"
-#include "wclbdde.h"
+#include <ddeml.h>
+#ifdef __WINDOWS__
+    #include "wclbdde.h"
+#endif
 
 
 WObjectMap WEXPORT WClient::_convMap;
@@ -70,10 +73,16 @@ WEXPORT WClient::WClient( WObject *owner, cbc notify )
     , _connected( false ) {
 /*************************/
 
+#ifdef __WINDOWS__
     _procInst = MakeProcInstance_DDE( clientCallback, GUIMainHInst );
     if( !DdeInitialize( &_procid, _procInst, INITFLAGS, 0L ) ) {
         _ok = true;
     }
+#else
+    if( !DdeInitialize( &_procid, clientCallback, INITFLAGS, 0L ) ) {
+        _ok = true;
+    }
+#endif
 }
 
 
@@ -81,8 +90,10 @@ WEXPORT WClient::~WClient() {
 /***************************/
 
     DdeUninitialize( _procid );
+#ifdef __WINDOWS__
     FreeProcInstance_DDE( _procInst );
     _procid = NULL;
+#endif
 }
 
 

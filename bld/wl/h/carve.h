@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -41,34 +42,6 @@
   chunks.
 */
 
-typedef struct blk blk_t;
-typedef struct free_t free_t;
-
-typedef struct {
-    free_t *    free_list;
-    free_t *    insert;
-    blk_t *     blk_list;
-    blk_t **    blk_map;
-    unsigned    elm_size;
-    unsigned    elm_count;
-    unsigned    blk_top;
-    unsigned    blk_count;
-    unsigned    blk_size;
-    boolbit     size_chg : 1;
-} cv_t, *carve_t;
-
-extern carve_t CarveCreate( unsigned elm_size, unsigned how_many );
-extern void CarveRestart( carve_t cv, unsigned );
-extern void CarvePurge( carve_t cv );
-extern void CarveVerifyAllGone( carve_t cv, const char * );
-extern void CarveDestroy( carve_t cv );
-
-extern void *CarveAlloc( carve_t cv );
-extern void *CarveZeroAlloc( carve_t cv );
-extern void CarveFree( carve_t cv, void *elm );
-
-typedef unsigned_32             cv_index;
-
 #define CV_SHIFT                16
 #define CV_MASK                 ((1<<CV_SHIFT)-1)
 
@@ -83,25 +56,31 @@ enum {
     CARVE_INVALID_INDEX = MK_INDEX( 0, 1 ),
 };
 
-extern void *   CarveGetIndex( carve_t, void * );
+typedef unsigned_32     carve_index;
+
+typedef struct cv_t     *carve_t;
+
+extern carve_t  CarveCreate( unsigned elm_size, unsigned how_many );
+extern void     CarveRestart( carve_t carver, unsigned );
+extern void     CarvePurge( carve_t carver );
+extern void     CarveVerifyAllGone( carve_t carver, const char * );
+extern void     CarveDestroy( carve_t carver );
+
+extern void     *CarveAlloc( carve_t carver );
+extern void     *CarveZeroAlloc( carve_t carver );
+extern void     CarveFree( carve_t carver, void *elm );
+
+extern void     *CarveGetIndex( carve_t, void * );
 extern void     CarveWalkBlocks( carve_t, void (*)(carve_t, void *, void *), void * );
 extern bool     CarveBlockModified( void * );
 extern void     CarveBlockScan( carve_t, void *, void (*)(void *, void *), void *);
 extern unsigned CarveBlockSize( carve_t );
 extern unsigned CarveNumElements( carve_t );
-extern void *   CarveBlockData( void * );
-extern void *   CarveMapIndex( carve_t, void * );
+extern void     *CarveBlockData( void * );
+extern void     *CarveMapIndex( carve_t, void * );
 extern bool     CarveSizeChanged( carve_t );
 extern void     CarveInsertFree( carve_t, void * );
-
-typedef struct {
-    unsigned    bindex;
-    blk_t *     block;
-    free_t **   head;
-    carve_t     cv;
-} cvinit_t;
-
-extern void CarveWalkAllFree( carve_t gcv, void (*rtn)( void * ) );
-extern void CarveWalkAll( carve_t, void (*)(void *, void *), void * );
+extern void     CarveWalkAllFree( carve_t carver, void (*rtn)( void * ) );
+extern void     CarveWalkAll( carve_t, void (*)(void *, void *), void * );
 
 #endif

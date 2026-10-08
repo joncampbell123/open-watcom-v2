@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2020 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -73,7 +73,7 @@ ExtraRptCtr( macros_defined_with_parms );
 ExtraRptCtr( macros_redefined );
 ExtraRptSpace( macro_space );
 
-#define macroSizeAlign( s )     _RoundUp((s), sizeof( int ))
+#define macroSizeAlign( s )     _RoundUp((s), sizeof( void * ))
 
 static void *macroAllocateInSeg( // ALLOCATE WITHIN A SEGMENT
     size_t size )               // - size
@@ -153,7 +153,7 @@ static int macroCompare(        // COMPARE TWO MACROS TO SEE IF IDENTICAL
         return( -1 );
     if( m1->macro_defn != m2->macro_defn )
         return( -1 );
-    if( m1->parm_count != m2->parm_count )
+    if( m1->u.parm_count != m2->u.parm_count )
         return( -1 );
     return( memcmp( m1->macro_name, m2->macro_name, m1->macro_len - offsetof( MEDEFN, macro_name ) ) );
 }
@@ -604,7 +604,7 @@ MEPTR MacroSpecialAdd(          // ADD A SPECIAL MACRO
     TokenLocnClear( mentry->defn );
     mentry->macro_defn = 0;     /* indicate special macro */
     mentry->macro_len = reqd;
-    mentry->parm_count = value;
+    mentry->u.special_macro = value;
     memcpy( mentry->macro_name, name, len + 1 );
     mentry = MacroDefine( mentry, reqd, mflags );
     return( mentry );
@@ -744,9 +744,9 @@ void MacroSegmentAddToken(          // MacroSegment: ADD A TOKEN
     size_t  clen;
 
     clen = *mlen;
-    MacroReallocOverflow( clen + sizeof( TOKEN ), clen );
-    *(TOKEN *)( MacroOffset + clen ) = token;
-    *mlen = clen + sizeof( TOKEN );
+    MacroReallocOverflow( clen + SIZE_MTOKEN, clen );
+    SET_MTOKEN( MacroOffset + clen, token );
+    *mlen = clen + SIZE_MTOKEN;
 }
 
 
@@ -776,4 +776,76 @@ void MacroSegmentAddMem(            // MacroSegment: ADD A SEQUENCE OF BYTES
     MacroReallocOverflow( clen + len, clen );
     memcpy( MacroOffset + clen, buff, len );
     *mlen += len;
+}
+
+
+static void dumpMacroDefn(          // DUMP TOKENIZED MACRO DEFINITION
+    const char *p )                 // - pointer to token stream
+{
+    unsigned char   c;
+    TOKEN           token;
+
+    while( (token = GET_MTOKEN( p )) != T_NULL ) {
+        p += SIZE_MTOKEN;
+        switch( token ) {
+        case T_CONSTANT:
+        case T_PPNUMBER:
+        case T_BAD_TOKEN:
+        case T_ID:
+        case T_UNEXPANDABLE_ID:
+            for( ; (c = *p++) != '\0'; ) {
+                fputc( c, CppFile );
+            }
+            break;
+        case T_LSTRING:
+            fputc( 'L', CppFile );
+            /* fall through */
+        case T_STRING:
+            fputc( '"', CppFile );
+            for( ; (c = *p++) != '\0'; ) {
+                fputc( c, CppFile );
+            }
+            fputc( '"', CppFile );
+            break;
+        case T_WHITE_SPACE:
+            fputc( ' ', CppFile );
+            break;
+        case T_BAD_CHAR:
+            fputc( *p++, CppFile );
+            break;
+        case T_MACRO_PARM:
+        case T_MACRO_VAR_PARM:
+            p += SIZE_MPARM;
+            break;
+        default:
+            fprintf( CppFile, "%s", TokenString[token] );
+            break;
+        }
+    }
+}
+
+
+void DumpAllMacros(                 // DUMP ALL PREDEFINED MACROS
+    void )
+{
+    unsigned        hash;
+    MEPTR           mentry;
+    const char      *p;
+
+    for( hash = 0; hash < MACRO_HASH_SIZE; hash++ ) {
+        RingIterBeg( macroHashTable[hash], mentry ) {
+            if( mentry->macro_flags & MFLAG_HIDDEN )
+                continue;
+            if( MacroIsSpecial( mentry ) )
+                continue;
+            fprintf( CppFile, "#define %s", mentry->macro_name );
+            p = (char *)mentry + mentry->macro_defn;
+            if( GET_MTOKEN( p ) != T_NULL ) {
+                fputc( ' ', CppFile );
+                dumpMacroDefn( p );
+            }
+            fputc( '\n', CppFile );
+        } RingIterEnd( mentry )
+    }
+    fflush( CppFile );
 }

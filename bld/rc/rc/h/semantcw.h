@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -42,14 +43,13 @@
 #include "semsnglw.h"
 #include "semresfl.h"
 
-extern FullMemFlags     SemWINAddFirstMemOption( YYTOKENTYPE token );
-extern FullMemFlags     SemWINAddMemOption( FullMemFlags, YYTOKENTYPE token );
+
+extern ResMemFlags      SemWINAddResOption( ResMemFlags res_flags, YYTOKENTYPE token );
 extern char             *SemWINTokenToString( YYTOKENTYPE token );
 extern void             SemWINSetGlobalLanguage( const WResLangType *newlang );
 extern void             SemWINSetResourceLanguage( const WResLangType *newlang, bool from_parser );
 extern void             SemWINUnsupported( YYTOKENTYPE token );
-extern void             SemWINCheckMemFlags( FullMemFlags *currflags,
-                                ResMemFlags loadopts, ResMemFlags memopts,
-                                ResMemFlags pureopts );
+extern uint_32          SemWINGetDefaultCodepage( void );
+extern void             SemWINSetDefaultCodepage( uint_32 codepage );
 
 #endif

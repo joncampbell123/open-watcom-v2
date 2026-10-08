@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2024-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2024-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -30,6 +30,7 @@
 ****************************************************************************/
 
 
+#include <ctype.h>
 #include "asmglob.h"
 #include "asmalloc.h"
 #include "directiv.h"
@@ -47,19 +48,39 @@ enum changes {
 
 #define USCORE "_"
 
+size_t get_ucase_name( char *dst, size_t len, const char *src, size_t slen )
+{
+    size_t          i;
+
+    if( slen == 0 )
+        slen = strlen( src );
+    if( len > 0 )
+        len--;
+    if( len > slen )
+        len = slen;
+    for( i = 0; i < len; i++ ) {
+        *dst++ = (char)toupper( (unsigned char)*src++ );
+    }
+    *dst = '\0';
+    return( len );
+}
+
 static char *AsmMangler( asm_sym_handle sym )
 /*******************************************/
 {
-    return( AsmStrDup( sym->name ) );
+    return( MemStrdupSafe( sym->name ) );
 }
 
 static char *UCaseMangler( asm_sym_handle sym )
 /*********************************************/
 {
     char        *name;
+    size_t      slen;
 
-    name = AsmStrDup( sym->name );
-    return( strupr( name ) );
+    slen = strlen( sym->name );
+    name = MemAllocSafe( slen + 1 );
+    get_ucase_name( name, slen + 1, sym->name, slen );
+    return( name );
 }
 
 static char *UScoreMangler( asm_sym_handle sym )
@@ -67,7 +88,7 @@ static char *UScoreMangler( asm_sym_handle sym )
 {
     char        *name;
 
-    name = AsmAlloc( strlen( sym->name ) + 1 + 1 );
+    name = MemAllocSafe( strlen( sym->name ) + 1 + 1 );
     name[0] = '_';
     strcpy( name + 1, sym->name );
     return( name );
@@ -88,7 +109,7 @@ static char *StdUScoreMangler( asm_sym_handle sym )
         parasize = ((dir_node_handle)sym)->e.procinfo->parasize;
         for( count = 2; parasize > 9; count++ )
             parasize /= 10;
-        name = AsmAlloc( strlen( sym->name ) + 1 + 1 + count + 1 );
+        name = MemAllocSafe( strlen( sym->name ) + 1 + 1 + count + 1 );
         parasize = ((dir_node_handle)sym)->e.procinfo->parasize;
         sprintf( name, "_%s@%d", sym->name, parasize );
         return( name );
@@ -124,7 +145,7 @@ static char *WatcomCMangler( asm_sym_handle sym )
     }
 
     len = strlen( ptr );
-    name = AsmAlloc( len + 2 + 1 );
+    name = MemAllocSafe( len + 2 + 1 );
     p = name;
     if( changes & USCORE_BEFORE ) {
         *p++ = '_';
@@ -143,8 +164,8 @@ static char *CMangler( asm_sym_handle sym )
     return( UScoreMangler( sym ) );
 }
 
-static mangle_func GetMangler( const char *mangle_type )
-/******************************************************/
+mangle_func GetMangler( const char *mangle_type )
+/***********************************************/
 {
     mangle_func mangler;
 
@@ -197,14 +218,11 @@ char *Mangle( asm_sym_handle sym )
     return( mangler( sym ) );
 }
 
-void SetMangler( asm_sym_handle sym, const char *mangle_type, int langtype )
-/**************************************************************************/
+void SetMangler( asm_sym_handle sym, mangle_func mangler, lang_type langtype )
+/****************************************************************************/
 {
-    mangle_func mangler;
-
     if( langtype != WASM_LANG_NONE )
         sym->langtype = langtype;
-    mangler = GetMangler( mangle_type );
     if( mangler == NULL ) {
         /* nothing to do */
     } else if( sym->mangler == NULL ) {

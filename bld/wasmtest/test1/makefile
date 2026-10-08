@@ -25,6 +25,11 @@ dosstart.dis &
 do_ax.dis &
 dup.dis &
 empty.dis &
+extabs.dis &
+extabsdb.dis &
+extcase.dis &
+extcas2.dis &
+extcas3.dis &
 f.dis &
 farjmp.dis &
 fcom.dis &
@@ -34,6 +39,7 @@ fubar.dis &
 g.dis &
 getenv.dis &
 hello.dis &
+ifdefmac.dis &
 ifs.dis &
 ins.dis &
 jmpfword.dis &
@@ -44,7 +50,10 @@ loader2.dis &
 lods.dis &
 maaak.dis &
 macro.dis &
+macrodef.dis &
+macroesc.dis &
 macroloc.dis &
+macropar.dis &
 macrotst.dis &
 main.dis &
 mainnew.dis &
@@ -65,15 +74,20 @@ proc.dis &
 proc3.dis &
 pub.dis &
 pub2.dis &
+pubcase.dis &
 pubdef.dis &
+purge.dis &
 q.dis &
+qmacand.dis &
 qnxstrt.dis &
+quotmac.dis &
 scas.dis &
 segoff.dis &
 shell.dis &
 size.dis &
 sizebug.dis &
 sizlen.dis &
+smalldat.dis &
 stos.dis &
 strmang.dis &
 struct.dis &
@@ -81,6 +95,7 @@ t2.dis &
 test.dis &
 tmp2.dis &
 tn.dis &
+trailcm.dis &
 wincall.dis &
 word.dis &
 x.dis &
@@ -89,5 +104,10 @@ xx.dis
 asm_flags_x = -c
 asm_flags_loader2 = -c
 asm_flags_getenv = -I"$(watcom_dir)/h"
+asm_flags_pubcase = -zcm=masm
+asm_flags_extcase = -zcm=masm
+asm_flags_extcas2 = -zcm=masm
+asm_flags_extcas3 = -zcm=masm
+asm_flags_trailcm = -zcm=tasm
 
 !include ../test.mif

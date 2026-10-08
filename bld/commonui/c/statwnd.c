@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -37,8 +37,9 @@
 #include "bool.h"
 #include "statwnd.h"
 #include "loadcc.h"
-#include "wclbproc.h"
-#ifdef __NT__
+#if defined( __WINDOWS__ )
+    #include "wclbproc.h"
+#elif defined( __NT__ )
     #include <commctrl.h>
 #endif
 
@@ -392,7 +393,11 @@ bool StatusWndInit( WPI_INST hinstance, statushook hook, int extra, HCURSOR hDef
             classHandle = hinstance;
             classWinExtra = extra;
             wc.style = CS_HREDRAW | CS_VREDRAW;
+#ifdef __WINDOWS__
             wc.lpfnWndProc = GetWndProc( StatusWndCallback );
+#else
+            wc.lpfnWndProc = StatusWndCallback;
+#endif
             wc.cbClsExtra = 0;
             wc.cbWndExtra = extra + sizeof( statwnd * );
             wc.hInstance = hinstance;
@@ -422,9 +427,9 @@ statwnd *StatusWndStart( void )
 {
     statwnd *sw;
 
-    sw = (statwnd *)CUIMemAlloc( sizeof( statwnd ) );
+    sw = MemAlloc( sizeof( *sw ) );
     if( sw != NULL ) {
-        memset( sw, 0, sizeof( statwnd ) );
+        memset( sw, 0, sizeof( *sw ) );
     }
     return( sw );
 
@@ -469,7 +474,7 @@ static void updateParts( statwnd *sw )
     int     width;
     int     *parts;
 
-    parts = (int *)CUIMemAlloc( sizeof( int ) * ( sw->numSections + 1 ) );
+    parts = MemAlloc( sizeof( int ) * ( sw->numSections + 1 ) );
     GetClientRect( sw->win, &rc );
     width = rc.right - rc.left;
     for( i = 0; i < sw->numSections; i++ ) {
@@ -488,7 +493,7 @@ static void updateParts( statwnd *sw )
     } else {
         SendMessage( sw->win, SB_SETPARTS, sw->numSections, (LPARAM)parts );
     }
-    CUIMemFree( parts );
+    MemFree( parts );
 
 } /* updateParts */
 
@@ -598,7 +603,6 @@ static void outputText( statwnd *sw, WPI_PRES pres, char *buff, WPI_RECT *r, UIN
 {
     WPI_RECT    ir;
     WPI_RECT    draw_rect;
-    size_t      len;
     WPI_RECTDIM ext;
     int         width;
     WPI_RECTDIM ir_left;
@@ -623,19 +627,17 @@ static void outputText( statwnd *sw, WPI_PRES pres, char *buff, WPI_RECT *r, UIN
         }
     }
 
-    len = strlen( buff );
-    if( len == 0 ) {
+    if( buff[0] == '\0' ) {
         return;
     }
-    CUIMemFree( sw->sectionData[curr_block] );
-    sw->sectionData[curr_block] = CUIMemAlloc( len + 1 );
-    memcpy( sw->sectionData[curr_block], buff, len + 1 );
+    MemFree( sw->sectionData[curr_block] );
+    sw->sectionData[curr_block] = MemStrdupSafe( buff );
     sw->sectionDataFlags[curr_block] = flags | DT_TEXTATTRS;
 
 #ifndef __NT__
-    _wpi_gettextextent( pres, buff, (int)len, &ext, &height );
+    _wpi_gettextextent( pres, buff, (int)strlen( buff ), &ext, &height );
 #else
-    GetTextExtentPoint( pres, buff, (int)len, &sz );
+    GetTextExtentPoint( pres, buff, (int)strlen( buff ), &sz );
     ext = sz.cx;
 #endif
     ir = *r;
@@ -826,10 +828,10 @@ void StatusWndDestroy( statwnd *sw )
             _wpi_destroywindow( sw->win );
         }
         for( i = 0; i <= sw->numSections; i++ ) {
-            CUIMemFree( sw->sectionData[i] );
+            MemFree( sw->sectionData[i] );
             sw->sectionData[i] = NULL;
         }
-        CUIMemFree( sw );
+        MemFree( sw );
     }
 
 } /* StatusWndDestroy */

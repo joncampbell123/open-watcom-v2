@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -36,7 +36,6 @@
 #include "linkstd.h"
 #include "specials.h"
 #include "fileio.h"
-#include "exeos2.h"
 #include "exeflat.h"
 #include "exepe.h"
 #include "exedos.h"
@@ -94,7 +93,7 @@ static entry_export *FreeAnExport( entry_export *exp )
 {
     entry_export    *next;
 
-    _LnkFree( exp->impname );
+    MemFree( exp->impname );
     next = exp->next;
     CarveFree( CarveExportInfo, exp );
     return( next );
@@ -125,10 +124,10 @@ void AddToExportList( entry_export *exp )
     len = strlen( exp->name.u.ptr );
     for( owner = &FmtData.u.os2fam.exports; (curr = *owner) != NULL; owner = &curr->next ) {
         currlen = strlen( curr->name.u.ptr );
-        if( currlen == len && CmpRtn( curr->name.u.ptr, exp->name.u.ptr, len ) == 0 ) {
-            if( !IS_FMT_INCREMENTAL( ObjFormat ) ) {
+        if( currlen == len && (*CmpNRtn)( curr->name.u.ptr, exp->name.u.ptr, len ) == 0 ) {
+            if( ObjFileFormat != FILE_FMT_INCREMENTAL ) {
                 if( !IS_SYM_COMDAT( exp->sym ) ) {
-                    LnkMsg( LOC+WRN+MSG_DUP_EXP_NAME, "s", curr->name.u.ptr );
+                    LnkMsg( WRN+LOC+MSG_DUP_EXP_NAME, "s", curr->name.u.ptr );
                 }
                 FreeAnExport( exp );
             }
@@ -172,11 +171,11 @@ static size_t CheckStdCall( const char *name, size_t len )
     chop = 0;
     if( len > 3 ) {
         teststr = name + len - 1;
-        if( *name == '_' && isdigit( *teststr ) ) {
+        if( *name == '_' && isdigit( *(unsigned char *)teststr ) ) {
             teststr--;
             if( *teststr == '@' ) {
                 chop = 3;
-            } else if( isdigit( *teststr ) ) {
+            } else if( isdigit( *(unsigned char *)teststr ) ) {
                 teststr--;
                 if( *teststr == '@' ) {
                     chop = 4;
@@ -295,21 +294,21 @@ void MSImportKeyword( symbol *sym, const length_name *modname, const length_name
     dll_sym_info    *dll;
 
     if( (sym->info & SYM_DEFINED) == 0 ) {
-        sym->info |= SYM_DEFINED | SYM_DCE_REF;
+        sym->info |= SYM_DEFINED | SYM_1_DCE_REF;
         if( LinkFlags & LF_STRIP_CODE ) {
             DefStripImpSym( sym );
         }
         SET_SYM_TYPE( sym, SYM_IMPORTED );
         dll = AllocDLLInfo();
-        sym->p.import = dll;
+        sym->p.import_dll = dll;
         if( FmtData.type & MK_PE ) {
             dll->iatsym = GetIATSym( sym );
-            dll->iatsym->info |= SYM_DEFINED | SYM_DCE_REF;
+            dll->iatsym->info |= SYM_DEFINED | SYM_1_DCE_REF;
             SET_SYM_TYPE( dll->iatsym, SYM_IMPORTED );
-            dll->iatsym->p.import = NULL;
+            dll->iatsym->p.import_dll = NULL;
         }
         dll->m.modnum = AddNameTable( modname->name, modname->len, true, &FmtData.u.os2fam.mod_ref_list );
-        if( ordinal == NOT_IMP_BY_ORDINAL ) {
+        if( ordinal == IMP_BY_NAME ) {
             dll->isordinal = false;
             dll->u.entry = AddNameTable( extname->name, extname->len, false, &FmtData.u.os2fam.imp_tab_list );
         } else {
@@ -359,8 +358,8 @@ void CheckExport( const char *name, ordinal_t ordinal, bool cmpcase )
     }
 }
 
-ordinal_t FindEntryOrdinal( targ_addr addr, group_entry *grp )
-/************************************************************/
+ordinal_t FindEntryOrdinal( addr_type addr, group_entry *group )
+/**************************************************************/
 {
     ordinal_t       max_ord;
     entry_export    **owner;
@@ -379,18 +378,12 @@ ordinal_t FindEntryOrdinal( targ_addr addr, group_entry *grp )
     exp->sym = NULL;
     exp->isexported = false;
     exp->ordinal = max_ord + 1;
-    if( grp->segflags & SEG_MOVABLE )
+    if( group->segflags & SEG_MOVABLE )
         exp->ismovable = true;
     exp->next = NULL;
     exp->addr = addr;
     *owner = exp;
     return( exp->ordinal );
-}
-
-char *ImpModuleName( dll_sym_info *dll )
-/**************************************/
-{
-    return( dll->m.modnum->name.u.ptr );
 }
 
 bool IsSymElfImported( symbol *sym )

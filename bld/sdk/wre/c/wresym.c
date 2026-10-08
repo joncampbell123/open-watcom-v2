@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -48,7 +48,9 @@
 #include "wresym.h"
 #include "wresdefn.h"
 #include "pathgrp2.h"
-#include "wclbhelp.h"
+#ifdef __WINDOWS__
+    #include "wclbproc.h"
+#endif
 
 #include "clibext.h"
 
@@ -90,30 +92,6 @@ extern char *WRESymSaveTitle;
 /****************************************************************************/
 static char WREBusyChars[] = "-\\|/";
 static jmp_buf SymEnv;
-
-void PPENTRY PP_OutOfMemory( void )
-/*********************************/
-{
-    longjmp( SymEnv, 1 );
-}
-
-void * PPENTRY PP_Malloc( size_t size )
-/*************************************/
-{
-    void        *p;
-
-    p = WRMemAlloc( size );
-    if( p == NULL ) {
-        PP_OutOfMemory();
-    }
-    return( p );
-}
-
-void PPENTRY PP_Free( void *p )
-/*****************************/
-{
-    WRMemFree( p );
-}
 
 int PP_MBCharLen( const char *p )
 /*******************************/
@@ -226,7 +204,7 @@ static char *WRELoadSymbols( WRHashTable **table, char *file_name, bool prompt_n
             gf.save_ext = false;
             name = WREGetOpenFileName( &gf );
         } else {
-            name = WREStrDup( file_name );
+            name = WREStrdup( file_name );
         }
         ok = (name != NULL);
     }
@@ -274,7 +252,7 @@ static char *WRELoadSymbols( WRHashTable **table, char *file_name, bool prompt_n
 
     if( !ok ) {
         if( name != NULL ) {
-            WRMemFree( name );
+            MemFree( name );
             name = NULL;
         }
     }
@@ -315,7 +293,7 @@ bool WRESaveSymbols( WRHashTable *table, char **file_name, bool prompt_name )
         ok = (name != NULL);
         if( ok ) {
             if( *file_name != NULL ) {
-                WRMemFree( *file_name );
+                MemFree( *file_name );
             }
             *file_name = name;
         }
@@ -339,28 +317,22 @@ bool WRESaveSymbols( WRHashTable *table, char **file_name, bool prompt_name )
 bool WREEditResourceSymbols( WREResInfo *info )
 {
     WRHashEntryFlags    flags;
-    HELPFUNC            hcb;
     bool                ok;
 
-    hcb = NULL;
     ok = (info != NULL && info->symbol_table != NULL);
 
     if( ok ) {
-        hcb = MakeProcInstance_HELP( WREHelpRoutine, WREGetAppInstance() );
-        ok = (hcb != NULL);
-    }
-
-    if( ok ) {
         flags = WR_HASHENTRY_ALL;
-        ok = WREditSym( info->info_win, &info->symbol_table, &flags, hcb );
+#ifdef __WINDOWS__
+        {
+            HELPFUNC hcb = MakeProcInstance_HELP( WREHelpRoutine, WREGetAppInstance() );
+            ok = WREditSym( info->info_win, &info->symbol_table, &flags, hcb );
+            FreeProcInstance_HELP( hcb );
+        }
+#else
+        ok = WREditSym( info->info_win, &info->symbol_table, &flags, WREHelpRoutine );
+#endif
     }
-
-    // ***** call routine to update the edit sessions *****
-
-    if( hcb != NULL ) {
-        FreeProcInstance_HELP( hcb );
-    }
-
     return( ok );
 }
 
@@ -378,7 +350,7 @@ bool WRELoadResourceSymbols( WREResInfo *info )
     }
 
     if( info->symbol_file != NULL ) {
-        WRMemFree( info->symbol_file );
+        MemFree( info->symbol_file );
     }
     info->symbol_file = symbol_file;
 
@@ -419,7 +391,7 @@ char *WRECreateSymFileName( const char *fname )
     _splitpath2( fname, pg.buffer, &pg.drive, &pg.dir, &pg.fname, NULL );
     _makepath( fn_path, pg.drive, pg.dir, pg.fname, "h" );
 
-    return( WREStrDup( fn_path ) );
+    return( WREStrdup( fn_path ) );
 }
 
 bool WREFindAndLoadSymbols( WREResInfo *rinfo )
@@ -449,7 +421,7 @@ bool WREFindAndLoadSymbols( WREResInfo *rinfo )
         prompt_name = true;
     } else {
         strcpy( fn_path, symbol_file );
-        WRMemFree( symbol_file );
+        MemFree( symbol_file );
         symbol_file = NULL;
         prompt_name = false;
     }
@@ -461,7 +433,7 @@ bool WREFindAndLoadSymbols( WREResInfo *rinfo )
         ret = (symbol_file != NULL);
         if( ret ) {
             if( rinfo->symbol_file != NULL ) {
-                WRMemFree( rinfo->symbol_file );
+                MemFree( rinfo->symbol_file );
             }
             rinfo->symbol_file = symbol_file;
         }

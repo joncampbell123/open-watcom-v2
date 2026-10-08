@@ -8,18 +8,20 @@ pmake_trmem = 1
 !include defrule.mif
 !include deftarg.mif
 
-!include trmem.mif
-
 #
 # cflags
 #
 .c : ..;$(trmem_dir)
 
-inc_dirs = -I.. -I"$(builder_dir)/h"
+inc_dirs = -I.. -I"$(builder_dir)/h" -I"$(trmem_dir)"
 
-extra_cpp_flags_f_pmkcmd = $(trmem_cpp_flags)
-
-extra_c_flags_f_pmkcmd = $(trmem_cover_cflags)
+!ifeq trmem 1
+! ifdef __WATCOM_TOOLS__
+!  if $(__WATCOM_TOOLS__) < 1300
+extra_c_flags_f_pmkcmd = -of+
+!  endif
+! endif
+!endif
 
 # explicit rules
 #################

@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -36,35 +37,35 @@
 #include "resstr.h"
 #include "wresrtns.h"
 
-void ResInitStringTableBlock( StringTableBlock * currblock )
-/**********************************************************/
+void ResInitStringTableBlock( StringTableBlock *block )
+/*****************************************************/
 {
     int     stringid;
 
     for( stringid = 0; stringid < STRTABLE_STRS_PER_BLOCK; stringid++ ) {
-        currblock->String[stringid] = NULL;
+        block->String[stringid] = NULL;
     }
 } /* ResInitStringTableBlock */
 
-void ResFreeStringTableBlock( StringTableBlock * currblock )
-/**********************************************************/
+void ResFreeStringTableBlock( StringTableBlock *block )
+/*****************************************************/
 {
     int     stringid;
 
     for( stringid = 0; stringid < STRTABLE_STRS_PER_BLOCK; stringid++ ) {
-        if( currblock->String[stringid] != NULL ) {
-            WRESFREE( currblock->String[stringid] );
+        if( block->String[stringid] != NULL ) {
+            WRESFREE( block->String[stringid] );
         }
     }
 } /* ResFreeStringTableBlock */
 
-bool ResWriteStringTableBlock( StringTableBlock *currblock, bool use_unicode, FILE *fp )
-/**************************************************************************************/
+bool ResWriteStringTableBlock( StringTableBlock *block, bool use_unicode, FILE *fp )
+/**********************************************************************************/
 {
     int     stringid;
 
     for( stringid = 0; stringid < STRTABLE_STRS_PER_BLOCK; stringid++ ) {
-        if( WResWriteWResIDName( currblock->String[stringid], use_unicode, fp ) ) {
+        if( ResWriteWResStringIDName( block->String[stringid], use_unicode, fp ) ) {
             return( true );
         }
     }

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -96,7 +96,7 @@ Done:
 #include "dbgtrace.h"
 #include "dbgmisc.h"
 #include "dipimp.h"
-#include "dipinter.h"
+#include "wvdipcli.h"
 #include "dbginsty.h"
 #include "dbgdot.h"
 #include "ntdbgpb.h"
@@ -389,16 +389,9 @@ char *GetCmdPartByChar( const char *cmd, const char *delimit )
 {
     char    *result;
     size_t  pos;
-    size_t  len;
 
     pos = strcspn( cmd, delimit );
-    len = strlen( cmd );
-    if( len > pos ) {
-        len = pos;
-    }
-    result = malloc( sizeof( char ) * ( len + 1 ) );
-    strncpy( result, cmd, len );
-    result[len] = NULLCHAR;
+    result = MemToStringSafe( cmd, pos );
     MyStrTrim( result );
     return( result );
 }
@@ -412,19 +405,11 @@ char *GetParamPartByChar( const char *cmd, const char *delimit )
 {
     char    *result;
     size_t  pos;
-    size_t  len;
 
     pos = strcspn( cmd, delimit );
-    len = strlen( cmd );
-    if( pos == len ) {
-        result = malloc( sizeof( char ) * 1 );
-        strncpy( result, "\0" , 1 );
-    } else {
-        len -= pos;
-        result = malloc( sizeof( char ) * ( len + 1 ) );
-        strncpy( result, cmd + pos + 1, len + 1 );
-        result[len] = NULLCHAR;
-    }
+    if( pos != strlen( cmd ) )
+        pos++;
+    result = MemStrdupSafe( cmd + pos );
     MyStrTrim( result );
     return( result );
 }
@@ -984,28 +969,28 @@ bool ProcessCmdBreakpoint( const char *param )
     /* if the filename or the missing then throw an error */
     if( file_name[0] == NULLCHAR ) {
         ShowDebuggerError( "file name not provided." );
-        free( file_name );
-        free( line_number_str );
+        MemFree( file_name );
+        MemFree( line_number_str );
         return( false );
     }
     if( line_number_str[0] == NULLCHAR ) {
         ShowDebuggerError( "line number not provided." );
-        free( file_name );
-        free( line_number_str );
+        MemFree( file_name );
+        MemFree( line_number_str );
         return( false );
     }
     line_num = atoi( line_number_str );
     if( line_num == 0 ) {
         ShowDebuggerError( "line number is invalid." );
-        free( file_name );
-        free( line_number_str );
+        MemFree( file_name );
+        MemFree( line_number_str );
         return( false );
     }
     only_file_name = GetCmdPartByChar( file_name, "." );
     SetBreakPointInFile( only_file_name, line_num );
-    free( file_name );
-    free( line_number_str );
-    free( only_file_name );
+    MemFree( file_name );
+    MemFree( line_number_str );
+    MemFree( only_file_name );
     return( true );
 }
 
@@ -1040,9 +1025,9 @@ bool ProcessCmdDisable( const char *param )
     } else {
         ShowDebuggerError( "no subcommand specified." );
     }
-    free( disable_cmd );
+    MemFree( disable_cmd );
     if( disable_param != NULL ) {
-        free( disable_param );
+        MemFree( disable_param );
     }
     return( true );
 }
@@ -1077,9 +1062,9 @@ bool ProcessCmdEnable( const char *param )
     } else {
         ShowDebuggerError( "no subcommand specified." );
     }
-    free( enable_cmd );
+    MemFree( enable_cmd );
     if( enable_param != NULL ) {
-        free( enable_param );
+        MemFree( enable_param );
     }
     return( true );
 }
@@ -1114,9 +1099,9 @@ bool ProcessCmdDelete( const char *param )
     } else {
         ShowDebuggerError( "no subcommand specified." );
     }
-    free( delete_cmd );
+    MemFree( delete_cmd );
     if( delete_param != NULL ) {
-        free( delete_param );
+        MemFree( delete_param );
     }
     return( true );
 }
@@ -1145,7 +1130,7 @@ bool ProcessCmdInfo( const char *param )
     } else {
         ShowDebuggerError( "no subcommand specified." );
     }
-    free( info_cmd );
+    MemFree( info_cmd );
     return( true );
 }
 
@@ -1456,8 +1441,8 @@ bool ProcessDebuggerCmd( char *cmd )
         ShowDebuggerError( "Unknown Command." );
     }
 
-    free( cmd_part );
-    free( param_part );
+    MemFree( cmd_part );
+    MemFree( param_part );
 
     return( true );
 }
@@ -2096,7 +2081,6 @@ int main( int argc, char **argv )
     _bgetcmd( cmd_line, sizeof( cmd_line ) );
     CmdData = cmd_line;
     DebugMain();
-    _SwitchOff( SW_ERROR_STARTUP );
     Requestsem = CreateSemaphore( NULL, 0, 1, NULL );
     Requestdonesem = CreateSemaphore( NULL, 0, 1, NULL );
     ReleaseSemaphore( Requestdonesem, 1, NULL ); // signal req done

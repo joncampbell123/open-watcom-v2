@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -41,6 +41,7 @@
 #include "fold.h"
 #include "codegen.h"
 #include "floatsup.h"
+#include "i64.h"
 
 
 static target_long FoldSignedRShiftMax( target_long v )
@@ -62,8 +63,8 @@ static bool isCondDecor(        // TEST IF CONDITIONALLY DECORATED
     if( NodeIsBinaryOp( node, CO_COMMA ) ) {
         node = node->u.subtree[0];
         if( node->op == PT_IC ) {
-            if( node->u.ic.opcode == IC_COND_TRUE
-             || node->u.ic.opcode == IC_COND_FALSE ) {
+            if( node->u.ic.u.opcode == IC_COND_TRUE
+             || node->u.ic.u.opcode == IC_COND_FALSE ) {
                 ok = true;
             }
         }
@@ -82,12 +83,6 @@ static PTREE overCondDecor(     // BY-PASS CONDITIONAL DECORATION
 }
 
 
-bool Zero64                     // TEST IF 64-BITTER IS ZERO
-    ( signed_64 const *test )   // - value to be tested
-{
-    return( test->u._32[0] == 0 && test->u._32[1] == 0 );
-}
-
 /**
  * Check if node is or evaluates to a zero constant for folding purposes.
  *
@@ -105,7 +100,7 @@ static bool zeroConstant( PTREE expr )
         if( NULL == Integral64Type( expr->type ) ) {
             return( expr->u.int_constant == 0 );
         } else {
-            return( Zero64( &expr->u.int64_constant ) );
+            return( U64isZero( expr->u.int64_constant ) );
         }
     case PT_FLOATING_CONSTANT:
       { target_ulong ul_val = CFCnvF32( expr->u.floating_constant );
@@ -319,9 +314,9 @@ PTREE CastIntConstant( PTREE expr, TYPE type, bool *happened )
 #if 0
 // these are now identical, with canonical floating point
             if( signed_type ) {
-                flt_val = CFCnvI64F( &cxxh, expr->u.int64_constant.u._32[I64LO32], expr->u.int64_constant.u._32[I64HI32] );
+                flt_val = CFCnvI64F( &cxxh, U64Low( expr->u.int64_constant ), U64High( expr->u.int64_constant ) );
             } else {
-                flt_val = CFCnvU64F( &cxxh, expr->u.int64_constant.u._32[I64LO32], expr->u.int64_constant.u._32[I64HI32] );
+                flt_val = CFCnvU64F( &cxxh, U64Low( expr->u.int64_constant ), U64High( expr->u.int64_constant ) );
             }
             new_expr = PTreeFloatingConstant( flt_val, id );
             break;
@@ -329,9 +324,9 @@ PTREE CastIntConstant( PTREE expr, TYPE type, bool *happened )
         case TYP_LONG_DOUBLE:
         case TYP_DOUBLE:
             if( signed_type ) {
-                dbl_val = CFCnvI64F( &cxxh, expr->u.int64_constant.u._32[I64LO32], expr->u.int64_constant.u._32[I64HI32] );
+                dbl_val = CFCnvI64F( &cxxh, U64Low( expr->u.int64_constant ), U64High( expr->u.int64_constant ) );
             } else {
-                dbl_val = CFCnvU64F( &cxxh, expr->u.int64_constant.u._32[I64LO32], expr->u.int64_constant.u._32[I64HI32] );
+                dbl_val = CFCnvU64F( &cxxh, U64Low( expr->u.int64_constant ), U64High( expr->u.int64_constant ) );
             }
             new_expr = PTreeFloatingConstant( dbl_val, id );
             break;
@@ -581,11 +576,10 @@ PTREE FoldUnary( PTREE expr )
     } else if( op1->op == PT_INT_CONSTANT ) {
         switch( expr->cgop ) {
         case CO_TILDE:
-            op1->u.int64_constant.u._32[0] = ~ op1->u.int64_constant.u._32[0];
-            op1->u.int64_constant.u._32[1] = ~ op1->u.int64_constant.u._32[1];
+            U64NotEq( op1->u.int64_constant );
             break;
         case CO_UMINUS:
-            U64Neg( &op1->u.int64_constant, &op1->u.int64_constant );
+            U64NegEq( &op1->u.int64_constant );
             break;
         case CO_UPLUS:
             break;
@@ -869,13 +863,10 @@ static void idiv64              // DO 64-BIT SIGNED DIVISION
     , signed_64* result         // - result
     , signed_64* rem )          // - remainder
 {
-    if( v2->u._32[0] == 0
-     && v2->u._32[1] == 0 ) {
+    if( U64isZero( *v2 ) ) {
         CErr1( ERR_DIVISION_BY_ZERO );
-        result->u._32[I64HI32] = 0;
-        result->u._32[I64LO32] = 1;
-        rem->u._32[I64HI32] = 0;
-        rem->u._32[I64LO32] = 0;
+        Set64Val1p( *result );
+        Set64ValZero( *rem );
     } else {
         I64Div( v1, v2, result, rem );
     }
@@ -890,21 +881,21 @@ static PTREE foldInt64( CGOP op, PTREE left, signed_64 v2 )
     v1 = left->u.int64_constant;
     switch( op ) {
     case CO_PLUS:
-        U64Add( &v1, &v2, &left->u.int64_constant );
+        U64Add( &left->u.int64_constant, &v1, &v2 );
         break;
     case CO_MINUS:
-        U64Sub( &v1, &v2, &left->u.int64_constant );
+        U64Sub( &left->u.int64_constant, &v1, &v2 );
         break;
     case CO_TIMES:
-        t0 = CFCnvI64F( &cxxh, v1.u._32[I64LO32], v1.u._32[I64HI32] );
-        t1 = CFCnvI64F( &cxxh, v2.u._32[I64LO32], v2.u._32[I64HI32] );
+        t0 = CFCnvI64F( &cxxh, U64Low( v1 ), U64High( v1 ) );
+        t1 = CFCnvI64F( &cxxh, U64Low( v2 ), U64High( v2 ) );
         t2 = CFMul( &cxxh, t0, t1 );
         test = CFCnvF64( t2 );
         CFFree( &cxxh, t0 );
         CFFree( &cxxh, t1 );
         CFFree( &cxxh, t2 );
-        U64Mul( &v1, &v2, &left->u.int64_constant );
-        if( 0 != I64Cmp( &test, &left->u.int64_constant ) ) {
+        U64Mul( &left->u.int64_constant, &v1, &v2 );
+        if( U64isntEq( test, left->u.int64_constant ) ) {
             CErr1( ANSI_ARITHMETIC_OVERFLOW );
         }
         break;
@@ -917,46 +908,43 @@ static PTREE foldInt64( CGOP op, PTREE left, signed_64 v2 )
         idiv64( &v1, &v2, &div, &left->u.int64_constant );
       } break;
     case CO_AND:
-        left->u.int64_constant.u._32[0] = v1.u._32[0] & v2.u._32[0];
-        left->u.int64_constant.u._32[1] = v1.u._32[1] & v2.u._32[1];
+        U64And( left->u.int64_constant, v1, v2 );
         break;
     case CO_OR:
-        left->u.int64_constant.u._32[0] = v1.u._32[0] | v2.u._32[0];
-        left->u.int64_constant.u._32[1] = v1.u._32[1] | v2.u._32[1];
+        U64Or( left->u.int64_constant, v1, v2 );
         break;
     case CO_XOR:
-        left->u.int64_constant.u._32[0] = v1.u._32[0] ^ v2.u._32[0];
-        left->u.int64_constant.u._32[1] = v1.u._32[1] ^ v2.u._32[1];
+        U64Xor( left->u.int64_constant, v1, v2 );
         break;
     case CO_RSHIFT:
-        I64ShiftR( &v1, v2.u._32[I64LO32], &left->u.int64_constant );
+        I64ShiftR( &left->u.int64_constant, &v1, U64Low( v2 ) );
         break;
     case CO_LSHIFT:
-        U64ShiftL( &v1, v2.u._32[I64LO32], &left->u.int64_constant );
+        U64ShiftL( &left->u.int64_constant, &v1, U64Low( v2 ) );
         break;
     case CO_EQ:
-        left = makeBooleanConst( left, 0 == I64Cmp( &v1, &v2 ) );
+        left = makeBooleanConst( left, U64isEq( v1, v2 ) );
         return( left );
     case CO_NE:
-        left = makeBooleanConst( left, 0 != I64Cmp( &v1, &v2 ) );
+        left = makeBooleanConst( left, U64isntEq( v1, v2 ) );
         return( left );
     case CO_GT:
-        left = makeBooleanConst( left, 0 < I64Cmp( &v1, &v2 )) ;
+        left = makeBooleanConst( left, I64Cmp( &v1, &v2 ) > 0 ) ;
         return( left );
     case CO_LE:
-        left = makeBooleanConst( left, 0 >= I64Cmp( &v1, &v2 ) );
+        left = makeBooleanConst( left, I64Cmp( &v1, &v2 ) <= 0 );
         return( left );
     case CO_LT:
-        left = makeBooleanConst( left, 0 > I64Cmp( &v1, &v2 )) ;
+        left = makeBooleanConst( left, I64Cmp( &v1, &v2 ) < 0 ) ;
         return( left );
     case CO_GE:
-        left = makeBooleanConst( left, 0 <= I64Cmp( &v1, &v2 ) );
+        left = makeBooleanConst( left, I64Cmp( &v1, &v2 ) >= 0 );
         return( left );
     case CO_AND_AND:
-        left = makeBooleanConst( left, !Zero64( &v1 ) && !Zero64( &v2 ) );
+        left = makeBooleanConst( left, U64isntZero( v1 ) && U64isntZero( v2 ) );
         return( left );
     case CO_OR_OR:
-        left = makeBooleanConst( left, !Zero64( &v1) || !Zero64( &v2 ) );
+        left = makeBooleanConst( left, U64isntZero( v1) || U64isntZero( v2 ) );
         return( left );
     case CO_COMMA:
         left->u.int64_constant = v2;
@@ -974,13 +962,10 @@ static void udiv64              // DO 64-BIT UNSIGNED DIVISION
     , unsigned_64* result       // - result
     , unsigned_64* rem )        // - remainder
 {
-    if( v2->u._32[0] == 0
-     && v2->u._32[1] == 0 ) {
+    if( U64isZero( *v2 ) ) {
         CErr1( ERR_DIVISION_BY_ZERO );
-        result->u._32[I64HI32] = 0;
-        result->u._32[I64LO32] = 1;
-        rem->u._32[I64HI32] = 0;
-        rem->u._32[I64LO32] = 0;
+        Set64Val1p( *result );
+        Set64ValZero( *rem );
     } else {
         U64Div( v1, v2, result, rem );
     }
@@ -995,21 +980,21 @@ static PTREE foldUInt64( CGOP op, PTREE left, signed_64 v2 )
     v1 = left->u.int64_constant;
     switch( op ) {
     case CO_PLUS:
-        U64Add( &v1, &v2, &left->u.int64_constant );
+        U64Add( &left->u.int64_constant, &v1, &v2 );
         break;
     case CO_MINUS:
-        U64Sub( &v1, &v2, &left->u.int64_constant );
+        U64Sub( &left->u.int64_constant, &v1, &v2 );
         break;
     case CO_TIMES:
-        t0 = CFCnvU64F( &cxxh, v1.u._32[I64LO32], v1.u._32[I64HI32] );
-        t1 = CFCnvU64F( &cxxh, v2.u._32[I64LO32], v2.u._32[I64HI32] );
+        t0 = CFCnvU64F( &cxxh, U64Low( v1 ), U64High( v1 ) );
+        t1 = CFCnvU64F( &cxxh, U64Low( v2 ), U64High( v2 ) );
         t2 = CFMul( &cxxh, t0, t1 );
         test = CFCnvF64( t2 );
         CFFree( &cxxh, t0 );
         CFFree( &cxxh, t1 );
         CFFree( &cxxh, t2 );
-        U64Mul( &v1, &v2, &left->u.int64_constant );
-        if( 0 != U64Cmp( &test, &left->u.int64_constant ) ) {
+        U64Mul( &left->u.int64_constant, &v1, &v2 );
+        if( U64isntEq( test, left->u.int64_constant ) ) {
             CErr1( ANSI_ARITHMETIC_OVERFLOW );
         }
         break;
@@ -1022,46 +1007,43 @@ static PTREE foldUInt64( CGOP op, PTREE left, signed_64 v2 )
         udiv64( &v1, &v2, &div, &left->u.int64_constant );
       } break;
     case CO_AND:
-        left->u.int64_constant.u._32[0] = v1.u._32[0] & v2.u._32[0];
-        left->u.int64_constant.u._32[1] = v1.u._32[1] & v2.u._32[1];
+        U64And( left->u.int64_constant, v1, v2 );
         break;
     case CO_OR:
-        left->u.int64_constant.u._32[0] = v1.u._32[0] | v2.u._32[0];
-        left->u.int64_constant.u._32[1] = v1.u._32[1] | v2.u._32[1];
+        U64Or( left->u.int64_constant, v1, v2 );
         break;
     case CO_XOR:
-        left->u.int64_constant.u._32[0] = v1.u._32[0] ^ v2.u._32[0];
-        left->u.int64_constant.u._32[1] = v1.u._32[1] ^ v2.u._32[1];
+        U64Xor( left->u.int64_constant, v1, v2 );
         break;
     case CO_RSHIFT:
-        U64ShiftR( &v1, v2.u._32[I64LO32], &left->u.int64_constant );
+        U64ShiftR( &left->u.int64_constant, &v1, U64Low( v2 ) );
         break;
     case CO_LSHIFT:
-        U64ShiftL( &v1, v2.u._32[I64LO32], &left->u.int64_constant );
+        U64ShiftL( &left->u.int64_constant, &v1, U64Low( v2 ) );
         break;
     case CO_EQ:
-        left = makeBooleanConst( left, 0 == U64Cmp( &v1, &v2 ) );
+        left = makeBooleanConst( left, U64isEq( v1, v2 ) );
         return( left );
     case CO_NE:
-        left = makeBooleanConst( left, 0 != U64Cmp( &v1, &v2 ) );
+        left = makeBooleanConst( left, U64isntEq( v1, v2 ) );
         return( left );
     case CO_GT:
-        left = makeBooleanConst( left, 0 < U64Cmp( &v1, &v2 )) ;
+        left = makeBooleanConst( left, U64Cmp( &v1, &v2 ) > 0 ) ;
         return( left );
     case CO_LE:
-        left = makeBooleanConst( left, 0 >= U64Cmp( &v1, &v2 ) );
+        left = makeBooleanConst( left, U64Cmp( &v1, &v2 ) <= 0 );
         return( left );
     case CO_LT:
-        left = makeBooleanConst( left, 0 > U64Cmp( &v1, &v2 )) ;
+        left = makeBooleanConst( left, U64Cmp( &v1, &v2 ) < 0 ) ;
         return( left );
     case CO_GE:
-        left = makeBooleanConst( left, 0 <= U64Cmp( &v1, &v2 ) );
+        left = makeBooleanConst( left, U64Cmp( &v1, &v2 ) >= 0 );
         return( left );
     case CO_AND_AND:
-        left = makeBooleanConst( left, !Zero64( &v1 ) && !Zero64( &v2 ) );
+        left = makeBooleanConst( left, U64isntZero( v1 ) && U64isntZero( v2 ) );
         return( left );
     case CO_OR_OR:
-        left = makeBooleanConst( left, !Zero64( &v1) || !Zero64( &v2 ) );
+        left = makeBooleanConst( left, U64isntZero( v1) || U64isntZero( v2 ) );
         return( left );
     case CO_COMMA:
         left->u.int64_constant = v2;
@@ -1265,7 +1247,7 @@ PTREE FoldBinary( PTREE expr )
         //
         if( (expr->flags & PTF_COND_END)
          && op1->op == PT_IC
-         && op1->u.ic.opcode == IC_COND_TRUE ) {
+         && op1->u.ic.u.opcode == IC_COND_TRUE ) {
             expr = pruneExpr( expr, &expr->u.subtree[1], op2 );
         }
         return( expr );
@@ -1314,10 +1296,10 @@ PTREE FoldBinary( PTREE expr )
             } else {
                 if( SignedIntType( op2->type ) ) {
                     op2->u.floating_constant
-                        = CFCnvI64F( &cxxh, op2->u.int64_constant.u._32[I64LO32], op2->u.int64_constant.u._32[I64HI32] );
+                        = CFCnvI64F( &cxxh, U64Low( op2->u.int64_constant ), U64High( op2->u.int64_constant ) );
                 } else {
                     op2->u.floating_constant
-                        = CFCnvU64F( &cxxh, op2->u.int64_constant.u._32[I64LO32], op2->u.int64_constant.u._32[I64HI32] );
+                        = CFCnvU64F( &cxxh, U64Low( op2->u.int64_constant ), U64High( op2->u.int64_constant ) );
                 }
             }
             typ2 = PT_FLOATING_CONSTANT;
@@ -1334,10 +1316,10 @@ PTREE FoldBinary( PTREE expr )
             } else {
                 if( SignedIntType( op1->type ) ) {
                     op1->u.floating_constant
-                        = CFCnvI64F( &cxxh, op1->u.int64_constant.u._32[I64LO32], op1->u.int64_constant.u._32[I64HI32] );
+                        = CFCnvI64F( &cxxh, U64Low( op1->u.int64_constant ), U64High( op1->u.int64_constant ) );
                 } else {
                     op1->u.floating_constant
-                        = CFCnvU64F( &cxxh, op1->u.int64_constant.u._32[I64LO32], op1->u.int64_constant.u._32[I64HI32] );
+                        = CFCnvU64F( &cxxh, U64Low( op1->u.int64_constant ), U64High( op1->u.int64_constant ) );
                 }
             }
             typ1 = PT_FLOATING_CONSTANT;

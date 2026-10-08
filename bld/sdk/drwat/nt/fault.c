@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2019 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -64,8 +64,9 @@ msglist ExceptionMsgs[] = {
 
 #ifdef __NT__
 
-static void setProcessHdl( HANDLE hdl ) {
-    ProcessHdl = hdl;
+static void setFaultProcess( HANDLE hdl )
+{
+    FaultProcessHdl = hdl;
 }
 #endif
 
@@ -215,7 +216,7 @@ BOOL CALLBACK ExceptionProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam )
         SetWindowPos( hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE );
         SetWindowPos( hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE );
         centerDialog( hwnd );
-        info = MemAlloc( sizeof( ExceptDlgInfo ) );
+        info = MemAlloc( sizeof( *info ) );
         info->dbinfo = (DEBUG_EVENT *)lparam;
         info->rc = 0;
         info->action = 0;
@@ -241,13 +242,13 @@ BOOL CALLBACK ExceptionProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam )
             tmp = ConfigData.exception_action;
             CheckDlgButton( hwnd, INT_TERMINATE, BST_CHECKED );
             SendMessage( hwnd, WM_COMMAND,
-                        MAKELONG( INT_ACT_AND_LOG, BN_CLICKED ),
+                        MAKEWPARAM( INT_ACT_AND_LOG, BN_CLICKED ),
                         (LPARAM)GetDlgItem( hwnd, INT_ACT_AND_LOG ) );
             ConfigData.exception_action = tmp;
         } else {
             fillExceptionDlg( hwnd, info );
         }
-        setProcessHdl( info->procinfo->prochdl );
+        setFaultProcess( info->procinfo->prochdl );
         break;
     case WM_COMMAND:
         cmd = LOWORD( wparam );
@@ -269,18 +270,18 @@ BOOL CALLBACK ExceptionProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam )
 //                  CloseHandle( hp );
                     info->rc = DBG_CONTINUE;
                     info->action = INT_TERMINATE;
-                    SendMessage( hwnd, WM_CLOSE, 0, 0L );
+                    SendMessage( hwnd, WM_CLOSE, 0, 0 );
                 }
             } else if( IsDlgButtonChecked( hwnd, INT_CHAIN_TO_NEXT ) ) {
                 ConfigData.exception_action = INT_CHAIN_TO_NEXT;
                 info->rc = DBG_EXCEPTION_NOT_HANDLED;
                 info->action = INT_CHAIN_TO_NEXT;
-                SendMessage( hwnd, WM_CLOSE, 0, 0L );
+                SendMessage( hwnd, WM_CLOSE, 0, 0 );
             } else if( IsDlgButtonChecked( hwnd, INT_RESTART ) ) {
                 ConfigData.exception_action = INT_RESTART;
                 info->rc = DBG_CONTINUE;
                 info->action = INT_RESTART;
-                SendMessage( hwnd, WM_CLOSE, 0, 0L );
+                SendMessage( hwnd, WM_CLOSE, 0, 0 );
             }
             break;
         case INT_REGISTERS:
@@ -300,7 +301,7 @@ BOOL CALLBACK ExceptionProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam )
         break;
     case WM_CLOSE:
         if( info->rc == 0 ) {
-            SendMessage( hwnd, WM_COMMAND, INT_ACT, 0L );
+            SendMessage( hwnd, WM_COMMAND, INT_ACT, 0 );
         } else {
             if( info->got_dbginfo ) {
                 UnloadDbgInfo( info->module );

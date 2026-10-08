@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -38,6 +38,7 @@
 #include <string.h>
 #include <limits.h>
 #include <time.h>
+#include <setjmp.h>
 #include "watcom.h"
 #include "bool.h"
 #include "asmconst.h"
@@ -62,9 +63,7 @@
 #define CMPLITBEG(sb,c) strncmp( sb, c, sizeof( c ) - 1 )
 #define CMPLITEND(se,c) strcmp( se - ( sizeof( c ) - 1 ), c )
 
-#define CPYLIT(s,c)     memcpy( s, c, sizeof( c ) )
-#define CATLIT(s,c)     (char *)memcpy( s, c, sizeof( c ) - 1 ) + sizeof( c ) - 1
-#define CATSTR(s,c,l)   (char *)memcpy( s, c, l ) + l
+#define CATSTR(s,c,l)   strncpy( s, c, l ) + l
 
 #define BIT_012                 0x07
 #define BIT_345                 0x38
@@ -122,21 +121,21 @@ enum {
 #define FILE_TYPES      4
 
 typedef struct {
-    FILE        *file[FILE_TYPES];      // ASM, ERR and OBJ
+    FILE        *fp[FILE_TYPES];        // ASM, ERR and OBJ
     char        *fname[FILE_TYPES];
 } File_Info;    // Information about the source and object files
 
 extern File_Info        AsmFiles;   // files information
 extern char             *ModuleName;
 
-#define ASM_EXT "asm"
-#define ERR_EXT "err"
-#define LST_EXT "lst"
+#define FEXT_ASM    "asm"
+#define FEXT_ERR    "err"
+#define FEXT_LST    "lst"
 
 #ifdef __UNIX__
-#define OBJ_EXT "o"
+#define FEXT_OBJ    "o"
 #else
-#define OBJ_EXT "obj"
+#define FEXT_OBJ    "obj"
 #endif
 
 typedef enum smode {
@@ -161,7 +160,7 @@ typedef struct global_options {
     int         error_count;
     int         warning_count;
     int         error_limit;
-    char        warning_level;
+    int         warning_level;
     bool        warning_error;
 
     char        *code_class;
@@ -199,12 +198,14 @@ typedef struct global_vars{
     uint    for_counter;
 } global_vars;
 
-extern global_vars Globals;
+extern global_vars  Globals;
+extern jmp_buf      errjmp;
 
-extern char *CreateFileName( const char *template, const char *ext, bool forceext );
+extern char     *CreateFileName( const char *template, const char *ext, bool forceext );
+extern void     CloseAsmFile( int type );
 
 #endif
 
-extern const asm_ins    ASMI86FAR *get_instruction( char *string );
+extern const asm_ins    ASMI86FAR *get_instruction( const char *string );
 
 #endif

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -46,9 +46,7 @@
 #include "watcom.h"
 #include "pmake.h"
 #include "memutils.h"
-#ifdef TRMEM
 #include "trmem.h"
-#endif
 
 #include "clibint.h"
 #include "clibext.h"
@@ -123,9 +121,7 @@ static int RunCommand( char *cmd )
             skip_sp = false;
         }
     }
-    argv = (const char **)MAlloc( i * sizeof( char * ) );
-    if( argv == NULL )
-        return( 1 );    /* error no memory */
+    argv = (const char **)MemAllocSafe( i * sizeof( char * ) );
     skip_sp = true;
     i = 0;
     for( p = cmd; *p != '\0'; ++p ) {
@@ -141,7 +137,7 @@ static int RunCommand( char *cmd )
     }
     argv[i] = NULL;
     rc = (int)spawnvp( P_WAIT, cmd, argv );
-    MFree( (void *)argv );
+    MemFree( (void *)argv );
     return( rc );
 }
 
@@ -235,6 +231,63 @@ static void PrintHelp( void )
     }
 }
 
+#ifdef TRMEM
+static _trmem_hdl   TrHdl = _TRMEM_HDL_NONE;
+
+static void     TRPrintLine( void *parm, const char *buff, size_t len )
+{
+    /* unused parameters */ (void)parm; (void)len;
+
+    printf( "%s\n", buff );
+}
+#endif
+
+void MemOpen( void )
+/******************/
+{
+#ifdef TRMEM
+    TrHdl = _trmem_open( malloc, free, _TRMEM_NO_REALLOC, _TRMEM_NO_STRDUP,
+            NULL, TRPrintLine, _TRMEM_DEF );
+#endif
+}
+
+void MemClose( void )
+/*******************/
+{
+#ifdef TRMEM
+    _trmem_prt_list( TrHdl );
+    _trmem_close( TrHdl );
+#endif
+}
+
+TRMEMAPI( MemAllocSafe )
+void *MemAllocSafe( size_t size )
+{
+    void        *p;
+
+#ifdef TRMEM
+    p = _trmem_alloc( size, _TRMEM_WHO( 1 ), TrHdl );
+#else
+    p = malloc( size );
+#endif
+    if( p == NULL ) {
+        printf( "Out of memory!\n" );
+        MemClose();
+        exit( EXIT_FAILURE );
+    }
+    return( p );
+}
+
+TRMEMAPI( MemFree )
+void MemFree( void *p )
+{
+#ifdef TRMEM
+    _trmem_free( p, _TRMEM_WHO( 2 ), TrHdl );
+#else
+    free( p );
+#endif
+}
+
 #if !defined( __WATCOMC__ )
 int main( int argc, char **argv )
 {
@@ -253,9 +306,9 @@ int main( void )
 #endif
 
     rc = EXIT_FAILURE;
-    MOpen();
+    MemOpen();
     cmd_len = _bgetcmd( NULL, 0 ) + 1;
-    cmd_line = MAlloc( cmd_len );
+    cmd_line = MemAllocSafe( cmd_len );
     _bgetcmd( cmd_line, cmd_len );
     if( PMakeBuild( &pmake, cmd_line ) != NULL ) {
         if( pmake.want_help ) {
@@ -272,62 +325,7 @@ int main( void )
         }
         PMakeCleanup( &pmake );
     }
-    MFree( cmd_line );
-    MClose();
+    MemFree( cmd_line );
+    MemClose();
     return( rc );
-}
-
-#ifdef TRMEM
-static _trmem_hdl   TRMemHandle;
-
-static void     TRPrintLine( void *parm, const char *buff, size_t len )
-{
-    /* unused parameters */ (void)parm; (void)len;
-
-    printf( "%s\n", buff );
-}
-#endif
-
-void MOpen( void )
-/****************/
-{
-#ifdef TRMEM
-    TRMemHandle = _trmem_open( malloc, free, NULL, NULL, NULL, TRPrintLine,
-            _TRMEM_ALLOC_SIZE_0 | _TRMEM_REALLOC_SIZE_0 | _TRMEM_OUT_OF_MEMORY | _TRMEM_CLOSE_CHECK_FREE );
-#endif
-}
-
-void MClose( void )
-/*****************/
-{
-#ifdef TRMEM
-    _trmem_prt_list( TRMemHandle );
-    _trmem_close( TRMemHandle );
-#endif
-}
-
-void *MAlloc( size_t size )
-{
-    void        *p;
-
-#ifdef TRMEM
-    p = _trmem_alloc( size, _trmem_guess_who(), TRMemHandle );
-#else
-    p = malloc( size );
-#endif
-    if( p == NULL ) {
-        printf( "Out of memory!\n" );
-        MClose();
-        exit( EXIT_FAILURE );
-    }
-    return( p );
-}
-
-void MFree( void *p )
-{
-#ifdef TRMEM
-    _trmem_free( p, _trmem_guess_who(), TRMemHandle );
-#else
-    free( p );
-#endif
 }

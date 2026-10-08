@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -66,8 +66,8 @@ STATIC void freePathRing( PATHRING pathring )
     do {
         cur = walk;
         walk = walk->next;
-        FreeSafe( cur->name );
-        FreeSafe( cur );
+        MemFree( cur->name );
+        MemFree( cur );
     } while( walk != pathring );
 }
 
@@ -81,16 +81,16 @@ STATIC bool freeSuffix( void *node, void *ptr )
 
     /* unused parameters */ (void)ptr;
 
-    FreeSafe( suffix->node.name );
+    MemFree( suffix->node.name );
     freePathRing( suffix->pathring );
 
     for( creator = suffix->creator; creator != NULL; creator = creator_next ) {
         creator_next = creator->next;
         FreeSList( creator->slist );
-        FreeSafe( creator );
+        MemFree( creator );
     }
 
-    FreeSafe( suffix );
+    MemFree( suffix );
 
     return( false );
 }
@@ -110,7 +110,7 @@ void ClearSuffixes( void )
 
 
 #ifdef __WATCOMC__
-#pragma on (check_stack);
+#pragma on( check_stack );
 #endif
 STATIC SUFFIX *findSuffixNode( const char *name, const char **sufdest )
 /**********************************************************************
@@ -148,7 +148,7 @@ STATIC SUFFIX *findSuffixNode( const char *name, const char **sufdest )
     return( (SUFFIX *)FindHashNode( sufTab, FixName( sufname ), FILENAMESENSITIVE ) );
 }
 #ifdef __WATCOMC__
-#pragma off(check_stack);
+#pragma pop( check_stack );
 #endif
 
 
@@ -194,8 +194,8 @@ STATIC void AddFrontSuffix( char const *sufname )
         && sufname[0] == '.'
         && !SufExists( sufname ) );
 
-    new = CallocSafe( sizeof( *new ) );
-    new->node.name = FixName( StrDupSafe( sufname + 1 ) );
+    new = MemCAllocSafe( sizeof( *new ) );
+    new->node.name = FixName( MemStrdupSafe( sufname + 1 ) );
     new->id = prevId;
     --prevId;
 
@@ -247,8 +247,8 @@ void AddSuffix( const char *sufname )
         && SufExists( sufname )
         && Glob.compat_nmake ) );
 
-    new = CallocSafe( sizeof( *new ) );
-    new->node.name = FixName( StrDupSafe( sufname + 1 ) ); /* skip leading dot */
+    new = MemCAllocSafe( sizeof( *new ) );
+    new->node.name = FixName( MemStrdupSafe( sufname + 1 ) ); /* skip leading dot */
     new->id = nextId;
     ++nextId;
 
@@ -283,11 +283,11 @@ STATIC void addPathToPathRing( PATHRING *pathring, const char *path )
         if( len > 0 ) {
             char    *p1;
 
-            p1 = MallocSafe( len + 1 );                     /* make copy of sub-path */
+            p1 = MemAllocSafe( len + 1 );                     /* make copy of sub-path */
             memcpy( p1, path, len );
             p1[len] = NULLCHAR;
             FixName( p1 );
-            newpath = MallocSafe( sizeof( *newpath ) );     /* get a new node */
+            newpath = MemAllocSafe( sizeof( *newpath ) );     /* get a new node */
             newpath->name = p1;
             *tail = newpath;           /* link into ring - but don't close ring yet */
             tail = &newpath->next;
@@ -394,27 +394,27 @@ char *AddCreator( const char *sufsuf )
     cur_targ_path = targ_path;
     if( *targ_path != NULLCHAR ) {
         _makepath( buf, NULL, targ_path, NULL, NULL );
-        cur_targ_path = StrDupSafe( FixName( buf ) );
+        cur_targ_path = MemStrdupSafe( FixName( buf ) );
     }
     cur_dep_path = dep_path;
     if( *dep_path != NULLCHAR ) {
         _makepath( buf, NULL, dep_path, NULL, NULL );
-        cur_dep_path = StrDupSafe( FixName( buf ) );
+        cur_dep_path = MemStrdupSafe( FixName( buf ) );
     }
 
     pslist = NULL;
     if( *cur != NULL
       && src->id == (*cur)->suffix->id ) {
         for( slist = (*cur)->slist; ; slist = slist->next ) {
-            if( stricmp( slist->targ_path, cur_targ_path ) == 0
-              && stricmp( slist->dep_path, cur_dep_path ) == 0 ) {
+            if( FNameEq( slist->targ_path, cur_targ_path )
+              && FNameEq( slist->dep_path, cur_dep_path ) ) {
                 if( *cur_targ_path != NULLCHAR ) {
-                    FreeSafe( cur_targ_path );
+                    MemFree( cur_targ_path );
                 }
                 if( *cur_dep_path != NULLCHAR ) {
-                    FreeSafe( cur_dep_path );
+                    MemFree( cur_dep_path );
                 }
-                return( StrDupSafe( slist->cretarg->node.name ) );
+                return( MemStrdupSafe( slist->cretarg->node.name ) );
             }
             if( slist->next == NULL ) {
                 pslist = &slist->next;
@@ -423,7 +423,7 @@ char *AddCreator( const char *sufsuf )
         }
     }
     if( pslist == NULL ) {
-        new = (CREATOR *)CallocSafe( sizeof( CREATOR ) );
+        new = MemCAllocSafe( sizeof( *new ) );
         new->suffix = src;
         new->slist = NULL;
         pslist = &new->slist;
@@ -437,7 +437,7 @@ char *AddCreator( const char *sufsuf )
     slist = NewSList();
     slist->targ_path = cur_targ_path;
     slist->dep_path = cur_dep_path;
-    slist->cretarg = NewTarget( fullsufsuf );
+    slist->cretarg = NewTarget( FixName( MemStrdupSafe( fullsufsuf ) ) );
     slist->cretarg->special = true;
     slist->cretarg->sufsuf  = true;
     slist->cretarg->depend = NewDepend();

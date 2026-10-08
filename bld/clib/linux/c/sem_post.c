@@ -30,6 +30,7 @@
 
 
 #include "variety.h"
+#include "seterrno.h"
 #include <semaphore.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -37,15 +38,13 @@
 #include <limits.h>
 #include "futex.h"
 #include "atomic.h"
-#include "rterrno.h"
-#include "seterrno.h"
 #include "thread.h"
 
 
 _WCRTLINK int sem_post( sem_t *sem )
 {
     if( sem == NULL ) {
-        return( __set_EINVAL() );
+        return( lib_set_EINVAL() );
     }
 
     while(sem->value < 0) __atomic_increment( &sem->value );

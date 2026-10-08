@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -30,7 +31,7 @@
 
 
 #define SSL2BOOL(x)     (x != 0)
-#define SSL2INT(x)      ((signed short)(x))
+#define SSL2INT(x)      ((int)(signed short)(x))
 
 typedef enum {
     TERM_NORMAL,
@@ -40,11 +41,9 @@ typedef enum {
     TERM_KILL
 } ssl_error_class;
 
-typedef unsigned short  ssl_value;
-
 extern bool         SemAllowClosestLine( bool ok );
-extern ssl_value    SSLSemantic( ssl_value action, ssl_value parm );
-extern int          SSLError( ssl_error_class class, ssl_value error );
+extern unsigned     SSLSemantic( unsigned action, unsigned parm );
+extern int          SSLError( ssl_error_class class, unsigned error );
 extern void         SSLOutToken( tokens token );
 extern tokens       SSLNextToken( void );
 extern tokens       SSLCurrToken( void );

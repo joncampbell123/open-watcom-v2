@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -49,21 +49,12 @@ static RcStatus readObjectTable( ExeFileInfo *src )
 
     pehdr = src->u.PEInfo.WinHead;
     objects_size = pehdr->fheader.num_objects * sizeof( pe_object );
-    src->u.PEInfo.Objects = RESALLOC( objects_size );
+    src->u.PEInfo.Objects = MemAllocSafe( objects_size );
     ret = SeekRead( src->fp, src->WinHeadOffset + PE_SIZE( *pehdr ), src->u.PEInfo.Objects, objects_size );
-    switch( ret ) {
-    case RS_OK:
-        break;
-    case RS_READ_ERROR:
-        RcError( ERR_READING_EXE, src->name, strerror( errno ) );
-        break;
-    case RS_READ_INCMPLT:
-        RcError( ERR_UNEXPECTED_EOF, src->name );
-        break;
-    default:
-        RcError( ERR_INTERNAL, INTERR_UNKNOWN_RCSTATUS );
-        break;
+    if( ret == RS_READ_ERROR ) {
+        ret = RS_READ_ERROR_EXE;
     }
+    RcIOError( ret, src->name, "", errno );
     CheckDebugOffset( src );
     return( ret );
 }
@@ -147,7 +138,7 @@ static int copyObjectTable( ExeFileInfo *src, ExeFileInfo *dst )
         return( -1 );
     }
 
-    dst->u.PEInfo.Objects = RESALLOC( dst_obj_size );
+    dst->u.PEInfo.Objects = MemAllocSafe( dst_obj_size );
 
     for( obj_num = 0; obj_num < dst_num_objects; obj_num++ ) {
         dst->u.PEInfo.Objects[obj_num] = src->u.PEInfo.Objects[obj_num];
@@ -203,18 +194,11 @@ bool CopyExeObjects( ExeFileInfo *src, ExeFileInfo *dst )
     dst_obj = dst->u.PEInfo.Objects;
     for( ; num_objs > 0; num_objs--, src_obj++, dst_obj++ ) {
         ret = copyOneObject( src->fp, src_obj, dst->fp, dst_obj );
-        switch( ret ) {
-        case RS_WRITE_ERROR:
-            RcError( ERR_WRITTING_FILE, dst->name, strerror( errno ) );
+        if( ret == RS_READ_ERROR ) {
+            ret = RS_READ_ERROR_EXE;
+        }
+        if( RcIOError( ret, src->name, dst->name, errno ) ) {
             return( true );
-        case RS_READ_ERROR:
-            RcError( ERR_READING_EXE, src->name, strerror( errno ) );
-            return( true );
-        case RS_READ_INCMPLT:
-            RcError( ERR_UNEXPECTED_EOF, src->name );
-            return( true );
-        default:
-            break;
         }
     }
     CheckDebugOffset( src );

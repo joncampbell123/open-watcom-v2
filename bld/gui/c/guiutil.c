@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -56,7 +56,7 @@ char *GUIStripTrailingBlanks( const char *label, bool *ok )
     }
     if( length == 0 )
         return( NULL );
-    new_str = (char *)GUIMemAlloc( length + 1 );
+    new_str = MemAlloc( length + 1 );
     if( new_str == NULL ) {
         if( ok != NULL )
             *ok = false;
@@ -65,67 +65,6 @@ char *GUIStripTrailingBlanks( const char *label, bool *ok )
     memcpy( new_str, label, length );
     new_str[length] = '\0';
     return( new_str );
-}
-
-/*
- * GUIStrDupLenOK -- duplicate the string text up to length characters
- */
-
-char *GUIStrDupLenOK( const char *text, size_t len, bool *ok )
-{
-    size_t  new_len;
-    char    *new_str;
-
-    if( ok != NULL )
-        *ok = true;
-    if( text == NULL )
-        return( NULL );
-    new_len = strlen( text );
-    if( new_len > len ) {
-        new_len = len;
-    }
-    new_str = (char *)GUIMemAlloc( new_len + 1 );
-    if( new_str == NULL ) {
-        if( ok != NULL )
-            *ok = false;
-        return( NULL );
-    }
-    memcpy( new_str, text, new_len );
-    new_str[new_len] = '\0';
-    return( new_str );
-}
-
-
-char *GUIStrDupOK( const char *text, bool *ok )
-{
-    void    *new_str;
-
-    if( ok != NULL )
-        *ok = true;
-    if( text != NULL ) {
-        new_str = GUIMemAlloc( strlen( text ) + 1 );
-        if( new_str != NULL ) {
-            return( strcpy( new_str, text ) );
-        }
-        if( ok != NULL ) {
-            *ok = false;
-        }
-    }
-    return( NULL );
-}
-
-
-char *GUIStrDup( const char *text )
-{
-    void    *new_str;
-
-    if( text != NULL ) {
-        new_str = GUIMemAlloc( strlen( text ) + 1 );
-        if( new_str != NULL ) {
-            return( strcpy( new_str, text ) );
-        }
-    }
-    return( NULL );
 }
 
 static char     **GUI_argv      = NULL;

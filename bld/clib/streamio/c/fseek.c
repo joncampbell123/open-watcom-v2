@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2017-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2017-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -31,6 +31,7 @@
 
 
 #include "variety.h"
+#include "seterrno.h"
 #include <stdio.h>
 #include <unistd.h>
 #if defined( __NT__ )
@@ -41,17 +42,13 @@
     #include "nw_lib.h"
 #endif
 #include "rtdata.h"
-#include "rterrno.h"
 #include "fileacc.h"
 #include "_flush.h"
 #include "thread.h"
+#include "filei64.h"
 
 
-#ifdef __INT64__
-static int __update_buffer( long long diff, FILE *fp )
-#else
-static int __update_buffer( long diff, FILE *fp )
-#endif
+static int _WCNEAR __update_buffer( __64_NAME(long,long long) diff, FILE *fp )
 {
     /*
       diff is relative to fp->_ptr
@@ -72,7 +69,7 @@ static int __update_buffer( long diff, FILE *fp )
  * This used to be in __update_buffer(), but we don't want to do this until
  * AFTER we've made certain that lseek() will be a successful one.
  */
-static void __reset_buffer( FILE *fp )
+static void _WCNEAR __reset_buffer( FILE *fp )
 {
     fp->_flag &= ~(_EOF);
     fp->_ptr = _FP_BASE( fp );
@@ -80,11 +77,7 @@ static void __reset_buffer( FILE *fp )
 }
 
 
-#ifdef __INT64__
-_WCRTLINK int _fseeki64( FILE *fp, long long offset, int origin )
-#else
-_WCRTLINK int fseek( FILE *fp, long offset, int origin )
-#endif
+_WCRTLINK int __64_NAME(fseek,_fseeki64)( FILE *fp, __64_NAME(long,long long) offset, int origin )
 {
     _ValidFile( fp, -1 );
     _AccessFile( fp );
@@ -106,7 +99,7 @@ _WCRTLINK int fseek( FILE *fp, long offset, int origin )
                 // assume __flush set the errno value
                 // if erroneous input, override errno value
                 if( origin == SEEK_SET && offset < 0 ) {
-                    _RWD_errno = EINVAL;
+                    lib_set_errno( EINVAL );
                 }
                 _ReleaseFile( fp );
                 return( -1 );
@@ -119,11 +112,7 @@ _WCRTLINK int fseek( FILE *fp, long offset, int origin )
             fp->_cnt = 0;
         }
         fp->_flag &= ~(_EOF|_UNGET);
-#ifdef __INT64__
-        if( _lseeki64( fileno( fp ), offset, origin ) == -1 ) {
-#else
-        if( lseek( fileno( fp ), offset, origin ) == -1 ) {
-#endif
+        if( __64_NAME(lseek,_lseeki64)( fileno( fp ), offset, origin ) == -1 ) {
             _ReleaseFile( fp );
             return( -1 );
         }
@@ -139,11 +128,7 @@ _WCRTLINK int fseek( FILE *fp, long offset, int origin )
 
             if( __update_buffer( offset, fp ) ) {
                 offset -= ptr_delta;
-#ifdef __INT64__
-                if( _lseeki64( fileno( fp ), offset, origin ) == -1 ) {
-#else
-                if( lseek( fileno( fp ), offset, origin ) == -1 ) {
-#endif
+                if( __64_NAME(lseek,_lseeki64)( fileno( fp ), offset, origin ) == -1 ) {
                     _ReleaseFile( fp );
                     return( -1 );
                 }
@@ -152,19 +137,10 @@ _WCRTLINK int fseek( FILE *fp, long offset, int origin )
         }   break;
         case SEEK_SET:
         {
-#ifdef __INT64__
-            long long   file_ptr = _telli64( fileno( fp ) );
-#else
-            long        file_ptr = _tell( fileno( fp ) );
-#endif
-
+            __64_NAME(long,long long)   file_ptr = __64_NAME(_tell,_telli64)( fileno( fp ) );
             file_ptr -= fp->_cnt;
             if( __update_buffer( offset - file_ptr, fp ) ) {
-#ifdef __INT64__
-                if( _lseeki64( fileno( fp ), offset, origin ) == -1 ) {
-#else
-                if( lseek( fileno( fp ), offset, origin ) == -1 ) {
-#endif
+                if( __64_NAME(lseek,_lseeki64)( fileno( fp ), offset, origin ) == -1 ) {
                     _ReleaseFile( fp );
                     return( -1 );
                 }
@@ -173,17 +149,13 @@ _WCRTLINK int fseek( FILE *fp, long offset, int origin )
         }   break;
         case SEEK_END:
             __reset_buffer( fp );
-#ifdef __INT64__
-            if( _lseeki64( fileno( fp ), offset, origin ) == -1 ) {
-#else
-            if( lseek( fileno( fp ), offset, origin ) == -1 ) {
-#endif
+            if( __64_NAME(lseek,_lseeki64)( fileno( fp ), offset, origin ) == -1 ) {
                 _ReleaseFile( fp );
                 return( -1 );
             }
             break;
         default:
-            _RWD_errno = EINVAL;
+            lib_set_errno( EINVAL );
             _ReleaseFile( fp );
             return( -1 );
         }

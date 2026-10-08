@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -656,16 +657,16 @@ static void free_opt_fonts( void )
         old = opt_fonts;
 
         if( old->name != NULL) {
-            mem_free( old->name );
+            MemFree( old->name );
             old->name = NULL;
         }
 
         if( old->style != NULL) {
-            mem_free( old->style );
+            MemFree( old->style );
             old->style = NULL;
         }
         opt_fonts = opt_fonts->nxt;
-        mem_free( old );
+        MemFree( old );
     }
 
     return;
@@ -684,25 +685,25 @@ static void free_opt_fonts( void )
  *      The appropriate character, which may be the same as in_char.
  */
 
-char cop_in_trans( char in_char, font_number font )
+int cop_in_trans( int in_char, font_number font )
 {
     intrans_block   *block   = NULL;
-    char            retval;
+    int             retval;
 
     CHECK_FONT( font );
 
-    retval = ti_table[(unsigned char)in_char];
+    retval = ti_table[in_char];
     if( retval == in_char ) {
         block = wgml_fonts[font].bin_font->intrans;
         if( block != NULL ) {
-            retval = block->table[(unsigned char)in_char];
+            retval = block->table[in_char];
         }
     }
 
     if( retval == in_char ) {
         block = bin_device->intrans;
         if( block != NULL ) {
-            retval = block->table[(unsigned char)in_char];
+            retval = block->table[in_char];
         }
     }
 
@@ -742,7 +743,7 @@ void cop_setup( void )
 
     bin_fonts = NULL;
 
-    cur_token = mem_alloc( sizeof( record_buffer ) );
+    cur_token = MemAllocSafe( sizeof( *cur_token ) );
     init_record_buffer( cur_token, 10 );
 
     for( i = 0; i < 0x100; i++) {
@@ -884,7 +885,7 @@ void cop_setup( void )
 
     /* Initialize wgml_fonts, which is an array */
 
-    wgml_fonts = mem_alloc( wgml_font_cnt * sizeof( wgml_font ) );
+    wgml_fonts = MemAllocSafe( sizeof( *wgml_fonts ) * wgml_font_cnt );
     for( i = 0; i < wgml_font_cnt; i++ ) {
         wgml_fonts[i].bin_font = NULL;
         wgml_fonts[i].font_switch = NULL;
@@ -1206,7 +1207,7 @@ void cop_setup( void )
     first_tab = (6 * tab_col) - 1;
     inter_tab = 5 * tab_col;
 
-    def_tabs.tabs = mem_alloc( TAB_COUNT * sizeof( tab_stop ) );
+    def_tabs.tabs = MemAllocSafe( sizeof( *def_tabs.tabs ) * TAB_COUNT );
     def_tabs.length = TAB_COUNT;
     def_tabs.tabs[0].column = first_tab;
     def_tabs.tabs[0].fill_char = ' ';
@@ -1220,7 +1221,7 @@ void cop_setup( void )
 
     /* Initialize user_tabs. */
 
-    user_tabs.tabs = mem_alloc( TAB_COUNT * sizeof( tab_stop ) );
+    user_tabs.tabs = MemAllocSafe( sizeof( *user_tabs.tabs ) * TAB_COUNT );
     user_tabs.length = TAB_COUNT;
     user_tabs.current = 0;
 
@@ -1243,46 +1244,46 @@ void cop_teardown( void )
     cop_font    *   old;
 
     if( bin_device != NULL ) {
-        mem_free( bin_device );
+        MemFree( bin_device );
         bin_device = NULL;
     }
 
     if( bin_driver  != NULL ) {
-        mem_free( bin_driver );
+        MemFree( bin_driver );
         bin_driver = NULL;
     }
 
     while( bin_fonts != NULL) {
         old = bin_fonts;
         bin_fonts = bin_fonts->next_font;
-        mem_free( old );
+        MemFree( old );
     }
 
     if( wgml_fonts != NULL) {
-        mem_free( wgml_fonts );
+        MemFree( wgml_fonts );
         wgml_fonts = NULL;
     }
 
     if( cur_token != NULL ) {
         if( cur_token->text != NULL ) {
-            mem_free( cur_token->text);
+            MemFree( cur_token->text);
             cur_token->text = NULL;
         }
-        mem_free( cur_token );
+        MemFree( cur_token );
         cur_token = NULL;
     }
 
     /* Free def_tabs.tabs. */
 
     if( def_tabs.tabs != NULL ) {
-        mem_free( def_tabs.tabs );
+        MemFree( def_tabs.tabs );
         def_tabs.tabs = NULL;
     }
 
     /* Free user_tabs.tabs. */
 
     if( user_tabs.tabs != NULL ) {
-        mem_free( user_tabs.tabs );
+        MemFree( user_tabs.tabs );
         user_tabs.tabs = NULL;
     }
 
@@ -1671,7 +1672,7 @@ void init_record_buffer( record_buffer *recb, unsigned size )
 {
     recb->current = 0;
     recb->size = size;
-    recb->text = mem_alloc( size + 1 );
+    recb->text = MemAllocSafe( size + 1 );
 }
 
 void resize_record_buffer( record_buffer *recb, unsigned size )
@@ -1679,16 +1680,14 @@ void resize_record_buffer( record_buffer *recb, unsigned size )
     if( size > recb->size ) {
         while( recb->size < size )
             recb->size *= 2;
-        recb->text = mem_realloc( recb->text, recb->size + 1 );
+        recb->text = MemReallocSafe( recb->text, recb->size + 1 );
     }
     recb->current = size;
 }
 
 void init_record_buffer_fill( record_buffer *recb, unsigned size, unsigned char byte )
 {
-    recb->current = 0;
-    recb->size = size;
-    recb->text = mem_alloc( size + 1 );
+    init_record_buffer( recb, size );
     memset( recb->text, byte, size );
     recb->text[size] = '\0';
 }
@@ -1696,7 +1695,7 @@ void init_record_buffer_fill( record_buffer *recb, unsigned size, unsigned char 
 void resize_record_buffer_fill( record_buffer *recb, unsigned size, unsigned char byte )
 {
     if( size > recb->size ) {
-        recb->text = mem_realloc( recb->text, size + 1 );
+        recb->text = MemReallocSafe( recb->text, size + 1 );
         memset( recb->text, byte, size );
         recb->text[size] = '\0';
     }

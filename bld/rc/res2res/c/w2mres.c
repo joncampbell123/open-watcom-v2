@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -38,28 +38,28 @@
 #include "trmemcvr.h"
 
 
-static ResNameOrOrdinal *ConvertIDToNameOrOrdinal( WResID * inid )
-/****************************************************************/
+static ResNameOrOrdinal *ConvertIDToNameOrOrdinal( WResID *id )
+/*************************************************************/
 {
-    ResNameOrOrdinal *  newname;
+    ResNameOrOrdinal    *name;
 
-    if (inid->IsName) {
+    if (id->IsName) {
         /* inculdes space for the '\0' since WResID's don't have one */
-        newname = TRMemAlloc( sizeof(ResNameOrOrdinal) +
-                    inid->ID.Name.NumChars );
-        if (newname != NULL) {
-            memcpy( newname->name, inid->ID.Name.Name, inid->ID.Name.NumChars );
-            newname->name[ inid->ID.Name.NumChars ] = '\0';
+        name = TRMemAlloc( sizeof(ResNameOrOrdinal) +
+                    id->ID.Name.NumChars );
+        if (name != NULL) {
+            memcpy( name->name, id->ID.Name.Name, id->ID.Name.NumChars );
+            name->name[id->ID.Name.NumChars] = '\0';
         }
     } else {
-        newname = TRMemAlloc( sizeof(ResNameOrOrdinal) );
-        if (newname != NULL) {
-            newname->ord.fFlag = 0xff;
-            newname->ord.wOrdinalID = inid->ID.Num;
+        name = TRMemAlloc( sizeof(ResNameOrOrdinal) );
+        if (name != NULL) {
+            name->ord.fFlag = 0xff;
+            name->ord.wOrdinalID = id->ID.Num;
         }
     }
 
-    return( newname );
+    return( name );
 }
 
 static bool ConvertOneWResource( FILE *in_fp, FILE *out_fp, WResDirWindow wind )
@@ -68,26 +68,28 @@ static bool ConvertOneWResource( FILE *in_fp, FILE *out_fp, WResDirWindow wind )
     WResTypeInfo        *typeinfo;
     WResResInfo         *resinfo;
     WResLangInfo        *langinfo;
-    MResResourceHeader  outhead;
+    MResResourceHeader  msheader;
     bool                error;
+    bool                iswin32;
 
+    iswin32 = false;
     typeinfo = WResGetTypeInfo( wind );
     resinfo = WResGetResInfo( wind );
     langinfo = WResGetLangInfo( wind );
-    outhead.Type = ConvertIDToNameOrOrdinal( &(typeinfo->TypeName) );
-    outhead.Name = ConvertIDToNameOrOrdinal( &(resinfo->ResName) );
-    outhead.MemoryFlags = langinfo->MemoryFlags;
-    outhead.Size = langinfo->Length;
+    msheader.Type = ConvertIDToNameOrOrdinal( &(typeinfo->TypeName) );
+    msheader.Name = ConvertIDToNameOrOrdinal( &(resinfo->ResName) );
+    msheader.res_flags = langinfo->res_flags;
+    msheader.Size = langinfo->Length;
 
     //FIXME! The last argument should be true for Win32 resources
-    error = MResWriteResourceHeader( &outhead, out_fp, false );
+    error = MResWriteResourceHeader( &msheader, iswin32, out_fp );
     if( !error ) {
         RESSEEK( in_fp, langinfo->Offset, SEEK_SET );
-        error = BinaryCopy( in_fp, out_fp, outhead.Size );
+        error = BinaryCopy( in_fp, out_fp, msheader.Size );
     }
 
-    TRMemFree( outhead.Type );
-    TRMemFree( outhead.Name );
+    TRMemFree( msheader.Type );
+    TRMemFree( msheader.Name );
 
     return( error );
 } /* ConvertOneWResource */
@@ -123,16 +125,10 @@ bool ConvertWResToMRes( FILE *in_fp, FILE *out_fp )
     WResDir             indir;
     bool                error;
 
-    indir = WResInitDir();
-    if( WResDirInitError( indir ) ) {
+    if( WResReadDir( in_fp, &indir, NULL ) )
         return( true );
-    }
 
-    error = WResReadDir( in_fp, indir, NULL );
-
-    if( !error ) {
-        error = ConvertWResources( in_fp, indir, out_fp );
-    }
+    error = ConvertWResources( in_fp, indir, out_fp );
 
     WResFreeDir( indir );
 

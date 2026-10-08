@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2025      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2025-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,8 +35,8 @@
 
 #define INCREMENT       10
 
-void InitArray( void **array, array_idx esize, array_info *info )
-/***************************************************************/
+void InitArray( void **array, array_idx elem_size, array_info *info )
+/*******************************************************************/
 {
     if( info->increment == 0 ) {
         info->increment = INCREMENT;
@@ -44,20 +44,18 @@ void InitArray( void **array, array_idx esize, array_info *info )
     if( info->alloc == 0 ) {
         info->alloc = info->increment;
     }
-    *array = GUIMemAlloc( esize * info->alloc );
-    info->esize = esize;
+    *array = MemAllocSafe( elem_size * info->alloc );
+    info->elem_size = elem_size;
     info->array = array;
 }
 
 bool BumpArray( array_info *info )
 /********************************/
 {
-    if( ++info->num >= info->alloc ) {
+    ++info->num;
+    if( info->alloc <= info->num ) {
         info->alloc = info->num + info->increment;
-        *(info->array) = GUIMemRealloc( *(info->array), info->esize * info->alloc );
-        if( *(info->array) == NULL ) {
-            return( false );
-        }
+        *(info->array) = MemReallocSafe( *(info->array), info->elem_size * info->alloc );
     }
     return( true );
 }
@@ -65,12 +63,9 @@ bool BumpArray( array_info *info )
 bool BumpDownArray( array_info *info )
 /************************************/
 {
-    if( info->alloc - info->num >= info->increment ) {
+    if( info->alloc >= info->increment + info->num ) {
         info->alloc -= info->increment;
-        *(info->array) = GUIMemRealloc( *(info->array), info->esize * info->alloc );
-        if( *(info->array) == NULL ) {
-            return( false );
-        }
+        *(info->array) = MemReallocSafe( *(info->array), info->elem_size * info->alloc );
     }
     return( true );
 }

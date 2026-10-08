@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -33,7 +34,7 @@
 #ifndef RCRTNS_INLCUDED
 #define RCRTNS_INLCUDED
 
-#include "cguimem.h"
+#include "memfuncs.h"
 
 #define RESOPEN         res_open
 #define RESCLOSE        res_close
@@ -42,11 +43,6 @@
 #define RESSEEK         res_seek
 #define RESTELL         res_tell
 #define RESIOERR        res_ioerr
-
-#define RESALLOC        MemAlloc
-#define RESFREE         MemFree
-
-#define RCREALLOC       MemRealloc
 
 extern FILE             *res_open( const char *name, wres_open_mode omode );
 extern bool             res_close( FILE *fp );

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2024      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2024-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -112,15 +112,9 @@ static void DoLocExpr( unsigned_8       *p,
             break;
         case DW_LOP_ADDR:
             if( addr_size == 4 ) {
-                op1 = *(uint_32 _WCUNALIGNED *)p;
-                if( DR_CurrNode->byte_swap ) {
-                    SWAP_32( op1 );
-                }
+                op1 = DR_ReadDWord( (char *)p );
             } else if( addr_size == 2 ) {
-                op1 = *(uint_16 _WCUNALIGNED *)p;
-                if( DR_CurrNode->byte_swap ) {
-                    SWAP_16( op1 );
-                }
+                op1 = DR_ReadWord( (char *)p );
             } else if( addr_size == 1 ) {
                 op1 = *(uint_8 _WCUNALIGNED *)p;
             } else {
@@ -137,19 +131,19 @@ static void DoLocExpr( unsigned_8       *p,
             p += sizeof(int_8 );
             break;
         case DW_LOP_OPU2:
-            op1 = *(uint_16 _WCUNALIGNED *)p;
+            op1 = DR_ReadWord( (char *)p );
             p += sizeof(uint_16 );
             break;
         case DW_LOP_OPS2:
-            op1 = (int_32)*(int_16 _WCUNALIGNED *)p;
+            op1 = (int_32)(int_16)DR_ReadWord( (char *)p );
             p += sizeof(int_16);
             break;
         case DW_LOP_OPS4:
-            op1 = *(int_32 _WCUNALIGNED *)p;
+            op1 = (int_32)DR_ReadDWord( (char *)p );
             p += sizeof(int_32);
             break;
         case DW_LOP_OPU4:
-            op1 = *(uint_32 _WCUNALIGNED *)p;
+            op1 = (int_32)DR_ReadDWord( (char *)p );
             p += sizeof(uint_32);
             break;
         case DW_LOP_U128:
@@ -203,7 +197,9 @@ static void DoLocExpr( unsigned_8       *p,
             /* get contents of reg op1 */
             Push( top );
             top[0] = op1;
-            if( (p != end) && ((*p == DW_OP_xderef) || (*p == DW_OP_xderef_size)) ) {
+            if( (p != end)
+              && ((*p == DW_OP_xderef)
+              || (*p == DW_OP_xderef_size)) ) {
                 isfar = true;
             } else {
                 isfar = false;
@@ -401,9 +397,9 @@ static void DoLocExpr( unsigned_8       *p,
     return;
 }
 
-static drmem_hdl SearchLocList( uint_32 start, uint_32 context, uint addr_size )
+static drmem_hdl SearchLocList( uint_32 start, uint_32 item, uint addr_size )
 /******************************************************************************/
-// Search loc list for context return start of loc_expr block or NULL
+// Search loc list for item return start of loc_expr block or NULL
 {
     uint_32     low;
     uint_32     high;
@@ -421,11 +417,13 @@ static drmem_hdl SearchLocList( uint_32 start, uint_32 context, uint addr_size )
         p += addr_size;
         high = DR_ReadInt( p, addr_size );
         p += addr_size;
-        if( low == high && low == 0 ) {
+        if( low == high
+          && low == 0 ) {
             p = DRMEM_HDL_NULL;
             break;
         }
-        if( low <= context && context < high )
+        if( low <= item
+          && item < high )
             break;
         len = DR_VMReadWord( p );
         p += sizeof( uint_16 );
@@ -444,7 +442,7 @@ static bool DR_LocExpr( drmem_hdl var, drmem_hdl abbrev, drmem_hdl info,
     uint_8      *expr;
     bool        ret;
     uint_32     loclist;
-    uint_32     context;
+    uint_32     item;
     int         addr_size;
 
     addr_size = DR_GetAddrSize( DR_FindCompileUnit( info ) );
@@ -472,12 +470,12 @@ static bool DR_LocExpr( drmem_hdl var, drmem_hdl abbrev, drmem_hdl info,
             break;
         case DW_FORM_ref_addr:
         case DW_FORM_data4:
-            if( !callbck->live( d, &context ) ) {
+            if( !callbck->live( d, &item ) ) {
                 ret = false;
                 goto exit;
             }
             loclist = DR_VMReadDWord( info );
-            info = SearchLocList( loclist, context, addr_size );
+            info = SearchLocList( loclist, item, addr_size );
             if( info == DRMEM_HDL_NULL ) {
                 ret = false;
                 goto exit;

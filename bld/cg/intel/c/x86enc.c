@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -39,7 +39,6 @@
 #include "pcencode.h"
 #include "zoiks.h"
 #include "zeropage.h"
-#include "_cfloat.h"
 #include "cgaux.h"
 #include "p5prof.h"
 #include "data.h"
@@ -228,7 +227,7 @@ void    EmitPtr( pointer p )
  * Plop a pointer into Inst[]
  */
 {
-    *(pointer *)(Inst + ICur) = p;
+    memcpy( Inst + ICur, &p, sizeof( pointer ) );
     ICur += sizeof( pointer );
 }
 
@@ -237,7 +236,7 @@ void    EmitSegId( segment_id segid )
  * Plop a segment_id into Inst[]
  */
 {
-    *(segment_id *)(Inst + ICur) = segid;
+    memcpy( Inst + ICur, &segid, sizeof( segment_id ) );
     ICur += sizeof( segment_id );
 }
 
@@ -246,7 +245,7 @@ void    EmitOffset( offset i )
  * Plop an "offset" int Inst[] (a machine word)
  */
 {
-    *(offset *)(Inst + ICur) = i;
+    memcpy( Inst + ICur, &i, sizeof( offset ) );
     ICur += sizeof( offset );
 }
 
@@ -306,7 +305,7 @@ static void     LayInitial( instruction *ins, gentype gen )
     const pccode_def    *table;
 
     table = PCCodeTable;
-    for(;;) {
+    for( ;; ) {
         if( gen < table->low_gen )
             break;
         if( table->width == 0 )
@@ -315,7 +314,7 @@ static void     LayInitial( instruction *ins, gentype gen )
     }
     -- table;
     index = 0;
-    for(;;) {
+    for( ;; ) {
         if( table->opcode_list[index] == ins->head.opcode )
             break;
         if( table->opcode_list[index] == OP_NOP )
@@ -420,9 +419,10 @@ dw_regs RegTransDW( hw_reg_set reg )
 }
 
 
-int RegTransWV( hw_reg_set reg )
-/*******************************
+int RegFindWV( hw_reg_set reg )
+/******************************
  * Translate reg to WATCOM enum name
+ * return -1 if it is not a single register (register pair etc.)
  */
 {
     int         i;
@@ -432,9 +432,21 @@ int RegTransWV( hw_reg_set reg )
             return( RegsTab[i].wv_idx );
         }
     }
-    _Zoiks( ZOIKS_031 );
-//    return( WV_REG_END );
     return( -1 );
+}
+
+int RegTransWV( hw_reg_set reg )
+/*******************************
+ * Translate reg to WATCOM enum name
+ */
+{
+    int         wv_reg;
+
+    wv_reg = RegFindWV( reg );
+    if( wv_reg < 0 ) {
+        _Zoiks( ZOIKS_031 );
+    }
+    return( wv_reg );
 }
 
 
@@ -1178,21 +1190,21 @@ static  void    PopSeg( hw_reg_set reg )
 }
 
 
-void    QuickSave( hw_reg_set reg, opcode_defs op )
-/**************************************************
- * PUSH/POP    reg     - based on "op"
+void    QuickSave( hw_reg_set reg, opcode_defs opcode )
+/******************************************************
+ * PUSH/POP    reg     - based on "opcode"
  * assume register is valid for PUSH/POP
  */
 {
     _Code;
     if( HW_COvlap( reg, HW_SEGS ) ) {
-        if( op == OP_PUSH ) {
+        if( opcode == OP_PUSH ) {
             PushSeg( reg );
         } else {
             PopSeg( reg );
         }
     } else {
-        if( op == OP_PUSH ) {
+        if( opcode == OP_PUSH ) {
             LayOpbyte( M_PUSH | ( RegTrans( reg ) << S_KEY_REG ) );
         } else {
             LayOpbyte( M_POP | ( RegTrans( reg ) << S_KEY_REG ) );
@@ -1244,13 +1256,13 @@ void    GenRegMove( hw_reg_set src, hw_reg_set dst )
 }
 
 
-static  void    AddSWData( opcode_defs op, int_32 val, type_class_def type_class )
-/**************************************************************************
+static  void    AddSWData( opcode_defs opcode, int_32 val, type_class_def type_class )
+/*************************************************************************************
  * Add a const (int_32) to Inst[] with sign extension if the opcode
  * allows it
  */
 {
-    switch( op ) {
+    switch( opcode ) {
     case OP_ADD:
     case OP_EXT_ADD:
     case OP_SUB:
@@ -1274,13 +1286,13 @@ static  void    AddSWData( opcode_defs op, int_32 val, type_class_def type_class
 }
 
 
-static  void    AddSWCons( opcode_defs op, name *opnd, type_class_def type_class )
-/******************************************************************************
+static  void    AddSWCons( opcode_defs opcode, name *opnd, type_class_def type_class )
+/*************************************************************************************
  * Add a const (name *) to Inst[] with sign extension if the opcode allows it
  */
 {
     if( opnd->c.const_type == CONS_ABSOLUTE ) {
-        AddSWData( op, opnd->c.lo.u.int_value, type_class );
+        AddSWData( opcode, opnd->c.lo.u.int_value, type_class );
     } else {
         switch( type_class ) {
         case U2:
@@ -1713,7 +1725,7 @@ void    GenWindowsProlog( void )
     _Emit;
 }
 
-void    GenCypWindowsProlog( void )
+void    GenCheapWindowsProlog( void )
 /************************************
  * Generate a "cheap" windows prolog
  */
@@ -1740,7 +1752,7 @@ void    GenWindowsEpilog( void )
     _Emit;
 }
 
-void    GenCypWindowsEpilog( void )
+void    GenCheapWindowsEpilog( void )
 /************************************
  * Generate a "cheap" windows epilog
  */

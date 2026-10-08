@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ======================================================================
@@ -874,9 +875,8 @@ static void set_out_file( void )
 
     if( temp_outfile[0] != '\0' ) {
         if( out_file != NULL )
-            mem_free( out_file );
-        out_file = mem_alloc( strlen( temp_outfile ) + 1 );
-        strcpy( out_file, temp_outfile );
+            MemFree( out_file );
+        out_file = MemStrdupSafe( temp_outfile );
     }
 
     return;
@@ -906,7 +906,7 @@ static void set_out_file_attr( void )
 
                 /* Use default if rec_spec is badly-formed. */
 
-                out_file_attr = mem_strdup( "t:132" );
+                out_file_attr = MemStrdupSafe( "t:132" );
 
             } else {
 
@@ -915,13 +915,13 @@ static void set_out_file_attr( void )
                  */
 
                 len -= 1;
-                out_file_attr = mem_tokdup( &bin_driver->rec_spec[1], len - 1 );
+                out_file_attr = MemToStringSafe( &bin_driver->rec_spec[1], len - 1 );
             }
         } else {
 
             /* Use default if bin_driver->rec_spec is missing. */
 
-            out_file_attr = mem_strdup( "t:132" );
+            out_file_attr = MemStrdupSafe( "t:132" );
         }
     }
 
@@ -1062,7 +1062,7 @@ void ob_binclude( binclude_element * in_el )
     }
 //    fclose( in_el->fp );
 //    in_el->fp = NULL;
-//    mem_free( in_el->file );
+//    MemFree( in_el->file );
 }
 
 
@@ -1191,8 +1191,8 @@ void ob_graphic( graphic_element * in_el )
     }
 //    fclose( in_el->fp );
 //    in_el->fp = NULL;
-//    mem_free( in_el->file );
-//    mem_free( in_el->short_name );
+//    MemFree( in_el->file );
+//    MemFree( in_el->short_name );
 }
 
 /* Function ob_insert_block().
@@ -1387,17 +1387,17 @@ void ob_setup( void )
 void ob_teardown( void )
 {
     if( binc_buff.text != NULL ) {
-        mem_free( binc_buff.text );
+        MemFree( binc_buff.text );
         binc_buff.text = NULL;
     }
 
     if( buffout.text != NULL ) {
-        mem_free( buffout.text );
+        MemFree( buffout.text );
         buffout.text = NULL;
     }
 
     if(translated.text != NULL ) {
-        mem_free( translated.text );
+        MemFree( translated.text );
         translated.text = NULL;
     }
 

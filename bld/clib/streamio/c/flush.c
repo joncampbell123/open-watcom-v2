@@ -31,6 +31,7 @@
 
 
 #include "variety.h"
+#include "seterrno.h"
 #include <stddef.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -43,7 +44,6 @@
     #include "nw_lib.h"
 #endif
 #include "rtdata.h"
-#include "rterrno.h"
 #include "fileacc.h"
 #include "qwrite.h"
 #include "lseek.h"
@@ -85,7 +85,7 @@ int _WCNEAR __flush( FILE *fp )
                     ret = EOF;
 #ifndef __UNIX__
                 } else if( len == 0 ) {
-                    _RWD_errno = ENOSPC;
+                    lib_set_errno( ENOSPC );
                     fp->_flag |= _SFERR;
                     ret = EOF;
 #endif

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2004-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2004-2026 The Open Watcom Contributors. All Rights Reserved.
 *
 *  ========================================================================
 *
@@ -757,7 +757,8 @@ char *format_num( unsigned n, char *res, unsigned ressize, num_style ns )
     char        a1;
     char        a2;
     char        charbase;
-
+    char        *p1;
+    int         c1;
 
     p = temp;
     pos = 0;
@@ -823,7 +824,10 @@ char *format_num( unsigned n, char *res, unsigned ressize, num_style ns )
         if( rp == NULL ) {
             return( NULL );             // field overflow
         }
-        strupr( p );
+        p1 = p;
+        while( (c1 = *(unsigned char *)p1) != '\0' ) {
+            *p1++ = toupper( c1 );
+        }
         pos1 = strlen( rp );
         p += pos1;
         break;
@@ -1192,16 +1196,16 @@ num_style find_pgnum_style( void )
 
 ffh_entry * init_ffh_entry( ffh_entry * ffh_list, ffhflags flags )
 {
-    ffh_entry   *   curr;
+    ffh_entry   *curr;
 
     curr = ffh_list;
     if( curr == NULL ) {            // first entry
-        curr = (ffh_entry *)mem_alloc( sizeof( ffh_entry ) );
+        curr = MemAllocSafe( sizeof( *curr ) );
     } else {
         while( curr->next != NULL ) {
             curr = curr->next;
         }
-        curr->next = (ffh_entry *)mem_alloc( sizeof( ffh_entry ) );
+        curr->next = MemAllocSafe( sizeof( *curr->next ) );
         curr = curr->next;
     }
     curr->next = NULL;
@@ -1233,7 +1237,7 @@ fwd_ref *init_fwd_ref( fwd_ref *dict, const char *refid )
         }
         prev = local;
     }
-    curr = (fwd_ref *)mem_alloc( sizeof( fwd_ref ) );
+    curr = MemAllocSafe( sizeof( *curr ) );
     curr->next = NULL;
     strcpy( curr->refid, refid );
     if( dict == NULL ) {
@@ -1261,14 +1265,14 @@ void free_ffh_list( ffh_entry * ffh_list )
 
     while( ffh_list != NULL ) {
         if( ffh_list->prefix != NULL ) {
-            mem_free( ffh_list->prefix );
+            MemFree( ffh_list->prefix );
         }
         if ( ffh_list->text != NULL ) {
-            mem_free( ffh_list->text );
+            MemFree( ffh_list->text );
         }
         curr = ffh_list;
         ffh_list = ffh_list->next;
-        mem_free( curr );
+        MemFree( curr );
     }
     return;
 }
@@ -1284,7 +1288,7 @@ void free_fwd_refs( fwd_ref * fwd_refs )
     while( fwd_refs != NULL ) {
         curr = fwd_refs;
         fwd_refs = fwd_refs->next;
-        mem_free( curr );
+        MemFree( curr );
     }
     return;
 }

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,7 +35,6 @@
 #include <io.h>
 #include "wrrdwnt.h"
 #include "wrmsg.h"
-#include "wrmemi.h"
 #include "rcrtns.h"
 #include "exedos.h"
 
@@ -102,21 +101,36 @@ bool WRReadWinNTExeHeader( FILE *fp, pe_exe_header *pehdr )
     uint_16     data;
     uint_32     ne_header_off;
     bool        ok;
+    bool        error;
 
     ok = ( fp != NULL && pehdr != NULL );
 
     /* check the reloc offset */
     if( ok ) {
-        ok = !RESSEEK( fp, DOS_RELOC_OFFSET, SEEK_SET )
-            && !ResReadUint16( &data, fp )
-            && NE_HEADER_FOLLOWS( data );
+        ok = !RESSEEK( fp, DOS_RELOC_OFFSET, SEEK_SET );
+        if( ok ) {
+            error = false;
+            data = ResReadUint16( &error, fp );
+            if( error ) {
+                ok = false;
+            } else {
+                ok = NE_HEADER_FOLLOWS( data );
+            }
+        }
     }
 
     /* check header offset */
     if( ok ) {
-        ok = !RESSEEK( fp, NE_HEADER_OFFSET, SEEK_SET )
-            && !ResReadUint32( &ne_header_off, fp )
-            && ( ne_header_off != 0 );
+        ok = !RESSEEK( fp, NE_HEADER_OFFSET, SEEK_SET );
+        if( ok ) {
+            error = false;
+            ne_header_off = ResReadUint32( &error, fp );
+            if( error ) {
+                ok = false;
+            } else {
+                ok = ( ne_header_off != 0 );
+            }
+        }
     }
 
     if( ok ) {
@@ -141,7 +155,7 @@ bool WRReadNTObjectTable( FILE *fp, pe_exe_header *pehdr, pe_object **ot )
     size_t  size;
 
     size = sizeof( pe_object ) * pehdr->fheader.num_objects;
-    *ot = (pe_object *)MemAlloc( size );
+    *ot = MemAlloc( size );
     if( *ot != NULL ) {
         if( RESREAD( fp, *ot, size ) != size ) {
             MemFree( *ot );
@@ -361,7 +375,7 @@ bool WRHandleWinNTNameEntry( FILE *fp, WResDir *dir, WResID *type,
     if( ok ) {
         if( add_now ) {
             offset = WR_MAP_RES_RVA( res_entry.data_rva );
-            ok = !WResAddResource( type, name, 0, offset, res_entry.size,
+            ok = !WResAddResource( type, name, DEFAULT_FLAGS_NONE, offset, res_entry.size,
                                    *dir, &lang, NULL );
         }
     }
@@ -425,7 +439,7 @@ bool WRHandleWinNTLangIDEntry( FILE *fp, WResDir *dir, WResID *type,
         offset = WR_MAP_DATA_RVA( res_entry.data_rva );
         lang.lang = HIWORD( resdir_entry->id_name );
         lang.sublang = LOBYTE( LOWORD( resdir_entry->id_name ) );
-        ok = !WResAddResource( type, name, 0, offset, res_entry.size, *dir, &lang, NULL );
+        ok = !WResAddResource( type, name, DEFAULT_FLAGS_NONE, offset, res_entry.size, *dir, &lang, NULL );
     }
 
     return( ok );
@@ -450,7 +464,7 @@ bool WRReadResourceHeader( FILE *fp, uint_32 offset,
 
     if( ok ) {
         res_size = sizeof( resource_dir_entry ) * ( resdir_hdr->num_name_entries + resdir_hdr->num_id_entries );
-        *resdir_entry = (resource_dir_entry *)MemAlloc( res_size );
+        *resdir_entry = MemAlloc( res_size );
         ok = ( *resdir_entry != NULL );
     }
 
@@ -467,57 +481,39 @@ bool WRReadResourceHeader( FILE *fp, uint_32 offset,
 
 WResID *WRGetUniCodeWResID( FILE *fp, uint_32 rva )
 {
-    bool    old_pos;
     uint_32 offset;
     uint_16 len;
-    bool    ok;
     char    *unistr;
     WResID  *id;
     int     i;
+    bool    error;
 
     offset = WR_MAP_RES_RVA( rva );
 
-    unistr = NULL;
-
     /* seek to the location of the Unicode string */
-    ok = old_pos = !RESSEEK( fp, offset, SEEK_SET );
+    if( RESSEEK( fp, offset, SEEK_SET ) )
+        return( NULL );
 
     /* read the Unicode string */
-    if( ok ) {
-        ResReadUint16( &len, fp );
-        len *= 2;
-        unistr = (char *)MemAlloc( len + 2 );
-        ok = ( unistr != NULL );
-    }
-
-    if( ok ) {
+    error = false;
+    len = ResReadUint16( &error, fp );
+    if( error )
+        return( NULL );
+    id = NULL;
+    len *= 2;
+    unistr = MemAlloc( len + 2 );
+    if( unistr != NULL ) {
         unistr[len] = 0;
         unistr[len + 1] = 0;
-        ok = ( RESREAD( fp, unistr, len ) == len );
-    }
-
-    if( ok ) {
-        for( i = 0; i < len + 2; i += 2 ) {
-            unistr[i / 2] = unistr[i];
+        if( RESREAD( fp, unistr, len ) == len ) {
+            for( i = 0; i < len + 2; i += 2 ) {
+                unistr[i / 2] = unistr[i];
+            }
+            id = WResIDFromStr( unistr );
         }
-        ok = ( (id = WResIDFromStr( unistr )) != NULL );
-    }
-
-#if 0
-    if( old_pos ) {
-        ok = ( !RESSEEK( fp, offset, SEEK_SET ) && ok );
-    }
-#endif
-
-    if( unistr != NULL ) {
         MemFree( unistr );
     }
-
-    if( ok ) {
-        return( id );
-    } else {
-        return( NULL );
-    }
+    return( id );
 }
 
 bool WRReadResourceEntry( FILE *fp, uint_32 offset, resource_entry *res_entry )

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -31,6 +31,8 @@
 
 
 #include "as.h"
+#include "i64.h"
+
 
 #define MAX_ALIGNMENT   6       // 64 byte alignment
 
@@ -339,7 +341,7 @@ static bool dirFuncStorageAlloc( directive_t *dir, dir_table_enum parm )
     }
     ObjSwitchSection( as_section );     // Have to switch to the right
     ObjEmitLabel( sym );                // section before emitting label.
-    buffer = MemAlloc( expr );
+    buffer = MemAllocSafe( expr );
     memset( buffer, 0, expr );
     ObjEmitData( CurrentSection, buffer, expr, true ); // Align the data also.
     MemFree( buffer );
@@ -379,7 +381,7 @@ static char *getESCChar( char * const byte, char *ptr )
     }
     if( *ptr == 'x' ) {     // Hex
         ptr++;
-        buffer = MemAlloc( strlen( ptr ) + 2 + 1 );
+        buffer = MemAllocSafe( strlen( ptr ) + 2 + 1 );
         strcpy( buffer, "0x" );
         strcat( buffer, ptr );
         num = strtoul( buffer, &endptr, 16 );
@@ -427,7 +429,7 @@ static bool dirFuncString( directive_t *dir, dir_table_enum parm )
     opnum = 0;
     for( dirop = dir->operand_list; dirop != NULL; dirop = dirop->next ) {
         assert( dirop->type == DIROP_STRING );
-        str = byte = MemAlloc( strlen( STRING_CONTENT( dirop ) ) + 1 );
+        str = byte = MemAllocSafe( strlen( STRING_CONTENT( dirop ) ) + 1 );
         for( ptr = STRING_CONTENT( dirop ); *ptr != '\0'; ptr++ ) {
             if( *ptr == ESCAPE_CHAR ) {
                 ptr = getESCChar( byte, ptr );
@@ -732,11 +734,12 @@ static bool dirFuncValues( directive_t *dir, dir_table_enum parm )
             break;
         case DT_VAL_INT64:
             assert( dirop->type == DIROP_INTEGER || dirop->type == DIROP_REP_INT );
+            U64High( u.quad ) = 0;
             if( dirop->type == DIROP_INTEGER ) {
-                u.quad.u._32[I64LO32] = NUMBER_INTEGER( dirop );
+                U64Low( u.quad ) = NUMBER_INTEGER( dirop );
             } else { // repeat
                 rep = REPEAT_COUNT( dirop );
-                u.quad.u._32[I64LO32] = REPEAT_INTEGER( dirop );
+                U64Low( u.quad ) = REPEAT_INTEGER( dirop );
             }
             break;
         case DT_VAL_DOUBLE:
@@ -986,20 +989,6 @@ static bool dirValidate( directive_t *dir, dir_table *table_entry )
 }
 
 
-static directive_t *dirAlloc( void )
-//**********************************
-{
-    return( MemAlloc( sizeof( directive_t ) ) );
-}
-
-
-static void dirFree( directive_t *directive )
-//*******************************************
-{
-    MemFree( directive );
-}
-
-
 void DirInit( void )
 //******************
 {
@@ -1052,7 +1041,7 @@ bool DirGetNextScanState( void )
 directive_t *DirCreate( sym_handle sym )
 //**************************************
 {
-    lastDirective = dirAlloc();
+    lastDirective = MemAllocSafe( sizeof( directive_t ) );
     lastDirective->dir_sym = sym;
     lastDirective->num_operands = 0;
     lastDirective->operand_list = NULL;
@@ -1088,7 +1077,7 @@ void DirDestroy( directive_t *directive )
         dirop_next = dirop->next;
         DirOpDestroy( dirop );
     }
-    dirFree( directive );
+    MemFree( directive );
     lastDirective = NULL;
 }
 

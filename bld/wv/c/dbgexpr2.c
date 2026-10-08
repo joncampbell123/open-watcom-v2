@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2024      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2024-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -37,11 +37,11 @@
 #include "liteng.h"
 #include "dbgstk.h"
 #include "dbgerr.h"
-#include "dbgmem.h"
+#include "memfuncs.h"
 #include "dbgitem.h"
 #include "i64.h"
 #include "numscan.h"
-#include "madinter.h"
+#include "wvmadcli.h"
 #include "dbgutil.h"
 #include "dbgexpr4.h"
 #include "dbgexpr3.h"
@@ -212,10 +212,14 @@ void SymResolve( stack_entry *entry )
             GetTrueEntry( entry );
         } else {
             if( entry->ti.kind == TK_STRING ) {
-                _ChkAlloc( entry->v.string.allocated, entry->ti.size, LIT_ENG( ERR_NO_MEMORY_FOR_EXPR ) );
-                LocationCreate( &entry->v.string.loc, LT_INTERNAL, entry->v.string.allocated );
-                if( DIPSymValue( sh, entry->lc, entry->v.string.allocated ) != DS_OK ) {
-                    Error( ERR_NONE, LIT_ENG( ERR_NO_ACCESS ) );
+                entry->v.string.allocated = MemAlloc( entry->ti.size );
+                if( entry->v.string.allocated == NULL ) {
+                    Error( ERR_NONE, LIT_ENG( ERR_NO_MEMORY_FOR_EXPR ) );
+                } else {
+                    LocationCreate( &entry->v.string.loc, LT_INTERNAL, entry->v.string.allocated );
+                    if( DIPSymValue( sh, entry->lc, entry->v.string.allocated ) != DS_OK ) {
+                        Error( ERR_NONE, LIT_ENG( ERR_NO_ACCESS ) );
+                    }
                 }
             } else {
                 if( DIPSymValue( sh, entry->lc, &tmp ) != DS_OK ) {
@@ -263,7 +267,7 @@ void ClassNum( stack_entry *entry )
     entry->ti.kind = TK_INTEGER;
     entry->flags &= ~SF_FORM_MASK;
     entry->flags |= SF_CONST;
-    if( I64Test( &entry->v.sint ) < 0 ) {
+    if( I64isNeg( entry->v.sint ) ) {
         /*
             A bit backwards - if the top bit is on, it won't fit in in
             63 bits.
@@ -428,13 +432,17 @@ void LRValue( stack_entry *entry )
                 }
                 break;
             case TK_STRING:
-                _ChkAlloc( entry->v.string.allocated, entry->ti.size, LIT_ENG( ERR_NO_MEMORY_FOR_EXPR ) );
-                LocationCreate( &ll, LT_INTERNAL, entry->v.string.allocated );
-                if( LocationAssign( &ll, &entry->v.loc, entry->ti.size, false ) != DS_OK ) {
-                    _Free( entry->v.string.allocated );
-                    Error( ERR_NONE, LIT_ENG( ERR_NO_ACCESS ) );
+                entry->v.string.allocated = MemAlloc( entry->ti.size );
+                if( entry->v.string.allocated == NULL ) {
+                    Error( ERR_NONE, LIT_ENG( ERR_NO_MEMORY_FOR_EXPR ) );
+                } else {
+                    LocationCreate( &ll, LT_INTERNAL, entry->v.string.allocated );
+                    if( LocationAssign( &ll, &entry->v.loc, entry->ti.size, false ) != DS_OK ) {
+                        MemFree( entry->v.string.allocated );
+                        Error( ERR_NONE, LIT_ENG( ERR_NO_ACCESS ) );
+                    }
+                    entry->v.string.loc = ll;
                 }
-                entry->v.string.loc = ll;
                 break;
             case TK_BOOL:
             case TK_CHAR:

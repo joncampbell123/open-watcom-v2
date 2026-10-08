@@ -48,9 +48,9 @@ pick( MSG_PRESS_KEY,            "press any key to continue" ,
                                 "続行するために何かキーを押して下さい" )
 
 
-#define pick1(a,b,c,d)   pick( MSG_FILE_TYPES_##a, c, d )
+#define pick_format(a,b,c,d,e)   pick( MSG_FILE_TYPES_##c, d, e )
 FORMATS()
-#undef pick1
+#undef pick_format
 
 
 pick( MSG_CREATE_TYPE_DLL,      "dynamic link library" ,
@@ -212,8 +212,8 @@ pick( MSG_GENERAL_HELP_28,  "            | \"MODFile\"      obj_file{\",\"obj_fi
                             "            | \"MODFile\"      オブジェクトファイル{\",\"オブジェクトファイル}" )
 pick( MSG_GENERAL_HELP_29,  "obj_spec  ::= obj_file[\"(\"obj_member\")\"] | library_file[\"(\"lib_member\")\"]" ,
                             "obj_spec  ::= オブジェクトファイル[\"(\"オブジェクトメンバー\")\"] | ライブラリファイル[\"(\"ライブラリメンバー\")\"]")
-pick( MSG_GENERAL_HELP_30,  "dbtype    ::= \"Watcom\" | \"Dwarf\" | \"Codeview\"",
-                            "dbtype    ::= \"Watcom\" | \"Dwarf\" | \"Codeview\"")
+pick( MSG_GENERAL_HELP_30,  "dbtype    ::= \"Watcom\" | \"Dwarf\" | \"Codeview\" | \"Hll\"" ,
+                            "dbtype    ::= \"Watcom\" | \"Dwarf\" | \"Codeview\" | \"Hll\"" )
 pick( MSG_GENERAL_HELP_31,  "dblist    ::= dboption{\",\"dboption}" ,
                             "dblist    ::= dboption{\",\"dboption}")
 pick( MSG_GENERAL_HELP_32,  "dboption  ::= \"LInes\" | \"Types\" | \"LOcals\" | \"All\"" ,
@@ -232,9 +232,9 @@ pick( MSG_GENERAL_HELP_38,  "            | \"[NO]REDefsok\" | \"STack\"=n | \"ST
                             "            | \"[NO]REDefsok\" | \"STack\"=n | \"START=\"シンボル名 | \"STATics\"" )
 pick( MSG_GENERAL_HELP_39,  "            | \"SYMFile\"[\"=\"symbol_file], | \"[NO]Undefsok\" | \"Verbose\"",
                             "            | \"SYMFile\"[\"=\"シンボルファイル], | \"[NO]Undefsok\" | \"Verbose\"" )
-pick( MSG_GENERAL_HELP_40,  "            | \"VFRemoval\"" ,
-                            "            | \"VFRemoval\"" )
-                
+pick( MSG_GENERAL_HELP_40,  "            | \"VFRemoval\" | \"HLLPack\"" ,
+                            "            | \"VFRemoval\" | \"HLLPack\"" )
+
 /*
  *  Dos help screen: max 16 lines (from 0 to 15).
  *  To start a new page, leave a line undefined or define an empty line.
@@ -625,18 +625,6 @@ pick( MSG_WIN_VXD_HELP_21,  "            | (\"MOVeable\" | \"FIXed\") | \"DIScar
 */
 
 /*
- *  Zdos help screen: max 16 lines (from 0 to 15).
- *  To start a new page, leave a line undefined or define an empty line.
- */
-pick( MSG_ZDOS_HELP_0,      " " ,
-                            " " )
-pick( MSG_ZDOS_HELP_1,      "commands valid for the ZDOS executable formats only:" ,
-                            "ZDOS 実行可能形式に対してのみ有効なオプション:" )
-pick( MSG_ZDOS_HELP_2,      " " ,
-                            " " )
-pick( MSG_ZDOS_HELP_3,      "form      ::= \"ZDos\" [\"SYS\" | \"HWD\" | \"FSD\"]" ,
-                            "form      ::= \"ZDos\" [\"SYS\" | \"HWD\" | \"FSD\"]" )
-/*
  *  Raw help screen: max 16 lines (from 0 to 15).
  *  To start a new page, leave a line undefined or define an empty line.
  */
@@ -652,7 +640,7 @@ pick( MSG_RAW_HELP_4,       "option    ::= \"OFFset=\"n" ,
                             "option    ::= \"OFFset=\"n" )
                                 
 /*
- *  Zdos help screen: max 16 lines (from 0 to 15).
+ *  RDOS help screen: max 16 lines (from 0 to 15).
  *  To start a new page, leave a line undefined or define an empty line.
  */
 pick( MSG_RDOS_HELP_0,      " " ,

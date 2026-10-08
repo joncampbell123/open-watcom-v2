@@ -1,12 +1,3 @@
-#include "as.h"
-#include "lexyacc.h"
-#include "ytab.h"
-#include "asparser.h"
-#ifdef _STANDALONE_
-#include "preproc.h"
-#include "options.h"
-#endif
-
 #define BSIZE           8192
 #define YYCTYPE         char
 #define YYCURSOR        cursor
@@ -82,7 +73,7 @@ static char *yytext( void ) {
     if ( (yytextlen = cursor - tok) > maxyytextlen - 1 ) {
         MemFree( _yytext );
         maxyytextlen = yytextlen + 1;
-        _yytext = (char *) MemAlloc( maxyytextlen );
+        _yytext = MemAllocSafe( maxyytextlen );
     }
     memcpy( _yytext, tok, yytextlen );
     _yytext[yytextlen] = 0;
@@ -104,7 +95,7 @@ static void yylexError( int res_id ) {
     CurrLineno = yylineno;
     CurrFilename = yyfname;
     AsMsgGet( res_id, AsResBuffer );
-    tmpstr = AsStrdup( AsResBuffer );
+    tmpstr = MemStrdupSafe( AsResBuffer );
     yyerror( tmpstr );
     MemFree( tmpstr );
     CurrLineno = saveLineno;
@@ -205,7 +196,7 @@ static void fill( void ) {
         if((top - limit) < BSIZE) { // buffer needs to be expanded
             char *buf;
 
-            buf = (char *) MemAlloc( limit - bot + BSIZE );   // alloc new piece
+            buf = MemAllocSafe( limit - bot + BSIZE );   // alloc new piece
             memcpy(buf, tok, limit - tok);          // copy leftover
             tok = buf;                              // adjust all pointers
             marker = &buf[marker - bot];
@@ -391,7 +382,7 @@ sym                     {
 [0-9]*"."[0-9]+         { yylval.fval = strtod( yytext(), NULL ); return( T_FLOAT_CONST ); }
 string                  {
                             MemFree( cStr );
-                            yylval.str = ( cStr = AsStrdup( yytext()+1 ) );
+                            yylval.str = ( cStr = MemStrdupSafe( yytext()+1 ) );
                             cStr[yytextlen - 2] = 0;
                             return( T_STRING_CONST );
                         }
@@ -438,7 +429,7 @@ getfname:   tok = cursor;
 ws                      { goto getfname; }
 "\""fname"\""           {
                             MemFree( yyfname );
-                            yyfname = AsStrdup( yytext()+1 );
+                            yyfname = MemStrdupSafe( yytext()+1 );
                             yyfname[yytextlen - 2] = 0;
                             dropDblBackSlashes( yyfname );
                             goto getfname;
@@ -446,7 +437,7 @@ ws                      { goto getfname; }
 nl                      {
                             fileinfo    *file;
 
-                            file = MemAlloc( sizeof( fileinfo ) + strlen( yyfname ) );
+                            file = MemAllocSafe( sizeof( fileinfo ) + strlen( yyfname ) );
                             file->line = yylineno = newlineno;
                             strcpy( file->name, yyfname );
                             yylval.file = file;
@@ -465,7 +456,7 @@ ws                      { goto getdirop; }
 ((ch \ [ \t]) ch*) |
 empstr                  {
                             MemFree( dirOpStr );
-                            yylval.str = ( dirOpStr = AsStrdup( yytext() ) );
+                            yylval.str = ( dirOpStr = MemStrdupSafe( yytext() ) );
                             return( T_DIRECTIVE_OPERAND );
                         }
 */

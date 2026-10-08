@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -36,11 +36,11 @@
 #include "dbgdata.h"
 #include "dbgerr.h"
 #include "liteng.h"
-#include "dbgmem.h"
+#include "memfuncs.h"
 #include "dbgio.h"
 #include "strutil.h"
 #include "dbgscan.h"
-#include "madinter.h"
+#include "wvmadcli.h"
 #include "dbgmad.h"
 #include "dbgutil.h"
 #include "dbgsrc.h"
@@ -53,7 +53,6 @@
 #include "dbgparse.h"
 #include "dbgtrace.h"
 #include "dbgset.h"
-#include "dbglkup.h"
 #include "dbgchopt.h"
 #include "dbgsetfn.h"
 #include "dbgsetfg.h"
@@ -87,7 +86,7 @@ typedef enum {
     MWT_LAST
 } mad_window_toggles;
 
-char    *Language = NULL;
+static char         *Language = NULL;
 
 static pending_toggle_list *PendToggleList[MWT_LAST];
 
@@ -269,51 +268,54 @@ static void RecursionConf( void )
 
 bool LangSetInit( void )
 {
-    static char InitialLang[] = { FE_LANG_CPP };
-
     LangInit();
-    _Alloc( Language, sizeof( InitialLang ) + 1 );
-    if( Language == NULL )
-        return( false );
-    StrCopyDst( InitialLang, Language );
-    return( LangLoad( Language, strlen( Language ) ) );
+    Language = MemStrdupSafe( FE_LANG_CPP );
+    return( LangLoad( Language ) );
 }
 
 void LangSetFini( void )
 {
-    _Free( Language );
+    MemFree( Language );
     LangFini();
 }
 
-
-
+const char  *GetLanguage( void )
+{
+    return( Language );
+}
 
 /*
  * NewLang -- load a new expression language, if different from current one
  */
 
-void NewLang( const char *lang )
+void NewLang( const char *lang, size_t len )
 {
-    char       *new_lang;
-    size_t     len;
+    char            *new_lang;
+    char            *p;
+    int             c;
 
     if( lang == NULL )
         return;
-    len = strlen( lang );
-    new_lang = DbgMustAlloc( len + 1 );
-    memcpy( new_lang, lang, len );
-    new_lang[len] = NULLCHAR;
-    strlwr( new_lang );
-    if( ( len != strlen( Language ) ) || memcmp( new_lang, Language, len ) != 0 ) {
-        if( LangLoad( new_lang, len ) ) {
-            _Free( Language );
+    if( len == 0 ) {
+        new_lang = MemStrdupSafe( lang );
+    } else {
+        new_lang = MemToStringSafe( lang, len );
+    }
+    /* change to lower-case */
+    p = new_lang;
+    while( (c = *(unsigned char *)p) != '\0' ) {
+        *p++ = (char)tolower( c );
+    }
+    if( strcmp( new_lang, Language ) != 0 ) {
+        if( LangLoad( new_lang ) ) {
+            MemFree( Language );
             Language = new_lang;
             return;
         }
-        LangLoad( Language, strlen( Language ) );
+        LangLoad( Language );
         Error( ERR_NONE, LIT_ENG( ERR_NO_LANG ) );
     }
-    _Free( new_lang );
+    MemFree( new_lang );
 }
 
 
@@ -324,7 +326,7 @@ static void LangSet( void )
 
     ScanItem( true, &start, &len );
     ReqEOC();
-    NewLang( start );
+    NewLang( start, len );
 }
 
 static void LangConf( void )
@@ -415,7 +417,7 @@ static void PendingAdd( mad_window_toggles wt, dig_arch arch, const char *name, 
 
     for( owner = &PendToggleList[wt]; (new = *owner) != NULL; owner = &new->next )
         ;
-    new = DbgMustAlloc( sizeof( *new ) + len );
+    new = MemAllocSafe( sizeof( *new ) + len );
     *owner = new;
     new->next = NULL;
     new->arch = arch;
@@ -498,7 +500,7 @@ void PendingToggles( void )
                 ReScan( curr->toggle );
                 DoOneToggle( wt );
                 *owner = curr->next;
-                _Free( curr );
+                MemFree( curr );
             } else {
                 owner = &curr->next;
             }
@@ -892,7 +894,7 @@ void SupportFini( void )
     while( curr != NULL ) {
         junk = curr;
         curr = curr->next;
-        _Free( junk );
+        MemFree( junk );
     }
     SupportRtns = NULL;
 }
@@ -920,7 +922,7 @@ static void SupportSet( void )
     count = 0;
     while( ScanItemDelim( ";}", true, &start, &len ) ) {
         if( !IsInSupportNames( start, len ) ) {
-            new = DbgMustAlloc( sizeof( *new ) + len );
+            new = MemAllocSafe( sizeof( *new ) + len );
             new->next = SupportRtns;
             SupportRtns = new;
             memcpy( new->name, start, len );

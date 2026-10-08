@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -74,13 +74,6 @@ enum {
     #undef pick
 };
 
-#if defined( _M_IX86 )
-
-unsigned char   _8087   = 0;
-unsigned char   _real87 = 0;
-
-#endif
-
 void    ShowUsage( void ) {
 //===================
 
@@ -107,7 +100,6 @@ static void FInit( void )
 static void FFini( void )
 {
     ErrorFini();
-    FMemErrors();
     FMemFini();
 }
 
@@ -116,11 +108,18 @@ int     main( int argc, char *argv[] )
 // FORTRAN compiler main line.
 {
     int         ret_code;
-    char        *opts[MAX_OPTIONS+1];
+    const char  *opts[MAX_OPTIONS+1];
     char        *wfc_env;
     int         cmd_len;
     char        *cmd_line;
 
+#if defined(__WATCOMC__) && defined( _M_IX86 )
+    /*
+     * set to 0 in case 8087 is present
+     */
+    _real87 = 0;
+    _8087 = 0;
+#endif
 #if !defined( __WATCOMC__ )
     _argc = argc;
     _argv = argv;
@@ -134,12 +133,12 @@ int     main( int argc, char *argv[] )
     if( wfc_env != NULL ) {
         size_t  len1;
         len1 = strlen( wfc_env );
-        cmd_line = FMemAlloc( len1 + 1 + cmd_len );
+        cmd_line = MemAllocSafe( len1 + 1 + cmd_len );
         strcpy( cmd_line, wfc_env );
         cmd_line[len1++] = ' ';
         _bgetcmd( cmd_line + len1, cmd_len );
     } else {
-        cmd_line = FMemAlloc( cmd_len );
+        cmd_line = MemAllocSafe( cmd_len );
         _bgetcmd( cmd_line, cmd_len );
     }
     ret_code = 0;
@@ -153,7 +152,7 @@ int     main( int argc, char *argv[] )
         ShowUsage();
     }
     FiniCompMain();
-    FMemFree( cmd_line );
+    MemFree( cmd_line );
     FFini();
     return( ret_code );
 }

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -37,6 +37,7 @@
 #include "globals.h"
 #include "substr.h"
 #include "dfa.h"
+#include "mem.h"
 
 
 typedef struct GoTo {
@@ -46,31 +47,32 @@ typedef struct GoTo {
 
 State *State_new( void )
 {
-    State   *s;
+    State   *st;
 
-    s = malloc( sizeof( State ) );
-    s->label = 0;
-    s->rule = NULL;
-    s->next = NULL;
-    s->link = NULL;
-    s->depth = 0;
-    s->kCount = 0;
-    s->kernel = NULL;
-    s->isBase = 0;
-    s->referenced = 0;
-    s->action = NULL;
-    s->go.nSpans = 0;
-    s->go.span = NULL;
-    return( s );
+    st = MemAlloc( sizeof( *st ) );
+    st->label = 0;
+    st->rule = NULL;
+    st->next = NULL;
+    st->link = NULL;
+    st->depth = 0;
+    st->kCount = 0;
+    st->kernel = NULL;
+    st->isBase = 0;
+    st->referenced = 0;
+    st->action = NULL;
+    st->go.nSpans = 0;
+    st->go.span = NULL;
+    return( st );
 }
 
-static void State_delete( State *s )
+static void State_delete( State *st )
 {
-    if( s->kernel != NULL )
-        free( s->kernel );
-    if( s->go.span != NULL )
-        free( s->go.span );
-    free( s );
+    if( st->kernel != NULL )
+        MemFree( st->kernel );
+    if( st->go.span != NULL )
+        MemFree( st->go.span );
+    Action_delete( st );
+    MemFree( st );
 }
 
 static Ins **closure( Ins **cP, Ins *i )
@@ -87,18 +89,19 @@ static Ins **closure( Ins **cP, Ins *i )
             break;
         }
     }
-    return cP;
+    return( cP );
 }
 
 static State *DFA_findState( DFA *d, Ins **kernel, uint kCount )
 {
     Ins     **cP, **iP, *i;
-    State   *s;
+    State   *st;
 
     kernel[kCount] = NULL;
     cP = kernel;
     for( iP = kernel; (i = *iP) != NULL; ++iP ) {
-        if( i->i.tag == CHAR || i->i.tag == TERM ) {
+        if( i->i.tag == CHAR
+          || i->i.tag == TERM ) {
             *cP++ = i;
         } else {
             i->i.marked = false;
@@ -106,9 +109,9 @@ static State *DFA_findState( DFA *d, Ins **kernel, uint kCount )
     }
     kCount = (uint)( cP - kernel );
     kernel[kCount] = NULL;
-    for( s = d->head; s != NULL; s = s->next ) {
-        if( s->kCount == kCount ) {
-            for( iP = s->kernel; (i = *iP) != NULL; ++iP ) {
+    for( st = d->head; st != NULL; st = st->next ) {
+        if( st->kCount == kCount ) {
+            for( iP = st->kernel; (i = *iP) != NULL; ++iP ) {
                 if( !i->i.marked ) {
                     break;
                 }
@@ -118,19 +121,19 @@ static State *DFA_findState( DFA *d, Ins **kernel, uint kCount )
             }
         }
     }
-    if( s == NULL ) {
-        s = State_new();
-        DFA_addState( d, d->tail, s );
-        s->kCount = kCount;
-        s->kernel = malloc( ( kCount + 1 ) * sizeof( Ins * ) );
-        memcpy( s->kernel, kernel, ( kCount + 1 ) * sizeof( Ins * ) );
-        s->link = d->toDo;
-        d->toDo = s;
+    if( st == NULL ) {
+        st = State_new();
+        DFA_addState( d, d->tail, st );
+        st->kCount = kCount;
+        st->kernel = MemAlloc( ( kCount + 1 ) * sizeof( *st->kernel ) );
+        memcpy( st->kernel, kernel, ( kCount + 1 ) * sizeof( *st->kernel ) );
+        st->link = d->toDo;
+        d->toDo = st;
     }
     for( iP = kernel; (i = *iP) != NULL; ++iP ) {
         i->i.marked = false;
     }
-    return s;
+    return( st );
 }
 
 DFA *DFA_new( Ins *ins, uint ni, Char lb, Char ub, Char *rep, uint nstate )
@@ -141,12 +144,12 @@ DFA *DFA_new( Ins *ins, uint ni, Char lb, Char ub, Char *rep, uint nstate )
     GoTo    *goTo;
     Span    *span;
 
-    d = malloc( sizeof( DFA ) );
-    work = malloc( ( ni + 1 ) * sizeof( Ins * ) );
+    d = MemAlloc( sizeof( *d ) );
+    work = MemAlloc( ( ni + 1 ) * sizeof( *work ) );
     nc = ub - lb;
-    goTo = malloc( nc * sizeof( GoTo ) );
-    memset( goTo, 0, nc * sizeof( GoTo ) );
-    span = malloc( nc * sizeof( Span ) );
+    goTo = MemAlloc( nc * sizeof( *goTo ) );
+    memset( goTo, 0, nc * sizeof( *goTo ) );
+    span = MemAlloc( nc * sizeof( *span ) );
     d->lbChar = lb;
     d->ubChar = ub;
     d->tail = &d->head;
@@ -155,14 +158,14 @@ DFA *DFA_new( Ins *ins, uint ni, Char lb, Char ub, Char *rep, uint nstate )
     d->toDo = NULL;
     DFA_findState( d, work, (uint)( closure( work, &ins[0] ) - work ) );
     while( d->toDo != NULL ) {
-        State   *s = d->toDo;
+        State   *st = d->toDo;
         Ins     **cP, **iP, *i;
         uint    nGoTos = 0;
         uint    j;
 
-        d->toDo = s->link;
-        s->rule = NULL;
-        for( iP = s->kernel; (i = *iP) != NULL; ++iP ) {
+        d->toDo = st->link;
+        st->rule = NULL;
+        for( iP = st->kernel; (i = *iP) != NULL; ++iP ) {
             if( i->i.tag == CHAR ) {
                 Ins *j2;
                 for( j2 = i + 1; j2 < (Ins *)i->i.link; ++j2 ) {
@@ -172,8 +175,9 @@ DFA *DFA_new( Ins *ins, uint ni, Char lb, Char ub, Char *rep, uint nstate )
                     goTo[j2->c.value - lb].to = j2;
                 }
             } else if( i->i.tag == TERM ) {
-                if( s->rule == NULL || ((RegExp *)i->i.link)->u.RuleOp.accept < s->rule->u.RuleOp.accept ) {
-                    s->rule = (RegExp *)i->i.link;
+                if( st->rule == NULL
+                  || ((RegExp *)i->i.link)->u.RuleOp.accept < st->rule->u.RuleOp.accept ) {
+                    st->rule = (RegExp *)i->i.link;
                 }
             }
         }
@@ -187,49 +191,52 @@ DFA *DFA_new( Ins *ins, uint ni, Char lb, Char ub, Char *rep, uint nstate )
             go->to = DFA_findState( d, work, (uint)( cP - work ) );
         }
 
-        s->go.nSpans = 0;
+        st->go.nSpans = 0;
         for( j = 0; j < nc; ) {
             State *to = (State *)goTo[rep[j]].to;
             while( ++j < nc && goTo[rep[j]].to == to )
                 ;
-            span[s->go.nSpans].ub = (Char)( lb + j );
-            span[s->go.nSpans].to = to;
-            s->go.nSpans++;
+            span[st->go.nSpans].ub = (Char)( lb + j );
+            span[st->go.nSpans].to = to;
+            st->go.nSpans++;
         }
 
         for( j = nGoTos; j-- > 0; ) {
             goTo[goTo[j].ch - lb].to = NULL;
         }
 
-        s->go.span = malloc( s->go.nSpans * sizeof( Span ) );
-        memcpy( s->go.span, span, s->go.nSpans * sizeof( Span ) );
+        st->go.span = MemAlloc( st->go.nSpans * sizeof( *st->go.span ) );
+        memcpy( st->go.span, span, st->go.nSpans * sizeof( *st->go.span ) );
 
-        Action_new_Match( s );
+        Action_delete( st );
+
+        Action_new_Match( st );
 
     }
-    free( work );
-    free( goTo );
-    free( span );
+    MemFree( span );
+    MemFree( goTo );
+    MemFree( work );
 
     return( d );
 }
 
 void DFA_delete( DFA *d )
 {
-    State   *s;
+    State   *st;
 
-    while( (s = d->head) != NULL ) {
-        d->head = s->next;
-        State_delete( s );
+    while( (st = d->head) != NULL ) {
+        d->head = st->next;
+        State_delete( st );
     }
+    MemFree( d );
 }
 
-void DFA_addState( DFA *d, State **a, State *s )
+void DFA_addState( DFA *d, State **st_before, State *st )
 {
-    s->label = d->nStates++;
-    s->next = *a;
-    *a = s;
-    if( a == d->tail ) {
-        d->tail = &s->next;
+    st->label = d->nStates++;
+    st->next = *st_before;
+    *st_before = st;
+    if( st_before == d->tail ) {
+        d->tail = &st->next;
     }
 }

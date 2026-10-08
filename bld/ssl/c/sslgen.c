@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -31,37 +32,72 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "ssl.h"
 #include "sslint.h"
 
 
+#define SKIP_LABELS(x)  while((x)->opcode == INS_LABEL) (x) = (x)->flink
+
 instruction     *FirstIns;
 instruction     *LastIns;
 
-static instruction *NewIns( op_code op )
+static instruction  *FreeInsPool;
+
+static instruction *NewIns( op_code opcode )
 {
     instruction *ins;
 
-    ins = malloc( sizeof( instruction ) );
-    if( ins == NULL )
-        Error( "out of memory for instructions" );
-    ins->ins = op;
-    ins->flink = NULL;
-    ins->blink = NULL;
-    ins->ptr = NULL;
-    ins->operand = 0;
+    ins = MemAllocSafe( sizeof( instruction ) );
+    memset( ins, 0, sizeof( instruction ) );
+    ins->opcode = opcode;
     ins->location = NO_LOCATION;
     return( ins );
 }
 
-static void CheckLongOperand( instruction *ins )
+instruction *NewLabel( void )
 {
-    if( (unsigned int)ins->operand != (unsigned char)ins->operand ) {
-        ins->ins |= INS_LONG; /* change to long form of instruction */
-    }
+    return( NewIns( INS_LABEL ) );
 }
 
+static void SetOperand( instruction *ins, int value )
+{
+    ins->u1.operand = value;
+    ins->is_long = ( (unsigned int)value != (unsigned char)value );
+}
+
+static void DelIns( instruction *ins )
+{
+    choice_entry        *choice;
+    choice_entry        *next;
+
+    switch( ins->opcode ) {
+    case INS_IN_CHOICE:
+    case INS_CHOICE:
+        for( choice = ins->u.choice; choice != NULL; choice = next ) {
+            next = choice->link;
+            /*
+             * remove reference to label
+             */
+            choice->lbl->u1.reference--;
+        }
+        break;
+    case INS_JUMP:
+    case INS_CALL:
+        /*
+         * remove reference to label
+         */
+        ins->u.lbl->u1.reference--;
+        break;
+    }
+    /*
+     * move instruction to free memory pool for later deallocation
+     */
+    ins->flink = FreeInsPool;
+    ins->blink = NULL;
+    FreeInsPool = ins;
+}
 
 static void AddStream( instruction *after, instruction *ins )
 {
@@ -91,11 +127,19 @@ static void AddStream( instruction *after, instruction *ins )
 }
 
 
+static void ReplaceStream( instruction *old, instruction *new )
+{
+    new->flink = old->flink;
+    new->blink = old->blink;
+    old->flink->blink = new;
+    old->blink->flink = new;
+
+    DelIns( old );
+}
+
+
 static void DelStream( instruction *ins )
 {
-    choice_entry        *tbl;
-    choice_entry        *next;
-
     if( ins == FirstIns ) {
         FirstIns = ins->flink;
         if( FirstIns != NULL ) {
@@ -110,25 +154,8 @@ static void DelStream( instruction *ins )
         ins->blink->flink = ins->flink;
         ins->flink->blink = ins->blink;
     }
-    switch( ins->ins & INS_MASK ) {
-    case INS_IN_CHOICE:
-    case INS_CHOICE:
-        for( tbl = ins->ptr; tbl != NULL; tbl = next ) {
-            next = tbl->link;
-            tbl->lbl->operand--; /* decrement label reference count */
-            free( tbl );
-        }
-        break;
-    case INS_JUMP:
-    case INS_CALL:
-        ((instruction *)ins->ptr)->operand--;
-        break;
-    }
-}
 
-instruction *GenNewLbl( void )
-{
-    return( NewIns( INS_LABEL ) );
+    DelIns( ins );
 }
 
 void GenLabel( instruction *lbl )
@@ -139,17 +166,20 @@ void GenLabel( instruction *lbl )
 
 void GenExportLabel( instruction *lbl )
 {
-    GenLabel( lbl );
-    lbl->operand++;     /* so it never gets deleted */
+    lbl->location = 0;
+    /*
+     * set reference to never gets deleted
+     */
+    lbl->u1.reference = 1;
+    AddStream( LastIns, lbl );
 }
 
-void GenInput( unsigned value )
+void GenInput( int value )
 {
     instruction *ins;
 
     ins = NewIns( INS_INPUT );
-    ins->operand = value;
-    CheckLongOperand( ins );
+    SetOperand( ins, value );
     AddStream( LastIns, ins );
 }
 
@@ -158,23 +188,21 @@ void GenInputAny( void )
     AddStream( LastIns, NewIns( INS_IN_ANY ) );
 }
 
-void GenOutput( unsigned value )
+void GenOutput( int value )
 {
     instruction *ins;
 
     ins = NewIns( INS_OUTPUT );
-    ins->operand = value;
-    CheckLongOperand( ins );
+    SetOperand( ins, value );
     AddStream( LastIns, ins );
 }
 
-void GenError( unsigned value )
+void GenError( int value )
 {
     instruction *ins;
 
     ins = NewIns( INS_ERROR );
-    ins->operand = value;
-    CheckLongOperand( ins );
+    SetOperand( ins, value );
     AddStream( LastIns, ins );
 }
 
@@ -183,33 +211,31 @@ void GenJump( instruction *lbl )
     instruction *ins;
 
     ins = NewIns( INS_JUMP );
-    ins->ptr = lbl;
-    lbl->operand++;
+    ins->u.lbl = lbl;
+    lbl->u1.reference++;
     AddStream( LastIns, ins );
 }
 
-void GenReturn(void)
+void GenReturn( void )
 {
     AddStream( LastIns, NewIns( INS_RETURN ) );
 }
 
-void GenSetParm( unsigned value )
+void GenSetParm( int value )
 {
     instruction *ins;
 
     ins = NewIns( INS_SET_PARM );
-    ins->operand = value;
-    CheckLongOperand( ins );
+    SetOperand( ins, value );
     AddStream( LastIns, ins );
 }
 
-void GenSetResult( unsigned value )
+void GenSetResult( int value )
 {
     instruction *ins;
 
     ins = NewIns( INS_SET_RESULT );
-    ins->operand = value;
-    CheckLongOperand( ins );
+    SetOperand( ins, value );
     AddStream( LastIns, ins );
 }
 
@@ -218,18 +244,17 @@ void GenLblCall( instruction *lbl )
     instruction *ins;
 
     ins = NewIns( INS_CALL );
-    ins->ptr = lbl;
-    lbl->operand++;
+    ins->u.lbl = lbl;
+    lbl->u1.reference++;
     AddStream( LastIns, ins );
 }
 
-void GenSemCall( unsigned num )
+void GenSemCall( int num )
 {
     instruction *ins;
 
     ins = NewIns( INS_SEMANTIC );
-    ins->operand = num;
-    CheckLongOperand( ins );
+    SetOperand( ins, num );
     AddStream( LastIns, ins );
 }
 
@@ -251,29 +276,27 @@ instruction *GenChoice( void )
     return( ins );
 }
 
-void GenTblLabel( instruction *choice, instruction *lbl, unsigned value )
+void GenTblLabel( instruction *ins, instruction *lbl, int value )
 {
-    choice_entry *new;
+    choice_entry *choice;
     choice_entry **owner;
     choice_entry *curr;
 
-    new = malloc( sizeof( choice_entry ) );
-    if( new == NULL )
-        Error( "no memory for choice entry" );
-    lbl->operand++;
-    new->value = value;
+    lbl->u1.reference++;
+    ins->u1.operand++;
     if( (unsigned int)value != (unsigned char)value ) {
-        choice->ins |= INS_LONG;
+        ins->is_long = true;
     }
-    new->lbl = lbl;
-    for( owner = (choice_entry **)&choice->ptr; (curr = *owner) != NULL; owner = &curr->link ) {
+    for( owner = &ins->u.choice; (curr = *owner) != NULL; owner = &curr->link ) {
         if( curr->value > value ) {
             break;
         }
     }
-    new->link = curr;
-    *owner = new;
-    choice->operand++;
+    choice = MemAllocSafe( sizeof( choice_entry ) );
+    choice->value = value;
+    choice->lbl = lbl;
+    choice->link = curr;
+    *owner = choice;
 }
 
 void GenKill( void )
@@ -281,11 +304,69 @@ void GenKill( void )
     instruction *ins;
 
     ins = NewIns( INS_KILL );
-    ins->operand = SrcLine();
-    CheckLongOperand( ins );
+    SetOperand( ins, SrcLine() );
     AddStream( LastIns, ins );
 }
 
+static bool remove_lbl_dup( void )
+{
+    bool            change;
+    instruction     *ins;
+    choice_entry    *choice;
+    instruction     *lbl;
+    instruction     *lbl_next;
+
+    lbl_next = NULL;
+    change = false;
+    do {
+        lbl = lbl_next;
+        lbl_next = NULL;
+        for( ins = FirstIns; ins != NULL; ins = ins->flink ) {
+            switch( ins->opcode ) {
+            case INS_JUMP:
+            case INS_CALL:
+                if( lbl == NULL )
+                    break;
+                if( ins->u.lbl == lbl ) {
+                    ins->u.lbl->u1.reference--;
+                    lbl->flink->u1.reference++;
+                    ins->u.lbl = lbl->flink;
+                    change = true;
+                }
+                break;
+            case INS_IN_CHOICE:
+            case INS_CHOICE:
+                if( lbl == NULL )
+                    break;
+                for( choice = ins->u.choice; choice != NULL; choice = choice->link ) {
+                    if( choice->lbl == lbl ) {
+                        choice->lbl->u1.reference--;
+                        lbl->flink->u1.reference++;
+                        choice->lbl = lbl->flink;
+                        change = true;
+                    }
+                }
+                break;
+            case INS_LABEL:
+                if( ins->u1.reference == 0
+                  || lbl_next != NULL
+                  || lbl != NULL
+                  && ins == lbl ) {
+                    break;
+                }
+                /*
+                 * check if next item is label
+                 */
+                if( ins->flink->opcode == INS_LABEL
+                  && ins->flink->u1.reference ) {
+                    lbl_next = ins;
+                }
+                break;
+            }
+        }
+    } while( lbl_next != NULL );
+    return( change );
+}
 
 static bool Optimize( void )
 {
@@ -295,15 +376,17 @@ static bool Optimize( void )
     instruction *dest;
     bool        dead_code;
 
+    if( remove_lbl_dup() )
+        return( true );
+
+    next = NULL;
     dead_code = false;  /* want to keep code at location 0 */
     change = false;
     for( ins = FirstIns; ins != NULL; ins = next ) {
-        next = ins->flink;
         for( ; ins != NULL; ins = next ) {
             next = ins->flink;
-            if( !dead_code )
-                break;
-            if( ins->ins == INS_LABEL )
+            if( !dead_code
+              || ins->opcode == INS_LABEL )
                 break;
             DelStream( ins );
             change = true;
@@ -311,40 +394,43 @@ static bool Optimize( void )
         if( ins == NULL )
             break;
         dead_code = false;
-        switch( ins->ins & INS_MASK ) {
+        switch( ins->opcode ) {
         case INS_JUMP:
-            for( dest = ins->ptr; dest->ins == INS_LABEL; dest = dest->flink )
-                ;
-            switch( dest->ins & INS_MASK ) {
+            dest = ins->u.lbl;
+            SKIP_LABELS( dest );
+            switch( dest->opcode ) {
             case INS_KILL:
-                /* jump to kill */
-                next = NewIns( dest->ins );
-                next->operand = dest->operand;
-                AddStream( ins, next );
-                DelStream( ins );
+                /*
+                 * jump to kill
+                 */
+                next = NewIns( INS_KILL );
+                next->u1.operand = dest->u1.operand;
+                next->is_long = dest->is_long;
+                ReplaceStream( ins, next );
                 next = next->flink;
                 change = true;
                 break;
             case INS_RETURN:
-                /* jump to return */
+                /*
+                 * jump to return
+                 */
                 next = NewIns( INS_RETURN );
-                AddStream( ins, next );
-                DelStream( ins );
+                ReplaceStream( ins, next );
                 next = next->flink;
                 change = true;
                 break;
             case INS_JUMP:
-                /* jump to jump */
+                /*
+                 * jump to jump
+                 */
                 if( ins == dest ) {
                     next = NewIns( INS_KILL );
-                    next->operand = 0;
-                    AddStream( ins, next );
-                    DelStream( ins );
+                    ReplaceStream( ins, next );
                     next = next->flink;
                 } else {
-                    ((instruction *)ins->ptr)->operand--;
-                    ins->ptr = dest->ptr;
-                    ((instruction *)ins->ptr)->operand++;
+                    ins->u.lbl->u1.reference--;
+                    ins->u.lbl = dest->u.lbl;
+                    ins->u.lbl->u1.reference++;
                 }
                 change = true;
                 break;
@@ -352,41 +438,46 @@ static bool Optimize( void )
             dead_code = true;
             break;
         case INS_CALL:
-            dest = ins->ptr;
+            dest = ins->u.lbl;
             if( dest->location == NO_LOCATION )
                 break;
-            for( ; dest->ins == INS_LABEL; dest = dest->flink )
-                ;
-            switch( dest->ins & INS_MASK ) {
+            SKIP_LABELS( dest );
+            switch( dest->opcode ) {
             case INS_KILL:
-                /* call to kill */
+                /*
+                 * call to kill
+                 */
                 dead_code = true;
-                next = NewIns( dest->ins );
-                next->operand = dest->operand;
-                AddStream( ins, next );
-                DelStream( ins );
+                next = NewIns( INS_KILL );
+                next->u1.operand = dest->u1.operand;
+                next->is_long = dest->is_long;
+                ReplaceStream( ins, next );
                 change = true;
                 break;
             case INS_RETURN:
-                /* call to return */
+                /*
+                 * call to return
+                 */
                 DelStream( ins );
                 change = true;
                 break;
             case INS_JUMP:
-                /* call to jump */
-                ((instruction *)ins->ptr)->operand--;
-                ins->ptr = dest->ptr;
-                ((instruction *)ins->ptr)->operand++;
+                /*
+                 * call to jump
+                 */
+                ins->u.lbl->u1.reference--;
+                ins->u.lbl = dest->u.lbl;
+                ins->u.lbl->u1.reference++;
                 change = true;
                 break;
             default:
-                for( dest = ins->flink;
-                     dest->ins == INS_LABEL;
-                     dest = dest->flink )
-                    ;
-                if( dest->ins == INS_RETURN ) {
-                    /* call followed by a return */
-                    ins->ins = INS_JUMP;
+                dest = ins->flink;
+                SKIP_LABELS( dest );
+                if( dest->opcode == INS_RETURN ) {
+                    /*
+                     * call followed by a return
+                     */
+                    ins->opcode = INS_JUMP;
                     change = true;
                     dead_code = true;
                 }
@@ -400,8 +491,10 @@ static bool Optimize( void )
             dead_code = true;
             break;
         case INS_LABEL:
-            /* dead label */
-            if( ins->operand == 0 ) {
+            if( ins->u1.reference == 0 ) {
+                /*
+                 * remove dead label
+                 */
                 DelStream( ins );
                 change = true;
             }
@@ -420,7 +513,7 @@ static unsigned Locate( void )
     loc = 0;
     for( ins = FirstIns; ins != NULL; ins = ins->flink ) {
         ins->location = loc;
-        switch( ins->ins & INS_MASK ) {
+        switch( ins->opcode ) {
         case INS_RETURN:
         case INS_IN_ANY:
             loc += sizeof( char );
@@ -429,36 +522,36 @@ static unsigned Locate( void )
         case INS_ERROR:
         case INS_OUTPUT:
             loc += sizeof( char ) + sizeof( char );
-            if( ins->ins & INS_LONG )
+            if( ins->is_long )
                 loc += sizeof( char );
             break;
         case INS_JUMP:
         case INS_CALL:
             loc += sizeof( char ) + sizeof( char );
-            if( ins->ins & INS_LONG )
+            if( ins->is_long )
                 loc += sizeof( char );
             break;
         case INS_IN_CHOICE:
         case INS_CHOICE:
-            loc += sizeof( char ) + sizeof( char ) + ins->operand *
-                       ( sizeof( char ) + sizeof( unsigned short ) );
-            if( ins->ins & INS_LONG )
-                loc += ins->operand * sizeof( char );
+            loc += sizeof( char ) + sizeof( char )
+                + ins->u1.operand * ( sizeof( char ) + sizeof( short ) );
+            if( ins->is_long )
+                loc += ins->u1.operand * sizeof( char );
             break;
         case INS_SET_RESULT:
         case INS_SET_PARM:
             loc += sizeof( char ) + sizeof( char );
-            if( ins->ins & INS_LONG )
+            if( ins->is_long )
                 loc += sizeof( char );
             break;
         case INS_SEMANTIC:
             loc += sizeof( char ) + sizeof( char );
-            if( ins->ins & INS_LONG )
+            if( ins->is_long )
                 loc += sizeof( char );
             break;
         case INS_KILL:
             loc += sizeof( char ) + sizeof( char );
-            if( ins->ins & INS_LONG )
+            if( ins->is_long )
                 loc += sizeof( char );
             break;
         case INS_LABEL:
@@ -474,18 +567,20 @@ static bool Expand( void )
 {
     instruction *ins;
     instruction *dest;
-    signed int  diff;
+    int         diff;
     bool        change;
+    bool        is_long;
 
     change = false;
     for( ins = FirstIns; ins != NULL; ins = ins->flink ) {
-        switch( ins->ins ) {
-        case INS_JUMP: /* short form */
-        case INS_CALL: /* short form */
-            dest = ins->ptr;
+        switch( ins->opcode ) {
+        case INS_JUMP:
+        case INS_CALL:
+            dest = ins->u.lbl;
             diff = dest->location - ins->location;
-            if( diff != (signed char)diff ) {
-                ins->ins |= INS_LONG; /* change to long form */
+            is_long = ( diff != (signed char)diff );
+            if( ins->is_long != is_long ) {
+                ins->is_long = is_long;
                 change = true;
             }
             break;
@@ -494,7 +589,7 @@ static bool Expand( void )
     return( change );
 }
 
-extern void GenCode( void )
+void GenCode( void )
 {
     while( Optimize() )
         ;
@@ -505,10 +600,10 @@ extern void GenCode( void )
 
 static void OutOper( instruction *ins )
 {
-    if( ins->ins & INS_LONG ) {
-        OutWord( ins->operand );
+    if( ins->is_long ) {
+        OutWord( ins->u1.operand );
     } else {
-        OutByte( ins->operand );
+        OutByte( (unsigned char)ins->u1.operand );
     }
 }
 
@@ -516,11 +611,11 @@ static void OutDisp( instruction *ins )
 {
     int disp;
 
-    disp = ((instruction *)ins->ptr)->location - ins->location;
-    if( ins->ins & INS_LONG ) {
+    disp = ins->u.lbl->location - ins->location;
+    if( ins->is_long ) {
         OutWord( disp );
     } else {
-        OutByte( disp );
+        OutByte( (unsigned char)disp );
     }
 }
 
@@ -533,35 +628,44 @@ void DumpGenCode( void )
     OutStartSect( "Code", Locate() );
     for( ins = FirstIns; ins != NULL; ins = next ) {
         next = ins->flink;
-        if( ins->ins != INS_LABEL )
-            OutByte( ins->ins );
-        Dump( "[%.4x] %c ", ins->location, (ins->ins & INS_LONG) ? 'L' : 'S' );
-        switch( ins->ins & INS_MASK ) {
+        if( ins->opcode == INS_LABEL ) {
+            /*
+             * don't generate any code for labels
+             */
+            Dump( "[%.4x] - ", ins->location );
+        } else if( ins->is_long ) {
+            OutByte( (unsigned char)( ins->opcode | INS_LONG ) );
+            Dump( "[%.4x] L ", ins->location );
+        } else {
+            OutByte( (unsigned char)ins->opcode );
+            Dump( "[%.4x] S ", ins->location );
+        }
+        switch( ins->opcode ) {
         case INS_INPUT:
-            Dump( "INPUT: %d\n", ins->operand );
+            Dump( "INPUT: %d\n", ins->u1.operand );
             OutOper( ins );
             break;
         case INS_IN_ANY:
             Dump( "IN_ANY\n" );
             break;
         case INS_OUTPUT:
-            Dump( "OUTPUT: %d\n", ins->operand );
+            Dump( "OUTPUT: %d\n", ins->u1.operand );
             OutOper( ins );
             break;
         case INS_ERROR:
-            Dump( "ERROR: %d\n", ins->operand );
+            Dump( "ERROR: %d\n", ins->u1.operand );
             OutOper( ins );
             break;
         case INS_JUMP:
-            Dump( "JUMP L%.4x\n", ((instruction *)ins->ptr)->location );
+            Dump( "JUMP L%.4x\n", ins->u.lbl->location );
             OutDisp( ins );
             break;
         case INS_CALL:
-            Dump( "CALL L%.4x\n", ((instruction *)ins->ptr)->location );
+            Dump( "CALL L%.4x\n", ins->u.lbl->location );
             OutDisp( ins );
             break;
         case INS_SET_RESULT:
-            Dump( "SET RES: %d\n", ins->operand );
+            Dump( "SET RES: %d\n", ins->u1.operand );
             OutOper( ins );
             break;
         case INS_RETURN:
@@ -569,35 +673,77 @@ void DumpGenCode( void )
             break;
         case INS_IN_CHOICE:
         case INS_CHOICE:
-            Dump( "%sCHOICE: %d\n", ((ins->ins & INS_MASK) == INS_IN_CHOICE) ? "IN_" : "", ins->operand );
-            OutByte( ins->operand );
-            for( choice = ins->ptr; choice != NULL; choice = choice->link ) {
+            Dump( "%sCHOICE: %d\n", ( ins->opcode == INS_IN_CHOICE ) ? "IN_" : "", ins->u1.operand );
+            OutByte( (unsigned char)ins->u1.operand );
+            for( choice = ins->u.choice; choice != NULL; choice = choice->link ) {
                 Dump( "        %4d L%.4x\n", choice->value, choice->lbl->location );
-                if( ins->ins & INS_LONG ) {
+                if( ins->is_long ) {
                     OutWord( choice->value );
                 } else {
-                    OutByte( choice->value );
+                    OutByte( (unsigned char)choice->value );
                 }
                 OutWord( choice->lbl->location );
             }
             break;
         case INS_SET_PARM:
-            Dump( "SET PARM: %d\n", ins->operand );
+            Dump( "SET PARM: %d\n", ins->u1.operand );
             OutOper( ins );
             break;
         case INS_SEMANTIC:
-            Dump( "SEMANTIC: %d\n", ins->operand );
+            Dump( "SEMANTIC: %d\n", ins->u1.operand );
             OutOper( ins );
             break;
         case INS_KILL:
-            Dump( "KILL: %d\n", ins->operand );
+            Dump( "KILL: %d\n", ins->u1.operand );
             OutOper( ins );
             break;
         case INS_LABEL:
-            Dump( "LABEL: %d\n", ins->operand );
+            /*
+             * don't generate any code for labels
+             */
+            Dump( "LABEL: %d\n", ins->u1.reference );
             break;
+        default:
+            Dump( "UNKNOWN: %d\n", ins->opcode );
         }
-        DelStream( ins );
     }
     OutEndSect();
+}
+
+void InsMemFree( instruction *ins )
+{
+    choice_entry        *choice;
+
+    switch( ins->opcode ) {
+    case INS_IN_CHOICE:
+    case INS_CHOICE:
+        while( (choice = ins->u.choice) != NULL ) {
+            ins->u.choice = choice->link;
+            MemFree( choice );
+        }
+        break;
+    }
+    MemFree( ins );
+}
+
+void FreeGenCode( void )
+{
+    instruction *next;
+
+    /*
+     * deallocate instructions in generated code
+     */
+    while( FirstIns != NULL ) {
+        next = FirstIns->flink;
+        InsMemFree( FirstIns );
+        FirstIns = next;
+    }
+    /*
+     * deallocate pool of free instructions
+     */
+    while( FreeInsPool != NULL ) {
+        next = FreeInsPool->flink;
+        InsMemFree( FreeInsPool );
+        FreeInsPool = next;
+    }
 }

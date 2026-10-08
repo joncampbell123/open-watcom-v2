@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -134,7 +134,7 @@ char *SetStringOption( char **o, OPT_STRING **h )
     p = NULL;
     if( s != NULL ) {
         if( s->data[0] != '\0' ) {
-            p = CMemStrDup( s->data );
+            p = CMemStrdup( s->data );
         }
         OPT_CLEAN_STRING( h );
     }
@@ -389,7 +389,22 @@ void SetTargetName( char **target_name, const char *name )
     if( *target_name != NULL ) {
         CMemFree( *target_name );
     }
-    *target_name = CMemStrDup( name );
+    *target_name = CMemStrdup( name );
+}
+
+void SetTargetNameBT( char **target_name, OPT_STRING **bt_value )
+/***************************************************************/
+{
+    char            *p;
+    int             c;
+
+    if( *target_name != NULL ) {
+        CMemFree( *target_name );
+    }
+    *target_name = p = SetStringOption( NULL, bt_value );
+    while( (c = *(unsigned char *)p) != '\0' ) {
+        *p++ = (char)toupper( c );
+    }
 }
 
 static void AnalyseAnyTargetOptions( OPT_STORAGE *data )
@@ -742,6 +757,10 @@ static void AnalyseAnyTargetOptions( OPT_STORAGE *data )
         CompFlags.cpp_output = true;
         CompFlags.quiet_mode = true;
     }
+    if( data->pm ) {
+        CompFlags.cpp_dump_macros = true;
+        CompFlags.quiet_mode = true;
+    }
     if( data->rod ) {
         OPT_STRING *s;
         for( s = data->rod_value; s != NULL; s = s->next ) {
@@ -865,13 +884,6 @@ static char *ReadIndirectFile( const char *fname )
               || ch == '\n' ) {
                 *str = ' ';
             }
-            /*
-             * if DOS end of file (^Z) -> mark end of str
-             */
-            if( ch == DOS_EOF_CHAR ) {
-                *str = '\0';
-                break;
-            }
         }
     }
     return( env );
@@ -932,7 +944,13 @@ static void ProcOptions( OPT_STORAGE *data, const char *str )
             }
             if( CmdScanSwitchChar( ch ) ) {
                 switch_start = CmdScanAddr() - 1;
-                OPT_PROCESS( data );
+                if( OPT_PROCESS( data ) ) {
+                    /*
+                     * incorrect option
+                     */
+                    CBanner();
+                    BadCmdLineOption();
+                }
             } else {  /* collect  file name */
                 CmdScanUngetChar();
                 switch_start = CmdScanAddr();

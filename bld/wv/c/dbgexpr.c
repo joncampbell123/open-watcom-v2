@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2024      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2024-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -36,9 +36,9 @@
 #include "liteng.h"
 #include "dbgstk.h"
 #include "dbgerr.h"
-#include "dbgmem.h"
+#include "memfuncs.h"
 #include "ldsupp.h"
-#include "madinter.h"
+#include "wvmadcli.h"
 #include "i64.h"
 #include "dbgscan.h"
 #include "dbgexpr4.h"
@@ -92,9 +92,13 @@ void CreateLC( stack_entry *entry )
     location_context    *new;
 
     if( entry->lc == NULL ) {
-        _ChkAlloc( new, sizeof( *new ), LIT_ENG( ERR_NO_MEMORY_FOR_EXPR ) );
-        InitLC( new, false );
-        entry->lc = new;
+        new = MemAlloc( sizeof( *new ) );
+        if( new == NULL ) {
+            Error( ERR_NONE, LIT_ENG( ERR_NO_MEMORY_FOR_EXPR ) );
+        } else {
+            InitLC( new, false );
+            entry->lc = new;
+        }
     }
 }
 
@@ -103,7 +107,7 @@ void FreeLC( stack_entry *entry )
     if( entry->lc != NULL ) {
         entry->lc->use--;
         if( entry->lc->use == 0 ) {
-            _Free( entry->lc );
+            MemFree( entry->lc );
             entry->lc = NULL;
         }
     }
@@ -134,16 +138,20 @@ void CreateEntry( void )
     stack_entry *new;
     unsigned    size;
 
-    size = sizeof( stack_entry ) + type_SIZE + sym_SIZE;
-    _ChkAlloc( new, size, LIT_ENG( ERR_NO_MEMORY_FOR_EXPR ) );
-    memset( new, 0, size );
-    new->up = ExprSP;
-    new->dn = ExprSP->dn;
-    if( new->dn != NULL )
-        new->dn->up = new;
-    if( new->up != NULL )
-        new->up->dn = new;
-    ExprSP = new;
+    size = sizeof( *new ) + type_SIZE + sym_SIZE;
+    new = MemAlloc( size );
+    if( new == NULL ) {
+        Error( ERR_NONE, LIT_ENG( ERR_NO_MEMORY_FOR_EXPR ) );
+    } else {
+        memset( new, 0, size );
+        new->up = ExprSP;
+        new->dn = ExprSP->dn;
+        if( new->dn != NULL )
+            new->dn->up = new;
+        if( new->up != NULL )
+            new->up->dn = new;
+        ExprSP = new;
+    }
 }
 
 bool AllocatedString( stack_entry *stk )
@@ -159,9 +167,9 @@ bool AllocatedString( stack_entry *stk )
 static void FreeEntry( stack_entry *old )
 {
     if( AllocatedString( old ) )
-        _Free( old->v.string.allocated );
+        MemFree( old->v.string.allocated );
     FreeLC( old );
-    _Free( old );
+    MemFree( old );
 }
 
 
@@ -296,8 +304,12 @@ char *DupStringVal( stack_entry *stk )
         return( NULL );
     if( stk->ti.size >= UINT_MAX )
         Error( ERR_NONE, LIT_ENG( ERR_NO_MEMORY_FOR_EXPR ) );
-    _ChkAlloc( dest, stk->ti.size, LIT_ENG( ERR_NO_MEMORY_FOR_EXPR ) );
-    memcpy( dest, stk->v.string.loc.e[0].u.p, stk->ti.size );
+    dest = MemAlloc( stk->ti.size );
+    if( dest == NULL ) {
+        Error( ERR_NONE, LIT_ENG( ERR_NO_MEMORY_FOR_EXPR ) );
+    } else {
+        memcpy( dest, stk->v.string.loc.e[0].u.p, stk->ti.size );
+    }
     return( dest );
 }
 
@@ -349,7 +361,7 @@ void PushName( lookup_item *li )
 void PushNum( long val )
 {
     CreateEntry();
-    I32ToI64( val, &ExprSP->v.sint );
+    Set64ValI32( ExprSP->v.sint, val );
     ClassNum( ExprSP );
 }
 
@@ -488,7 +500,7 @@ void PushType( type_handle *th )
 void PushInt( int val )
 {
     CreateEntry();
-    I32ToI64( val, &ExprSP->v.sint );
+    Set64ValI32( ExprSP->v.sint, val );
     ExprSP->ti.kind = TK_INTEGER;
     ExprSP->ti.modifier = TM_SIGNED;
     ExprSP->ti.size = sizeof( ExprSP->v.sint );
@@ -498,7 +510,7 @@ void PushInt( int val )
 static void PushBool( int val )
 {
     CreateEntry();
-    I32ToI64( val, &ExprSP->v.sint );
+    Set64ValI32( ExprSP->v.sint, val );
     ExprSP->ti.kind = TK_BOOL;
     ExprSP->ti.modifier = TM_NONE;
     ExprSP->ti.size = 1;
@@ -571,7 +583,7 @@ int TstEQ( int true_value )
     case TK_ENUM:
     case TK_CHAR:
     case TK_INTEGER:
-        temp = (U64Cmp( &left->v.uint, &rite->v.uint ) == 0);
+        temp = U64isEq( left->v.uint, rite->v.uint );
         break;
     case TK_ADDRESS:
     case TK_POINTER:
@@ -745,7 +757,7 @@ void ExprPurge( void )
     stk_ptr->dn = NULL;
     ExprSP = stk_ptr;
     if( StringStart != NULL )
-        _Free( StringStart );
+        MemFree( StringStart );
     FreePgmStack( true );
 }
 

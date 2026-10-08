@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -47,9 +47,7 @@
 #else
     #include <windows.h>
 #endif
-#ifdef TRMEM
-    #include "trmem.h"
-#endif
+#include "trmem.h"
 
 #include "clibext.h"
 
@@ -230,7 +228,7 @@ void reportError(WicErrors err, ...)
 
 #pragma initialize  40;
 
-static _trmem_hdl   TrHdl;
+static _trmem_hdl   TrHdl = _TRMEM_HDL_NONE;
 static unsigned     NumMessages = 0;
 
 static enum {
@@ -278,11 +276,12 @@ void outOfMemory( void )
 void *_debugVar = 0;
 #endif
 
+TRMEMAPI( BasicAlloc )
 static void *BasicAlloc(size_t size)
 {
     void *temp;
 #ifdef TRMEM
-    temp = _trmem_alloc( size, _trmem_guess_who(), TrHdl );
+    temp = _trmem_alloc( size, _TRMEM_WHO( 1 ), TrHdl );
 #else
     temp = malloc(size);
 #endif
@@ -320,13 +319,14 @@ char *wicStrdup(const char *src)
     return temp;
 }
 
+TRMEMAPI( BasicFree )
 void BasicFree(void *ptr)
 {
     incDebugCount();
     if (ptr != NULL) {
         unsigned temp = _msize(ptr);
 #ifdef TRMEM
-        _trmem_free( ptr, _trmem_guess_who(), TrHdl );
+        _trmem_free( ptr, _TRMEM_WHO( 2 ), TrHdl );
 #else
         free(ptr);
 #endif
@@ -382,10 +382,9 @@ void initMemory(void)
     reportBadHeap(_heapset(0));
 #endif
 #ifdef TRMEM
-    TrHdl = _trmem_open( malloc, free, NULL, NULL, NULL, _printLine,
-            _TRMEM_ALLOC_SIZE_0 | _TRMEM_REALLOC_SIZE_0 |
-            _TRMEM_OUT_OF_MEMORY | _TRMEM_CLOSE_CHECK_FREE );
-    if (TrHdl == NULL) {
+    TrHdl = _trmem_open( malloc, free, _TRMEM_NO_REALLOC, _TRMEM_NO_STRDUP,
+                            NULL, _printLine, _TRMEM_DEF );
+    if (TrHdl == _TRMEM_HDL_NONE) {
         puts( "Memory initialization failed." );
         exit(1);
     }

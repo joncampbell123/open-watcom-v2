@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -50,18 +50,6 @@
 
 bool    StopInvoked = false;
 
-static RcStatus copyStubFile( ExeFileInfo *src, ExeFileInfo *dst, int *err_code )
-/********************************************************************************
- * copy from the begining of the file to the start of the win exe header
- */
-{
-    RcStatus    ret;
-
-    ret = CopyExeData( src->fp, dst->fp, src->WinHeadOffset );
-    *err_code = errno;
-    return( ret );
-} /* copyStubFile */
-
 static RcStatus seekPastResTable( ExeFileInfo *src, ExeFileInfo *dst, int *err_code )
 {
     long            winheadoffset;
@@ -88,10 +76,9 @@ static RcStatus seekPastResTable( ExeFileInfo *src, ExeFileInfo *dst, int *err_c
 
 } /* seekPastResTable */
 
-static RcStatus copyOtherTables( ExeFileInfo *src, ExeFileInfo *dst, int *err_code )
+static RcStatus copyOtherTables( ExeFileInfo *src, ExeFileInfo *dst )
 {
     uint_32         tablelen;
-    RcStatus        ret;
 
     /*
      * the other tables start at the resident names table and end at the end
@@ -100,13 +87,10 @@ static RcStatus copyOtherTables( ExeFileInfo *src, ExeFileInfo *dst, int *err_co
     tablelen = (src->u.NEInfo.WinHead.nonres_off + src->u.NEInfo.WinHead.nonres_size) - ( src->WinHeadOffset + src->u.NEInfo.WinHead.resident_off );
 
     if( RESSEEK( src->fp, src->WinHeadOffset + src->u.NEInfo.WinHead.resident_off, SEEK_SET ) ) {
-        *err_code = errno;
         return( RS_READ_ERROR );
     }
 
-    ret = CopyExeData( src->fp, dst->fp, tablelen );
-    *err_code = errno;
-    return( ret );
+    return( CopyExeData( src->fp, dst->fp, tablelen ) );
 } /* copyOtherTables */
 
 static int computeShiftCount( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
@@ -126,7 +110,7 @@ static int computeShiftCount( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *r
 
     num_segs = src->u.NEInfo.WinHead.segments;
     if( ! CmdLineParms.NoResFile ) {
-        num_segs += WResGetNumResources( res->Dir );
+        num_segs += res->Dir->NumResources;
     }
 
     shift_count = FindShiftCount( filelen, num_segs );
@@ -150,21 +134,25 @@ static void checkShiftCount( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *re
 
 static bool copyWINBody( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
 {
-    uint_16             sect2mask = 0;
-    uint_16             sect2bits = 0;
+    ResMemFlags         res2mask;
+    ResMemFlags         res2bits;
+    uint_16             sect2mask;
+    uint_16             sect2bits;
     uint_16             shift_count;
     long                gangloadstart;
     long                gangloadlen;
     CpSegRc             copy_segs_ret;
     bool                use_gangload = false;
 
+    res2mask = RESFLAG_NONE;
+    res2bits = RESFLAG_NONE;
+    sect2mask = 0;
+    sect2bits = 0;
     switch( CmdLineParms.SegmentSorting ) {
     case SEG_SORT_NONE:
         /*
          * all segments in section 2
          */
-        sect2mask = 0;
-        sect2bits = 0;
         use_gangload = false;
         dst->u.NEInfo.WinHead.align = src->u.NEInfo.WinHead.align;
         dst->u.NEInfo.Res.Dir.ResShiftCount = computeShiftCount( src, dst, res );
@@ -173,8 +161,8 @@ static bool copyWINBody( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
         /*
          * all load on call segments in section 2
          */
+        res2mask = RESFLAG_PRELOAD;
         sect2mask = SEG_PRELOAD;
-        sect2bits = 0;
         use_gangload = true;
         checkShiftCount( src, dst, res );
         break;
@@ -182,6 +170,8 @@ static bool copyWINBody( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
         /*
          * only load on call, discardable, code segments in section 2
          */
+        res2mask = RESFLAG_PRELOAD | RESFLAG_DISCARDABLE;
+        res2bits = RESFLAG_DISCARDABLE;
         sect2mask = SEG_DATA | SEG_PRELOAD | SEG_DISCARD;
         sect2bits = SEG_DISCARD;
         /*
@@ -202,7 +192,7 @@ static bool copyWINBody( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
         break;
     }
     /*
-     * third arg to Copy???? is false --> copy section one
+     * fifth arg to CopyWIN.... is false --> copy section one
      */
     gangloadstart = RESTELL( dst->fp );
     gangloadstart += AlignAmount( gangloadstart, dst->u.NEInfo.Res.Dir.ResShiftCount );
@@ -221,20 +211,20 @@ static bool copyWINBody( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
         break;
     }
     if( ! CmdLineParms.NoResFile ) {
-        if( CopyWINResources( dst, res, sect2mask, sect2bits, false ) != RS_OK ) {
+        if( CopyWINResources( dst, res, res2mask, res2bits, false ) != RS_OK ) {
             return( true );
         }
     }
     gangloadlen = RESTELL( dst->fp ) - gangloadstart;
     /*
-     * third arg to Copy???? is true  --> copy section two
+     * fifth arg to CopyWIN.... is true --> copy section two
      */
     copy_segs_ret = CopyWINSegments( src, dst, sect2mask, sect2bits, true );
     if( copy_segs_ret == CPSEG_ERROR ) {
         return( true );
     }
     if( !CmdLineParms.NoResFile ) {
-        if( CopyWINResources( dst, res, sect2mask, sect2bits, true ) != RS_OK ) {
+        if( CopyWINResources( dst, res, res2mask, res2bits, true ) != RS_OK ) {
             return( true );
         }
     }
@@ -344,8 +334,8 @@ static RcStatus writeHeadAndTables( ExeFileInfo *src, ExeFileInfo *dst, int *err
     dst->u.NEInfo.WinHead.target = src->u.NEInfo.WinHead.target;
     /* |= the next one since the WIN_GANGLOAD_PRESENT flag may be set */
     dst->u.NEInfo.WinHead.otherflags |= src->u.NEInfo.WinHead.otherflags;
-    dst->u.NEInfo.WinHead.swaparea =   0;      /* What is this field for? */
-    dst->u.NEInfo.WinHead.expver = CmdLineParms.Win16VerStamp;
+    dst->u.NEInfo.WinHead.swaparea = 0;      /* What is this field for? */
+    dst->u.NEInfo.WinHead.expver = CmdLineParms.win16stamp;
     /*
      * seek to the start of the os2_exe_header in dst
      */
@@ -486,7 +476,7 @@ static RcStatus findEndOfResources( ExeFileInfo *src, int *err_code )
         return( RESIOERR( src->fp, numread ) ? RS_READ_ERROR : RS_READ_INCMPLT );
     }
     end = 0;
-    while( typeinfo.type != 0 ) {
+    while( typeinfo.type_id != 0 ) {
         for( i = typeinfo.num_resources; i > 0 ; --i ) {
             numread = RESREAD( src->fp, &nameinfo, sizeof( nameinfo ) );
             if( numread != sizeof( nameinfo ) ) {
@@ -563,85 +553,90 @@ bool MergeResExeWINNE( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
     bool            error;
     int             err_code;
 
-    ret = copyStubFile( src, dst, &err_code );
+    /* copy data from the src file to dst file */
+    ret = CopyExeData( src->fp, dst->fp, src->WinHeadOffset );
+    err_code = errno;
     if( ret != RS_OK )
         goto REPORT_ERROR;
-    if( StopInvoked )
-        goto STOP_ERROR;
+    if( StopInvoked ) {
+        RcFatalError( ERR_STOP_REQUESTED );
+        /* never return */
+    }
 
     ret = AllocAndReadWINSegTables( src, dst, &err_code );
     if( ret != RS_OK )
         goto REPORT_ERROR;
-    if( StopInvoked )
-        goto STOP_ERROR;
+    if( StopInvoked ) {
+        RcFatalError( ERR_STOP_REQUESTED );
+        /* never return */
+    }
 
     InitWINResTable( dst, res );
 
     ret = seekPastResTable( src, dst, &err_code );
     if( ret != RS_OK )
         goto REPORT_ERROR;
-    if( StopInvoked )
-        goto STOP_ERROR;
+    if( StopInvoked ) {
+        RcFatalError( ERR_STOP_REQUESTED );
+        /* never return */
+    }
 
     ret = findEndOfResources( src, &err_code );
     if( ret != RS_OK )
         goto REPORT_ERROR;
-    if( StopInvoked )
-        goto STOP_ERROR;
+    if( StopInvoked ) {
+        RcFatalError( ERR_STOP_REQUESTED );
+        /* never return */
+    }
 
-    ret = copyOtherTables( src, dst, &err_code );
+    ret = copyOtherTables( src, dst );
+    err_code = errno;
     if( ret != RS_OK )
         goto REPORT_ERROR;
-    if( StopInvoked )
-        goto STOP_ERROR;
+    if( StopInvoked ) {
+        RcFatalError( ERR_STOP_REQUESTED );
+        /* never return */
+    }
 
     error = copyWINBody( src, dst, res );
     if( error )
         goto HANDLE_ERROR;
-    if( StopInvoked )
-        goto STOP_ERROR;
+    if( StopInvoked ) {
+        RcFatalError( ERR_STOP_REQUESTED );
+        /* never return */
+    }
 
     ret = copyDebugInfo( src, dst );
     if( ret != RS_OK ) {
         err_code = errno;
         goto REPORT_ERROR;
     }
-    if( StopInvoked )
-        goto STOP_ERROR;
+    if( StopInvoked ) {
+        RcFatalError( ERR_STOP_REQUESTED );
+        /* never return */
+    }
 
     ret = writeHeadAndTables( src, dst, &err_code );
     if( ret != RS_OK )
         goto REPORT_ERROR;
-    if( StopInvoked )
-        goto STOP_ERROR;
+    if( StopInvoked ) {
+        RcFatalError( ERR_STOP_REQUESTED );
+        /* never return */
+    }
 
     return( true );
 
 REPORT_ERROR:
-    switch( ret ) {
-    case RS_READ_ERROR:
-        RcError( ERR_READING_EXE, src->name, strerror( err_code ) );
-        break;
-    case RS_READ_INCMPLT:
-        RcError( ERR_UNEXPECTED_EOF, src->name );
-        break;
-    case RS_WRITE_ERROR:
-        RcError( ERR_WRITTING_TMP, dst->name, strerror( err_code ) );
-        break;
-    case RS_NO_MEM:
-        break;
-    default:
-        RcError( ERR_INTERNAL, INTERR_UNKNOWN_RCSTATUS );
+    if( ret == RS_READ_ERROR ) {
+        ret = RS_READ_ERROR_EXE;
+    } else if( ret == RS_WRITE_ERROR ) {
+        ret = RS_WRITE_ERROR_TMP;
     }
+    RcIOError( ret, src->name, dst->name, err_code );
     /* fall through */
 HANDLE_ERROR:
     return( false );
 
-STOP_ERROR:
-    RcFatalError( ERR_STOP_REQUESTED );
-#if !defined( __WATCOMC__ )
-    return( false );
-#endif
 } /* MergeResExeWINNE */
 
 
@@ -652,83 +647,88 @@ bool MergeResExeOS2NE( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *res )
     bool            error;
     int             err_code;
 
-    ret = copyStubFile( src, dst, &err_code );
+    /* copy data from the src file to dst file */
+    ret = CopyExeData( src->fp, dst->fp, src->WinHeadOffset );
+    err_code = errno;
     if( ret != RS_OK )
         goto REPORT_ERROR;
-    if( StopInvoked )
-        goto STOP_ERROR;
+    if( StopInvoked ) {
+        RcFatalError( ERR_STOP_REQUESTED );
+        /* never return */
+    }
 
     ret = InitOS2ResTable( dst, res, &err_code );
     if( ret != RS_OK )
         goto REPORT_ERROR;
-    if( StopInvoked )
-        goto STOP_ERROR;
+    if( StopInvoked ) {
+        RcFatalError( ERR_STOP_REQUESTED );
+        /* never return */
+    }
 
     ret = AllocAndReadOS2SegTables( src, dst, res, &err_code );
     if( ret != RS_OK )
         goto REPORT_ERROR;
-    if( StopInvoked )
-        goto STOP_ERROR;
+    if( StopInvoked ) {
+        RcFatalError( ERR_STOP_REQUESTED );
+        /* never return */
+    }
 
     ret = seekPastResTable( src, dst, &err_code );
     if( ret != RS_OK )
         goto REPORT_ERROR;
-    if( StopInvoked )
-        goto STOP_ERROR;
+    if( StopInvoked ) {
+        RcFatalError( ERR_STOP_REQUESTED );
+        /* never return */
+    }
 
-    ret = copyOtherTables( src, dst, &err_code );
+    ret = copyOtherTables( src, dst );
+    err_code = errno;
     if( ret != RS_OK )
         goto REPORT_ERROR;
-    if( StopInvoked )
-        goto STOP_ERROR;
+    if( StopInvoked ) {
+        RcFatalError( ERR_STOP_REQUESTED );
+        /* never return */
+    }
 
     error = copyOS2Body( src, dst, res );
     if( error )
         goto HANDLE_ERROR;
-    if( StopInvoked )
-        goto STOP_ERROR;
+    if( StopInvoked ) {
+        RcFatalError( ERR_STOP_REQUESTED );
+        /* never return */
+    }
 
     ret = copyDebugInfo( src, dst );
     if( ret != RS_OK ) {
         err_code = errno;
         goto REPORT_ERROR;
     }
-    if( StopInvoked )
-        goto STOP_ERROR;
+    if( StopInvoked ) {
+        RcFatalError( ERR_STOP_REQUESTED );
+        /* never return */
+    }
 
     ret = writeOS2HeadAndTables( src, dst, &err_code );
     if( ret != RS_OK )
         goto REPORT_ERROR;
-    if( StopInvoked )
-        goto STOP_ERROR;
+    if( StopInvoked ) {
+        RcFatalError( ERR_STOP_REQUESTED );
+        /* never return */
+    }
 
     return( true );
 
 REPORT_ERROR:
-    switch( ret ) {
-    case RS_READ_ERROR:
-        RcError( ERR_READING_EXE, src->name, strerror( err_code ) );
-        break;
-    case RS_READ_INCMPLT:
-        RcError( ERR_UNEXPECTED_EOF, src->name );
-        break;
-    case RS_WRITE_ERROR:
-        RcError( ERR_WRITTING_TMP, dst->name, strerror( err_code ) );
-        break;
-    case RS_NO_MEM:
-        break;
-    default:
-        RcError( ERR_INTERNAL, INTERR_UNKNOWN_RCSTATUS );
+    if( ret == RS_READ_ERROR ) {
+        ret = RS_READ_ERROR_EXE;
+    } else if( ret == RS_WRITE_ERROR ) {
+        ret = RS_WRITE_ERROR_TMP;
     }
+    RcIOError( ret, src->name, dst->name, err_code );
     /* fall through */
 HANDLE_ERROR:
     return( false );
 
-STOP_ERROR:
-    RcFatalError( ERR_STOP_REQUESTED );
-#if !defined( __WATCOMC__ )
-    return( false );
-#endif
 } /* MergeResExeOS2NE */
 
 
@@ -795,78 +795,75 @@ bool MergeResExePE( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *resfiles )
     bool        error;
     int         err_code;
 
-    ret = copyStubFile( src, dst, &err_code );
+    /* copy data from the src file to dst file */
+    ret = CopyExeData( src->fp, dst->fp, src->WinHeadOffset );
+    err_code = errno;
     if( ret != RS_OK )
         goto REPORT_ERROR;
-    if( StopInvoked )
-        goto STOP_ERROR;
+    if( StopInvoked ) {
+        RcFatalError( ERR_STOP_REQUESTED );
+        /* never return */
+    }
 
     error = CopyExeObjects( src, dst );
     if( error )
         goto HANDLE_ERROR;
-    if( StopInvoked )
-        goto STOP_ERROR;
+    if( StopInvoked ) {
+        RcFatalError( ERR_STOP_REQUESTED );
+        /* never return */
+    }
 
     error = RcBuildPEResourceObject( dst, resfiles );
     if( error )
         goto HANDLE_ERROR;
-    if( StopInvoked )
-        goto STOP_ERROR;
+    if( StopInvoked ) {
+        RcFatalError( ERR_STOP_REQUESTED );
+        /* never return */
+    }
 
     ret = copyDebugInfo( src, dst );
     if( ret != RS_OK ) {
         err_code = errno;
         goto REPORT_ERROR;
     }
-    if( StopInvoked )
-        goto STOP_ERROR;
+    if( StopInvoked ) {
+        RcFatalError( ERR_STOP_REQUESTED );
+        /* never return */
+    }
 
     ret = writePEHeadAndObjTable( dst );
     if( ret != RS_OK ) {
         err_code = errno;
         goto REPORT_ERROR;
     }
-    if( StopInvoked )
-        goto STOP_ERROR;
+    if( StopInvoked ) {
+        RcFatalError( ERR_STOP_REQUESTED );
+        /* never return */
+    }
 
     ret = updateDebugDirectory( src, dst );
     if( ret != RS_OK ) {
         err_code = errno;
         goto REPORT_ERROR;
     }
-    if( StopInvoked )
-        goto STOP_ERROR;
+    if( StopInvoked ) {
+        RcFatalError( ERR_STOP_REQUESTED );
+        /* never return */
+    }
 
     return( true );
 
 REPORT_ERROR:
-    switch( ret ) {
-    case RS_READ_ERROR:
-        RcError( ERR_READING_EXE, src->name, strerror( err_code )  );
-        break;
-    case RS_READ_INCMPLT:
-        RcError( ERR_UNEXPECTED_EOF, src->name );
-        break;
-    case RS_WRITE_ERROR:
-        RcError( ERR_WRITTING_TMP, dst->name, strerror( err_code ) );
-        break;
-    case RS_BAD_FILE_FMT:
-        RcError( ERR_NOT_VALID_EXE, src->name );
-        break;
-    case RS_NO_MEM:
-        break;
-    default:
-        RcError( ERR_INTERNAL, INTERR_UNKNOWN_RCSTATUS );
+    if( ret == RS_READ_ERROR ) {
+        ret = RS_READ_ERROR_EXE;
+    } else if( ret == RS_WRITE_ERROR ) {
+        ret = RS_WRITE_ERROR_TMP;
     }
+    RcIOError( ret, src->name, dst->name, err_code );
     /* fall through */
 HANDLE_ERROR:
     return( false );
 
-STOP_ERROR:
-    RcFatalError( ERR_STOP_REQUESTED );
-#if !defined( __WATCOMC__ )
-    return( false );
-#endif
 } /* MergeResExePE */
 
 
@@ -976,23 +973,31 @@ bool MergeResExeLX( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *resfiles )
     bool        error;
     int         err_code;
 
-    ret = copyStubFile( src, dst, &err_code );
+    /* copy data from the src file to dst file */
+    ret = CopyExeData( src->fp, dst->fp, src->WinHeadOffset );
+    err_code = errno;
     if( ret != RS_OK )
         goto REPORT_ERROR;
-    if( StopInvoked )
-        goto STOP_ERROR;
+    if( StopInvoked ) {
+        RcFatalError( ERR_STOP_REQUESTED );
+        /* never return */
+    }
 
     error = RcBuildLXResourceObjects( dst, resfiles );
     if( error )
         goto HANDLE_ERROR;
-    if( StopInvoked )
-        goto STOP_ERROR;
+    if( StopInvoked ) {
+        RcFatalError( ERR_STOP_REQUESTED );
+        /* never return */
+    }
 
     error = CopyLXExeObjects( src, dst );
     if( error )
         goto HANDLE_ERROR;
-    if( StopInvoked )
-        goto STOP_ERROR;
+    if( StopInvoked ) {
+        RcFatalError( ERR_STOP_REQUESTED );
+        /* never return */
+    }
 
     ret = RcWriteLXResourceObjects( dst, resfiles );
     if( ret != RS_OK ) {
@@ -1005,53 +1010,42 @@ bool MergeResExeLX( ExeFileInfo *src, ExeFileInfo *dst, ResFileInfo *resfiles )
         err_code = errno;
         goto REPORT_ERROR;
     }
-    if( StopInvoked )
-        goto STOP_ERROR;
+    if( StopInvoked ) {
+        RcFatalError( ERR_STOP_REQUESTED );
+        /* never return */
+    }
 
     ret = copyLXDebugInfo( src, dst );
     if( ret != RS_OK ) {
         err_code = errno;
         goto REPORT_ERROR;
     }
-    if( StopInvoked )
-        goto STOP_ERROR;
+    if( StopInvoked ) {
+        RcFatalError( ERR_STOP_REQUESTED );
+        /* never return */
+    }
 
     ret = writeLXHeadAndTables( dst );
     if( ret != RS_OK ) {
         err_code = errno;
         goto REPORT_ERROR;
     }
-    if( StopInvoked )
-        goto STOP_ERROR;
+    if( StopInvoked ) {
+        RcFatalError( ERR_STOP_REQUESTED );
+        /* never return */
+    }
 
     return( true );
 
 REPORT_ERROR:
-    switch( ret ) {
-    case RS_READ_ERROR:
-        RcError( ERR_READING_EXE, src->name, strerror( err_code )  );
-        break;
-    case RS_READ_INCMPLT:
-        RcError( ERR_UNEXPECTED_EOF, src->name );
-        break;
-    case RS_WRITE_ERROR:
-        RcError( ERR_WRITTING_TMP, dst->name, strerror( err_code ) );
-        break;
-    case RS_BAD_FILE_FMT:
-        RcError( ERR_NOT_VALID_EXE, src->name );
-        break;
-    case RS_NO_MEM:
-        break;
-    default:
-        RcError( ERR_INTERNAL, INTERR_UNKNOWN_RCSTATUS );
+    if( ret == RS_READ_ERROR ) {
+        ret = RS_READ_ERROR_EXE;
+    } else if( ret == RS_WRITE_ERROR ) {
+        ret = RS_WRITE_ERROR_TMP;
     }
+    RcIOError( ret, src->name, dst->name, err_code );
     /* fall through */
 HANDLE_ERROR:
     return( false );
 
-STOP_ERROR:
-    RcFatalError( ERR_STOP_REQUESTED );
-#if !defined( __WATCOMC__ )
-    return( false );
-#endif
 } /* MergeResExeLX */

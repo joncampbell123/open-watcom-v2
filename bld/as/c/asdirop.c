@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -32,17 +33,6 @@
 
 #include "as.h"
 
-static dir_operand *dirOpAlloc( void ) {
-//**************************************
-
-    return( MemAlloc( sizeof( dir_operand ) ) );
-}
-
-static void dirOpFree( dir_operand *dirop ) {
-//*******************************************
-
-    MemFree( dirop );
-}
 
 static bool dirOpGetNumber( dir_operand *dirop, expr_tree *expr ) {
 //*****************************************************************
@@ -76,10 +66,10 @@ dir_operand *DirOpLine( const char *string )
 {
     dir_operand *dirop;
 
-    dirop = dirOpAlloc();
+    dirop = MemAllocSafe( sizeof( dir_operand ) );
     dirop->next = NULL;
     dirop->type = DIROP_LINE;
-    STRING_CONTENT( dirop ) = AsStrdup( string );
+    STRING_CONTENT( dirop ) = MemStrdupSafe( string );
     return( dirop );
 }
 
@@ -88,10 +78,10 @@ dir_operand *DirOpString( const char *string )
 {
     dir_operand *dirop;
 
-    dirop = dirOpAlloc();
+    dirop = MemAllocSafe( sizeof( dir_operand ) );
     dirop->next = NULL;
     dirop->type = DIROP_STRING;
-    STRING_CONTENT( dirop ) = AsStrdup( string );
+    STRING_CONTENT( dirop ) = MemStrdupSafe( string );
     return( dirop );
 }
 
@@ -101,7 +91,7 @@ dir_operand *DirOpNumber( expr_tree *expr )
     dir_operand *dirop;
 
     assert( expr != NULL );
-    dirop = dirOpAlloc();
+    dirop = MemAllocSafe( sizeof( dir_operand ) );
     dirop->next = NULL;
     if( !dirOpGetNumber( dirop, expr ) ) {
         dirop->type = DIROP_ERROR;
@@ -115,7 +105,7 @@ static dir_operand *doDirOpSymbol( asm_reloc_type rtype, void *target, expr_tree
 
     dir_operand *dirop, *tmp;
 
-    dirop = dirOpAlloc();
+    dirop = MemAllocSafe( sizeof( dir_operand ) );
     dirop->next = NULL;
     if( is_named ) {
         dirop->type = DIROP_SYMBOL;
@@ -126,13 +116,13 @@ static dir_operand *doDirOpSymbol( asm_reloc_type rtype, void *target, expr_tree
     }
     SYMBOL_RELOC_TYPE( dirop ) = rtype;
     if( expr ) {
-        tmp = dirOpAlloc();
+        tmp = MemAllocSafe( sizeof( dir_operand ) );
         if( !dirOpGetNumber( tmp, expr ) || tmp->type == DIROP_FLOATING ) {
             dirop->type = DIROP_ERROR;
         } else {
             SYMBOL_OFFSET( dirop ) = sign * NUMBER_INTEGER( tmp );
         }
-        dirOpFree( tmp );
+        MemFree( tmp );
     } else {
         SYMBOL_OFFSET( dirop ) = 0;
     }
@@ -157,9 +147,9 @@ dir_operand *DirOpRepeat( expr_tree *number, expr_tree *repeat )
     dir_operand *dirop, *tmp;
 
     assert( number != NULL && repeat != NULL );
-    dirop = dirOpAlloc();
+    dirop = MemAllocSafe( sizeof( dir_operand ) );
     dirop->next = NULL;
-    tmp = dirOpAlloc();     // use it to transfer type and content data
+    tmp = MemAllocSafe( sizeof( dir_operand ) );     // use it to transfer type and content data
     if( dirOpGetNumber( tmp, number ) ) {
         REPEAT_NUMBER( dirop ) = tmp->content.number;
         switch( tmp->type ) {
@@ -187,7 +177,7 @@ dir_operand *DirOpRepeat( expr_tree *number, expr_tree *repeat )
     } else {
         dirop->type = DIROP_ERROR;
     }
-    dirOpFree( tmp );
+    MemFree( tmp );
     return( dirop );
 }
 
@@ -199,5 +189,5 @@ void DirOpDestroy( dir_operand *dirop )
     if( dirop->type == DIROP_LINE || dirop->type == DIROP_STRING ) {
         MemFree( STRING_CONTENT( dirop ) );
     }
-    dirOpFree( dirop );
+    MemFree( dirop );
 }

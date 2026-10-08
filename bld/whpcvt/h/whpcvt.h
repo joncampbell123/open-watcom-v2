@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -41,6 +41,8 @@
 #include <string.h>
 #include <ctype.h>
 #include "bool.h"
+#include "memfuncs.h"
+
 
 /* for testing */
 //#define static
@@ -53,11 +55,6 @@
 
 #define _min( a, b )            ( a > b ) b ? a
 #define _max( a, b )            ( a > b ) a ? b
-#define _new( ptr, size )       ( ptr = check_alloc( sizeof( *(ptr) ) * (size) ) )
-#define _renew( ptr, size )     ( ptr = check_realloc( ptr, sizeof( *(ptr) ) * (size) ) )
-#define _free( x )              free( x )
-#define _alloc( size )          check_alloc( size )
-#define _realloc( ptr, size )   check_realloc( ptr, size )
 
 #define _is_nonblank( c )       ((c) != '\0' && (c) != ' ' && (c) != '\t')
 
@@ -99,23 +96,23 @@
 #define WHP_FONTTYPE            (char)'\x9D'  // 157
 
 /**** various file extensions ****/
-#define EXT_INPUT_FILE          ".whp"
-#define EXT_OUTRTF_FILE         ".rtf"
-#define EXT_OUTIPF_FILE         ".ipf"
-#define EXT_OUTHTML_FILE        ".htm"
+#define FEXT_WHP                ".whp"
+#define FEXT_RTF                ".rtf"
+#define FEXT_IPF                ".ipf"
+#define FEXT_HTM                ".htm"
 #ifdef __DOS__
- #define EXT_OUTWIKI_FILE       ".wik"
+ #define FEXT_WIKI              ".wik"
 #else
- #define EXT_OUTWIKI_FILE       ".wiki"
+ #define FEXT_WIKI              ".wiki"
 #endif
-#define EXT_OUTIB_FILE          ".ib"
-#define EXT_IDX_FILE            ".idx"
-#define EXT_KW_FILE             ".kw"
-#define EXT_BLIST_FILE          ".blt"
-#define EXT_DEF_FILE            ".h"
-#define EXT_HDEF_FILE           ".hh"
-#define EXT_HLP_FILE            ".hlp"
-#define EXT_TBL_FILE            ".tbl"
+#define FEXT_IB                 ".ib"
+#define FEXT_IDX                ".idx"
+#define FEXT_KW                 ".kw"
+#define FEXT_BLT                ".blt"
+#define FEXT_H                  ".h"
+#define FEXT_HH                 ".hh"
+#define FEXT_HLP                ".hlp"
+#define FEXT_TBL                ".tbl"
 
 /**** misc. stuff ****/
 #define INDENT_INC              360 // for RTF only
@@ -288,8 +285,6 @@ WHPCVT_GBL char         *IB_help_desc;
 /**** externed functions ****/
 extern void         error( int err );
 extern void         warning_msg( const char *msg, int line_num );
-extern void         *check_alloc( size_t size );
-extern void         *check_realloc( void *ptr, size_t size );
 extern void         Tabs_read( char *tab_line );
 extern tab_size     Tabs_align( tab_size ch_len );
 extern tab_size     Tabs_get( int pos );

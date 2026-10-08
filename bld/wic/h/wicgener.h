@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2023      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2023-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -52,12 +52,14 @@ void reportError(WicErrors err, ...);
 
 #include "fmem.h"
 void initMemory(void);
-void zapMemory(void);
 void *BasicMalloc(size_t size);
-void BasicFree(void *ptr);
 void outOfMemory(void);
 char *wicStrdup(const char *src);
 void checkMemory(void);
+
+void BasicFree(void *ptr);
+void zapMemory(void);
+
 #define wicMalloc FAlloc
 #define wicFree   FFree
 

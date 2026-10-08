@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -40,7 +40,7 @@
 #include "i64.h"
 #include "dbgscan.h"
 #include "numscan.h"
-#include "madinter.h"
+#include "wvmadcli.h"
 #include "dbgexpr4.h"
 #include "dbgexpr3.h"
 #include "dbgexpr2.h"
@@ -50,7 +50,7 @@
 #include "dbgdot.h"
 #include "dbgprog.h"
 #include "dipimp.h"
-#include "dipinter.h"
+#include "wvdipcli.h"
 #include "dbgreg.h"
 #include "dbglkup.h"
 
@@ -112,6 +112,134 @@ typedef enum {
                                 addresses (286 / 386)
                             */
 } stack_class;
+
+/*
+ * SSL mechanism core functions selection code definition
+ *
+ * must correspond with SSL definition in bld/wv/ssl/dbgintr.ssl
+ */
+typedef enum {
+    X_MISC_EXPR_DEPTH_ADJ,
+    X_MISC_EXPR_IS_CALL,
+    X_MISC_SKIP_COUNT_ADD,
+    X_MISC_SKIP_COUNT,
+    X_MISC___SPARE_ENTRY__,
+    X_MISC_SCAN_SAVE,
+    X_MISC_SCAN_RESTORE,
+    X_MISC_SCAN_POP,
+    X_MISC_SCAN_STRING,
+    X_MISC_MOVE_SCAN_PTR,
+    X_MISC_ADD_CHAR,
+    X_MISC_ADD_CESCAPE_CHAR,
+    X_MISC_ADD_CCHAR_ZERO,
+    X_MISC_SCAN_CCHAR_NUM,
+    X_MISC_NEXT_NESTED_CALL,
+    X_MISC_USE_SUBSTRING_INDEX1,
+    X_MISC_USE_SUBSTRING_INDEX2,
+    X_MISC_SET_EVAL_SUBSTRING,
+    X_MISC_EVAL_SUBSTRING,
+    X_MISC_PURGE_PGM_STACK,
+    X_MISC_SWITCH_ON,
+    X_MISC_SWITCH_OFF,
+    X_MISC_SWITCH_CHK,
+    X_MISC_MARK_ARRAY_ORDER,
+    X_MISC_START_SUBSCRIPT,
+    X_MISC_ADD_SUBSCRIPT_INDEX,
+    X_MISC_END_SUBSCRIPT
+} select_misc;
+
+typedef enum {
+    X_DO_ASSIGN,
+    X_DO_MUL,
+    X_DO_DIV,
+    X_DO_MOD,
+    X_DO_MINUS,
+    X_DO_SHIFT,
+    X_DO_AND,
+    X_DO_XOR,
+    X_DO_OR,
+    X_DO_ADDR,
+    X_DO_POINTS,
+    X_DO_FIELD,
+    X_DO_CALL,
+    X_DO_CONVERT,
+    X_DO_PLUS,
+    X_DO_MAKE_ADDR,
+    X_DO_TST_EQ,
+    X_DO_TST_LT,
+    X_DO_TST_TRUE,
+    X_DO_TST_EXIST,
+    X_DO_SIZE_TYPE,
+    X_DO_BASE_TYPE,
+    X_DO_POINT_TYPE,
+    X_DO_LKUP_TYPE,
+    X_DO_MAKE_COMPLEX,
+    X_DO_STRING_CONCAT,
+    X_DO_LCONVERT,
+    X_DO_PLUS_SCALED,
+    X_DO_MINUS_SCALED,
+    X_DO_POINTS2,
+    X_DO_POINT_TYPE2,
+    X_DO_SCOPE,
+} select_do;
+
+typedef enum {
+    X_PUSH_INT,
+    X_PUSH_DOT,
+    X_PUSH_REGSET,
+    X_PUSH_NUM,
+    X_PUSH_SCALAR,
+    X_PUSH_DUP,
+    X_PUSH_ENTRY,
+    X_PUSH_STRING,
+    X_PUSH_SSLVER,
+    X_PUSH_TYPE
+} select_push_n_pop;
+
+typedef enum {
+    X_STACK_SWAP,
+    X_STACK_MOVESP,
+    X_STACK_CLASS,
+    X_STACK_VALUE,
+    X_STACK_LVALUE,
+    X_STACK_RVALUE,
+    X_STACK_LRVALUE,
+    X_STACK_KIND,
+    X_STACK_SYMKIND,
+    X_STACK_SYMVALUE,
+    X_STACK_FORM
+} select_stack;
+
+typedef enum {
+    X_NUM_SET,
+    X_NUM_ADD,
+    X_NUM_PUSH,
+    X_NUM_POP,
+} select_num;
+
+typedef enum {
+    X_BITS_SET,
+    X_BITS_GET,
+    X_BITS_OR,
+    X_BITS_AND,
+} select_bits;
+
+typedef enum {
+    X_GET_INIT,
+    X_GET_FINI,
+    X_GET_MOD_CURR,
+    X_GET_MODNAME_LKUP,
+    X_GET_SCOPE_SET_FILE,
+    X_GET_SCOPE_SET_CURR,
+    X_GET_SCOPE_LKUP,
+    X_GET_NAME,
+    X_GET_OPERATOR_NAME,
+    X_GET_LINE_NUM,
+    X_GET_DTOR_NAME,
+    X_GET_SET_NAME_TYPE,
+    X_GET_QUERY_NAME,
+    X_GET_ADD_SCOPE,
+} select_get;
 
 extern void             AddChar( void );
 
@@ -268,72 +396,72 @@ static void FillInDefaults( dig_type_info *ti )
     }
 }
 
-static ssl_value MechMisc( unsigned select, ssl_value parm )
+static unsigned MechMisc( select_misc select, unsigned parm )
 {
     long                value;
-    ssl_value           result;
+    unsigned            result;
     mad_type_info       mti;
 
     result = 0;
     switch( select ) {
-    case 0:
+    case X_MISC_EXPR_DEPTH_ADJ:
         ExprAddrDepth += SSL2INT( parm );
         result = ExprAddrDepth;
         break;
-    case 1:
+    case X_MISC_EXPR_IS_CALL:
         result = ( _IsOn( SW_EXPR_IS_CALL ) && ExprAddrDepth == 0 );
         break;
-    case 2:
+    case X_MISC_SKIP_COUNT_ADD:
         SkipCount += SSL2INT( parm );
         break;
-    case 3:
+    case X_MISC_SKIP_COUNT:
         result = SkipCount;
         break;
-    case 4:
+    case X_MISC___SPARE_ENTRY__:
         //never called
         break;
-    case 5:
+    case X_MISC_SCAN_SAVE:
         if( ScanSavePtr >= MAX_SCANSAVE_PTRS )
             Error( ERR_INTERNAL, LIT_ENG( ERR_TOO_MANY_SCANSAVE ) );
         CurrScan[ScanSavePtr++] = ScanPos();
         break;
-    case 6:
+    case X_MISC_SCAN_RESTORE:
         if( ScanSavePtr <= 0 )
             Error( ERR_INTERNAL, LIT_ENG( ERR_TOO_MANY_SCANRESTORE ) );
         ReScan( CurrScan[--ScanSavePtr] );
         break;
-    case 7:
+    case X_MISC_SCAN_POP:
         if( ScanSavePtr <= 0 )
             Error( ERR_INTERNAL, LIT_ENG( ERR_TOO_MANY_SCANRESTORE ) );
         --ScanSavePtr;
         break;
-    case 8:
+    case X_MISC_SCAN_STRING:
         scan_string = SSL2BOOL( parm );
         ReScan( ScanPos() );
         break;
-    case 9:
+    case X_MISC_MOVE_SCAN_PTR:
         ReScan( ScanPos() + SSL2INT( parm ) );
         break;
-    case 10:
+    case X_MISC_ADD_CHAR:
         AddChar();
         break;
-    case 11:
+    case X_MISC_ADD_CESCAPE_CHAR:
         AddCEscapeChar();
         break;
-    case 12:
+    case X_MISC_ADD_CCHAR_ZERO:
         AddActualChar( NULLCHAR );
         break;
-    case 13:
+    case X_MISC_SCAN_CCHAR_NUM:
         ScanCCharNum = SSL2BOOL( parm );
         break;
-    case 14:
+    case X_MISC_NEXT_NESTED_CALL:
         if( NestedCallLevel == MAX_NESTED_CALL - 1 ) {
             Error( ERR_NONE, LIT_ENG( ERR_TOO_MANY_CALLS ) );
         } else {
             PgmStackUsage[++NestedCallLevel] = 0;
         }
         break;
-    case 15:
+    case X_MISC_USE_SUBSTRING_INDEX1:
         RValue( ExprSP );
         ConvertTo( ExprSP, TK_INTEGER, TM_SIGNED, 4 );
         value = U32FetchTrunc( ExprSP->v.uint ) - 1;
@@ -349,7 +477,7 @@ static ssl_value MechMisc( unsigned select, ssl_value parm )
             Error( ERR_NONE, LIT_ENG( ERR_ILL_TYPE ) );
         }
         break;
-    case 16:
+    case X_MISC_USE_SUBSTRING_INDEX2:
         RValue( ExprSP );
         ConvertTo( ExprSP, TK_INTEGER, TM_SIGNED, 4 );
         value = U32FetchTrunc( ExprSP->v.sint ) - 1;
@@ -364,18 +492,18 @@ static ssl_value MechMisc( unsigned select, ssl_value parm )
             Error( ERR_NONE, LIT_ENG( ERR_ILL_TYPE ) );
         }
         break;
-    case 17:
+    case X_MISC_SET_EVAL_SUBSTRING:
         EvalSubstring = SSL2BOOL( parm );
         if( EvalSubstring )
             ExprSP->v.string.ss_offset = 0;
         break;
-    case 18:
+    case X_MISC_EVAL_SUBSTRING:
         result = EvalSubstring;
         break;
-    case 19:
+    case X_MISC_PURGE_PGM_STACK:
         FreePgmStack( true );
         break;
-    case 20:
+    case X_MISC_SWITCH_ON:
         switch( parm ) { // nyi - begin temp
         case SSL_CASE_SENSITIVE:
             _SwitchOn( SW_SSL_CASE_SENSITIVE );
@@ -388,7 +516,7 @@ static ssl_value MechMisc( unsigned select, ssl_value parm )
         //    break;
         }
         break;
-    case 21:
+    case X_MISC_SWITCH_OFF:
         switch( parm ) {
         case SSL_CASE_SENSITIVE:
             _SwitchOff( SW_SSL_CASE_SENSITIVE );
@@ -401,7 +529,7 @@ static ssl_value MechMisc( unsigned select, ssl_value parm )
         //    break;
         }
         break;
-    case 22:
+    case X_MISC_SWITCH_CHK:
         switch( parm ) {
         case SSL_CASE_SENSITIVE:
             result = _IsOn( SW_SSL_CASE_SENSITIVE );
@@ -415,16 +543,16 @@ static ssl_value MechMisc( unsigned select, ssl_value parm )
             break;
         }
         break;
-    case 23: // nyi - end temp
+    case X_MISC_MARK_ARRAY_ORDER: // nyi - end temp
         MarkArrayOrder( SSL2BOOL( parm ) );
         break;
-    case 24:
+    case X_MISC_START_SUBSCRIPT:
         StartSubscript();
         break;
-    case 25:
+    case X_MISC_ADD_SUBSCRIPT_INDEX:
         AddSubscript();
         break;
-    case 26:
+    case X_MISC_END_SUBSCRIPT:
         EndSubscript();
         break;
     }
@@ -549,88 +677,88 @@ static void DoMinusScaled( void )
     DoMinus();
 }
 
-static ssl_value MechDo( unsigned select, ssl_value parm )
+static unsigned MechDo( select_do select, unsigned parm )
 {
     unsigned long       size;
-    ssl_value           result;
+    unsigned            result;
     DIPHDL( type, th );
     dig_type_info       ti;
     mad_type_info       mti;
 
     result = 0;
     switch( select ) {
-    case 0:
+    case X_DO_ASSIGN:
         DoAssign();
         break;
-    case 1:
+    case X_DO_MUL:
         DoMul();
         break;
-    case 2:
+    case X_DO_DIV:
         DoDiv();
         break;
-    case 3:
+    case X_DO_MOD:
         DoMod();
         break;
-    case 4:
+    case X_DO_MINUS:
         DoMinus();
         break;
-    case 5:
+    case X_DO_SHIFT:
         DoShift();
         break;
-    case 6:
+    case X_DO_AND:
         DoAnd();
         break;
-    case 7:
+    case X_DO_XOR:
         DoXor();
         break;
-    case 8:
+    case X_DO_OR:
         DoOr();
         break;
-    case 9:
+    case X_DO_ADDR:
         DoAddr();
         break;
-    case 10:
+    case X_DO_POINTS:
         ClassToTypeInfo( parm, &ti );
         DoPoints( ti.kind );
         break;
-    case 11:
+    case X_DO_FIELD:
         DoField();
         break;
-    case 12:
+    case X_DO_CALL:
         DoCall( Num, SSL2BOOL( parm ) );
         break;
-    case 13:
+    case X_DO_CONVERT:
         DoConvert();
         break;
-    case 14:
+    case X_DO_PLUS:
         DoPlus();
         break;
-    case 15:
+    case X_DO_MAKE_ADDR:
         MakeAddr();
         break;
-    case 16:
+    case X_DO_TST_EQ:
         result = ( TstEQ( SSL2INT( parm ) ) != 0 );
         break;
-    case 17:
+    case X_DO_TST_LT:
         result = ( TstLT( SSL2INT( parm ) ) != 0 );
         break;
-    case 18:
+    case X_DO_TST_TRUE:
         result = ( TstTrue( SSL2INT( parm ) ) != 0 );
         break;
-    case 19:
+    case X_DO_TST_EXIST:
         result = ( TstExist( SSL2INT( parm ) ) != 0 );
         break;
-    case 20:
+    case X_DO_SIZE_TYPE:
         size = ExprSP->ti.size;
         PopEntry();
         PushNum( size );
         break;
-    case 21:
+    case X_DO_BASE_TYPE:
         DIPTypeBase( ExprSP->th, th, NULL, NULL );
         PopEntry();
         PushType( th );
         break;
-    case 22:
+    case X_DO_POINT_TYPE:
         GetMADTypeDefault( MTK_ADDRESS, &mti );
         size = BITS2BYTES( mti.b.bits - mti.a.seg.bits );
         if( parm ) {
@@ -642,32 +770,32 @@ static ssl_value MechDo( unsigned select, ssl_value parm )
         PopEntry();
         PushType( th );
         break;
-    case 23:
+    case X_DO_LKUP_TYPE:
         result = UserType( th );
         if( result ) {
             PopEntry();
             PushType( th );
         }
         break;
-    case 24:
+    case X_DO_MAKE_COMPLEX:
         DoMakeComplex();
         break;
-    case 25:
+    case X_DO_STRING_CONCAT:
         DoStringConcat();
         break;
-    case 26:
+    case X_DO_LCONVERT:
         DoLConvert();
         break;
-    case 27:
+    case X_DO_PLUS_SCALED:
         DoPlusScaled();
         break;
-    case 28:
+    case X_DO_MINUS_SCALED:
         DoMinusScaled();
         break;
-    case 29:
+    case X_DO_POINTS2:
         DoPoints( TI_KIND_EXTRACT( parm ) );
         break;
-    case 30:
+    case X_DO_POINT_TYPE2:
         ti.kind = TK_POINTER;
         ti.size = TI_SIZE_EXTRACT( parm );
         ti.modifier = TI_MOD_EXTRACT( parm );
@@ -677,7 +805,7 @@ static ssl_value MechDo( unsigned select, ssl_value parm )
         PopEntry();
         PushType( th );
         break;
-    case 31:
+    case X_DO_SCOPE:
         if( SSL2BOOL( parm ) ) {
             /* file scope */
             if( ExprSP->flags & SF_NAME ) {
@@ -723,11 +851,11 @@ static void BasicType( unsigned basic_type )
     PushType( th );
 }
 
-static ssl_value MechPush_n_Pop( unsigned select, ssl_value parm )
+static unsigned MechPush_n_Pop( select_push_n_pop select, unsigned parm )
 {
     location_list           ll;
     dig_type_info           ti;
-    ssl_value               result;
+    unsigned                result;
     static const unsigned   TypeTbl[] = {
         TI_CREATE( TK_VOID,     TM_NONE,         0 ),
         TI_CREATE( TK_INTEGER,  TM_UNSIGNED,     1 ),
@@ -744,13 +872,13 @@ static ssl_value MechPush_n_Pop( unsigned select, ssl_value parm )
 
     result = 0;
     switch( select ) {
-    case 0:
+    case X_PUSH_INT:
         PushInt( SSL2INT( parm ) );
         break;
-    case 1:
+    case X_PUSH_DOT:
         PushAddr( GetDotAddr() );
         break;
-    case 2:
+    case X_PUSH_REGSET:
         ParseRegSet( true, &ll, &ti );
         if( ti.size != 0 ) {
             if( ti.kind == TK_NONE )
@@ -759,7 +887,7 @@ static ssl_value MechPush_n_Pop( unsigned select, ssl_value parm )
             result = true;
         }
         break;
-    case 3:
+    case X_PUSH_NUM:
         if( CurrToken == T_INT_NUM ) {
             PushNum64( IntNumVal() );
             Scan();
@@ -770,19 +898,19 @@ static ssl_value MechPush_n_Pop( unsigned select, ssl_value parm )
             result = true;
         }
         break;
-    case 4:
+    case X_PUSH_SCALAR:
         BasicType( TypeTbl[parm] );
         break;
-    case 5:
+    case X_PUSH_DUP:
         DupStack();
         break;
-    case 6:
+    case X_PUSH_ENTRY:
         PopEntry();
         break;
-    case 7:
+    case X_PUSH_STRING:
         PushString();
         break;
-    case 8:
+    case X_PUSH_SSLVER:
         /* here because old debuggers will always return false */
         if( (parm & SSL_VERSION_MAJOR_MASK) != SSL_VERSION_MAJOR_CURR ) {
             break;
@@ -794,50 +922,50 @@ static ssl_value MechPush_n_Pop( unsigned select, ssl_value parm )
 #endif
         result = true;
         break;
-    case 9:
+    case X_PUSH_TYPE:
         BasicType( parm );
         break;
     }
     return( result );
 }
 
-static ssl_value MechStack( unsigned select, ssl_value parm )
+static unsigned MechStack( select_stack select, unsigned parm )
 {
-    ssl_value   result;
+    unsigned    result;
     stack_entry *entry;
     sym_info    info;
 
     result = 0;
     switch( select ) {
-    case 0:
+    case X_STACK_SWAP:
         SwapStack( SSL2INT( parm ) );
         break;
-    case 1:
+    case X_STACK_MOVESP:
         MoveSP( SSL2INT( parm ) );
         break;
-    case 2:
+    case X_STACK_CLASS:
         entry = StkEntry( SSL2INT( parm ) );
         LValue( entry );
         result = TypeInfoToClass( &entry->ti ) & (BASE_TYPE | STK_UNSIGNED);
         break;
-    case 3:
+    case X_STACK_VALUE:
         ExprValue( StkEntry( SSL2INT( parm ) ) );
         break;
-    case 4:
+    case X_STACK_LVALUE:
         LValue( StkEntry( SSL2INT( parm ) ) );
         break;
-    case 5:
+    case X_STACK_RVALUE:
         RValue( StkEntry( SSL2INT( parm ) ) );
         break;
-    case 6:
+    case X_STACK_LRVALUE:
         LRValue( StkEntry( SSL2INT( parm ) ) );
         break;
-    case 7:
+    case X_STACK_KIND:
         entry = StkEntry( SSL2INT( parm ) );
         LValue( entry );
         result = TI_CREATE( entry->ti.kind, TM_NONE, 0 );
         break;
-    case 8:
+    case X_STACK_SYMKIND:
         entry = StkEntry( SSL2INT( parm ) );
         NameResolve( entry, false );
         if( entry->flags & SF_SYM ) {
@@ -847,11 +975,11 @@ static ssl_value MechStack( unsigned select, ssl_value parm )
             result = SK_NONE;
         }
         break;
-    case 9:
+    case X_STACK_SYMVALUE:
         entry = StkEntry( SSL2INT( parm ) );
         result = NameResolve( entry, false );
         break;
-    case 10:
+    case X_STACK_FORM:
         entry = StkEntry( SSL2INT( parm ) );
         if( entry->flags & SF_NAME ) {
             result = 0;
@@ -867,19 +995,19 @@ static ssl_value MechStack( unsigned select, ssl_value parm )
     return( result );
 }
 
-static ssl_value MechNum( unsigned select, ssl_value parm )
+static unsigned MechNum( select_num select, unsigned parm )
 {
     switch( select ) {
-    case 0:
+    case X_NUM_SET:
         Num = SSL2INT( parm );
         break;
-    case 1:
+    case X_NUM_ADD:
         Num += SSL2INT( parm );
         break;
-    case 2:
+    case X_NUM_PUSH:
         PushInt( Num );
         break;
-    case 3:
+    case X_NUM_POP:
         /* need to check that top stack entry is an integer value here? */
         Num = I32FetchTrunc( ExprSP->v.sint );
         PopEntry();
@@ -888,23 +1016,23 @@ static ssl_value MechNum( unsigned select, ssl_value parm )
     return( 0 );
 }
 
-static ssl_value MechBits( unsigned select, ssl_value parm )
+static unsigned MechBits( select_bits select, unsigned parm )
 {
-    ssl_value   result;
+    unsigned    result;
 
     result = 0;
     switch( select ) {
-    case 0:
+    case X_BITS_SET:
         Bits = parm;
         break;
-    case 1:
+    case X_BITS_GET:
         result = Bits;
         break;
-    case 2:
+    case X_BITS_OR:
         result = ( (Bits & parm) != 0 );
         Bits |= parm;
         break;
-    case 3:
+    case X_BITS_AND:
         result = ( (Bits & parm) == 0 );
         Bits &= parm;
         break;
@@ -1034,9 +1162,9 @@ bool SemAllowClosestLine( bool ok )
     return( old );
 }
 
-static ssl_value MechGet( unsigned select, ssl_value parm )
+static unsigned MechGet( select_get select, unsigned parm )
 {
-    ssl_value   result;
+    unsigned    result;
     DIPHDL( cue, cueh );
     sym_list    *sym;
     address     addr;
@@ -1048,12 +1176,12 @@ static ssl_value MechGet( unsigned select, ssl_value parm )
 
     result = 0;
     switch( select ) {
-    case 0: /* init */
+    case X_GET_INIT: /* init */
         memset( &CurrGet, 0, sizeof( CurrGet ) );
         CurrGet.li.mod = NO_MOD;
         CurrGet.li.case_sensitive = _IsOn( SW_SSL_CASE_SENSITIVE );
         break;
-    case 1: /* fini */
+    case X_GET_FINI: /* fini */
         switch( CurrGet.kind ) {
         case GET_NAME:
             PushName( &CurrGet.li );
@@ -1077,8 +1205,8 @@ static ssl_value MechGet( unsigned select, ssl_value parm )
             break;
         }
         break;
-    case 2: /* mod curr */
-    case 3: /* mod name lookup */
+    case X_GET_MOD_CURR: /* mod curr */
+    case X_GET_MODNAME_LKUP: /* mod name lookup */
         //NYI: temporary gunk
         CurrGet.multi_module = true;
         CurrGet.li.mod = NO_MOD;
@@ -1130,17 +1258,17 @@ static ssl_value MechGet( unsigned select, ssl_value parm )
             CurrGet.multi_module = false;
         }
         break;
-    case 4: /* file scope */
+    case X_GET_SCOPE_SET_FILE: /* file scope */
         CurrGet.li.file_scope = true;
         break;
-    case 5: /* given scope */
+    case X_GET_SCOPE_SET_CURR: /* given scope */
         CurrGet.li.file_scope = false;
         break;
-    case 6: /* scope lookup */
+    case X_GET_SCOPE_LKUP: /* scope lookup */
         CurrGet.li.scope.start = CurrGet.li.name.start;
         CurrGet.li.scope.len   = CurrGet.li.name.len;
         break;
-    case 7: /* get name >>bool */
+    case X_GET_NAME: /* get name >>bool */
         if( CurrToken == T_NAME ) {
             CurrGet.kind = GET_NAME;
             CurrGet.li.name.start = NamePos();
@@ -1149,13 +1277,13 @@ static ssl_value MechGet( unsigned select, ssl_value parm )
             result = true;
         }
         break;
-    case 8: /* get operator name */
+    case X_GET_OPERATOR_NAME: /* get operator name */
         CurrGet.kind = GET_OPERATOR;
         CurrGet.li.name.start = NamePos();
         CurrGet.li.name.len   = NameLen();
         Scan();
         break;
-    case 9: /* get line number >>bool */
+    case X_GET_LINE_NUM: /* get line number >>bool */
         if( CurrToken == T_LEFT_BRACE ) {
             size_t  len;
             /* Get a specfic file name for the module */
@@ -1174,7 +1302,7 @@ static ssl_value MechGet( unsigned select, ssl_value parm )
             SetCurrRadix( old_radix );
         }
         break;
-    case 10: /* GetDtorName >>bool */
+    case X_GET_DTOR_NAME: /* GetDtorName >>bool */
         if( CurrToken == T_NAME ) {
             CurrGet.kind = GET_NAME;
             CurrGet.li.name.start = NamePos();
@@ -1191,10 +1319,10 @@ static ssl_value MechGet( unsigned select, ssl_value parm )
             }
         }
         break;
-    case 11: /* GetSetNameType(symbol_type) */
+    case X_GET_SET_NAME_TYPE: /* GetSetNameType(symbol_type) */
         CurrGet.li.type = parm;
         break;
-    case 12: /* GetQueryName >>bool */
+    case X_GET_QUERY_NAME: /* GetQueryName >>bool */
         CurrGet.kind = GET_NAME;
         addr = Context.execution;
         sym = LookupSymList( SS_SCOPED, &addr, false, &CurrGet.li );
@@ -1205,7 +1333,7 @@ static ssl_value MechGet( unsigned select, ssl_value parm )
             CurrGet.li.type = ST_NONE;
         }
         break;
-    case 13: /* GetAddScope */
+    case X_GET_ADD_SCOPE: /* GetAddScope */
         if( CurrGet.li.scope.len == 0 ) {
             CurrGet.li.scope = CurrGet.li.name;
         } else {
@@ -1217,41 +1345,60 @@ static ssl_value MechGet( unsigned select, ssl_value parm )
 }
 
 
-ssl_value SSLSemantic( ssl_value action, ssl_value parm )
+unsigned SSLSemantic( unsigned action, unsigned parm )
 {
-    ssl_value   result;
-    unsigned    select;
+    unsigned    result;
 
     result = 0;
-    select = action & SEM_SELECTOR;
     switch( action & SEM_MECHANISM ) {
     case SEM_MISC:
+      {
+        select_misc select = (select_misc)(action & SEM_SELECTOR);
         result = MechMisc( select, parm );
+      }
         break;
     case SEM_DO:
+      {
+        select_do select = (select_do)(action & SEM_SELECTOR);
         result = MechDo( select, parm );
+      }
         break;
     case SEM_PUSH_N_POP:
+      {
+        select_push_n_pop select = (select_push_n_pop)(action & SEM_SELECTOR);
         result = MechPush_n_Pop( select, parm );
+      }
         break;
     case SEM_STACK:
+      {
+        select_stack select = (select_stack)(action & SEM_SELECTOR);
         result = MechStack( select, parm );
+      }
         break;
     case SEM_NUM:
+      {
+        select_num select = (select_num)(action & SEM_SELECTOR);
         result = MechNum( select, parm );
+      }
         break;
     case SEM_BITS:
+      {
+        select_bits select = (select_bits)(action & SEM_SELECTOR);
         result = MechBits( select, parm );
+      }
         break;
     case SEM_GET:
+      {
+        select_get select = (select_get)(action & SEM_SELECTOR);
         result = MechGet( select, parm );
+      }
         break;
     }
     return( result );
 }
 
 
-int SSLError( ssl_error_class class, ssl_value error )
+int SSLError( ssl_error_class class, unsigned error )
 {
     switch( class ) {
     case TERM_NORMAL:

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2019 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -40,16 +40,10 @@
 #include "clibext.h"
 
 
-#if defined( __WATCOMC__ ) && !defined( NLM )
-#include <malloc.h>
-#else
-/* There is no equivalent expand function in NetWare or non-Watcom libs. */
-#define _expand NULL
-#endif
-
 #ifdef TRMEM
-static _trmem_hdl   TRMemHandle;
-static FILE         *TRFileHandle = NULL;   /* stream to put output on */
+
+static _trmem_hdl   TrHdl = _TRMEM_HDL_NONE;
+static FILE         *TrFile = NULL;   /* stream to put output on */
 
 /* extern to avoid problems with taking address and overlays */
 static void TRPrintLine( void *parm, const char *buff, size_t len )
@@ -57,11 +51,12 @@ static void TRPrintLine( void *parm, const char *buff, size_t len )
 {
     /* unused parameters */ (void)parm; (void)len;
 
-    if( TRFileHandle != NULL ) {
-        fprintf( TRFileHandle, "%s\n", buff );
+    if( TrFile != NULL ) {
+        fprintf( TrFile, "%s\n", buff );
     }
 }
-#endif
+
+#endif  /* TRMEM */
 
 void TRMemRedirect( FILE *fp )
 /****************************/
@@ -69,7 +64,7 @@ void TRMemRedirect( FILE *fp )
 #ifndef TRMEM
     /* unused parameters */ (void)fp;
 #else
-    TRFileHandle = fp;
+    TrFile = fp;
 #endif
 }
 
@@ -77,11 +72,9 @@ void TRMemOpen( void )
 /********************/
 {
 #ifdef TRMEM
-    TRFileHandle = stderr;
-    TRMemHandle = _trmem_open( malloc, free, realloc, _expand,
-            TRFileHandle, TRPrintLine,
-            _TRMEM_ALLOC_SIZE_0 | _TRMEM_REALLOC_SIZE_0 |
-            _TRMEM_OUT_OF_MEMORY | _TRMEM_CLOSE_CHECK_FREE );
+    TrFile = stderr;
+    TrHdl = _trmem_open( malloc, free, realloc, strdup,
+        TrFile, TRPrintLine, _TRMEM_DEF );
 #endif
 }
 
@@ -89,45 +82,49 @@ void TRMemClose( void )
 /*********************/
 {
 #ifdef TRMEM
-    _trmem_close( TRMemHandle );
+    _trmem_close( TrHdl );
 #endif
 }
 
+TRMEMAPI( TRMemAlloc )
 void *TRMemAlloc( size_t size )
 /*****************************/
 {
 #ifdef TRMEM
-    return( _trmem_alloc( size, _trmem_guess_who(), TRMemHandle ) );
+    return( _trmem_alloc( size, _TRMEM_WHO( 1 ), TrHdl ) );
 #else
     return( malloc( size ) );
 #endif
 }
 
+TRMEMAPI( TRMemFree )
 void TRMemFree( void *ptr )
 /*************************/
 {
 #ifdef TRMEM
-    _trmem_free( ptr, _trmem_guess_who(), TRMemHandle );
+    _trmem_free( ptr, _TRMEM_WHO( 2 ), TrHdl );
 #else
     free( ptr );
 #endif
 }
 
+TRMEMAPI( TRMemRealloc )
 void *TRMemRealloc( void *ptr, size_t size )
 /******************************************/
 {
 #ifdef TRMEM
-    return( _trmem_realloc( ptr, size, _trmem_guess_who(), TRMemHandle ) );
+    return( _trmem_realloc( ptr, size, _TRMEM_WHO( 3 ), TrHdl ) );
 #else
     return( realloc( ptr, size ) );
 #endif
 }
 
+TRMEMAPI( TRMemStrdup )
 char *TRMemStrdup( const char *str )
 /**********************************/
 {
 #ifdef TRMEM
-    return( _trmem_strdup( str, _trmem_guess_who(), TRMemHandle ) );
+    return( _trmem_strdup( str, _TRMEM_WHO( 4 ), TrHdl ) );
 #else
     return( strdup( str ) );
 #endif
@@ -138,31 +135,33 @@ char *TRMemStrdup( const char *str )
 void TRMemPrtUsage( void )
 /************************/
 {
-    _trmem_prt_usage( TRMemHandle );
+    _trmem_prt_usage( TrHdl );
 }
 
 unsigned TRMemPrtList( void )
 /***************************/
 {
-    return( _trmem_prt_list( TRMemHandle ) );
+    return( _trmem_prt_list( TrHdl ) );
 }
 
+TRMEMAPI( TRMemValidate )
 int TRMemValidate( void *ptr )
 /****************************/
 {
-    return( _trmem_validate( ptr, _trmem_guess_who(), TRMemHandle ) );
+    return( _trmem_validate( ptr, _TRMEM_WHO( 5 ), TrHdl ) );
 }
 
 int TRMemValidateAll( void )
 /**************************/
 {
-    return( _trmem_validate_all( TRMemHandle ) );
+    return( _trmem_validate_all( TrHdl ) );
 }
 
+TRMEMAPI( TRMemChkRange )
 int TRMemChkRange( void *start, size_t len )
 /******************************************/
 {
-    return( _trmem_chk_range( start, len, _trmem_guess_who(), TRMemHandle ) );
+    return( _trmem_chk_range( start, len, _TRMEM_WHO( 6 ), TrHdl ) );
 }
 
-#endif
+#endif /* TRMEM */

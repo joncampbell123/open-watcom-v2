@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -31,6 +31,10 @@
 ****************************************************************************/
 
 
+#include "wlinkcfg.h"
+
+#ifdef _OS2
+
 #include <string.h>
 #include <stdio.h>
 #include <ctype.h>
@@ -40,10 +44,9 @@
 #include "pcobj.h"
 #include "newmem.h"
 #include "reloc.h"
-#include "exeos2.h"
-#include "exeflat.h"
-#include "exepe.h"
 #include "exedos.h"
+#include "exeos2.h"
+#include "pass2l1.h"
 #include "loadfile.h"
 #include "specials.h"
 #include "virtmem.h"
@@ -58,8 +61,6 @@
 #include "permdata.h"
 #include "loadpe.h"
 #include "impexp.h"
-#include "wres.h"
-#include "rcstrblk.h"
 #include "rcstr.h"
 #include "dosstub.h"
 #include "loados2.h"
@@ -68,38 +69,9 @@
 #include "clibext.h"
 
 
-#ifdef _OS2
+#define NE_ORDID    0x8000
 
-#define STUB_ALIGN 16
-
-typedef struct FullResourceRecord {
-    struct FullResourceRecord   *Next;
-    struct FullResourceRecord   *Prev;
-    resource_record             Info;
-} FullResourceRecord;
-
-typedef struct FullTypeRecord {
-    struct FullTypeRecord   *Next;
-    struct FullTypeRecord   *Prev;
-    FullResourceRecord      *Head;
-    FullResourceRecord      *Tail;
-    resource_type_record    Info;
-} FullTypeRecord;
-
-typedef struct {
-    unsigned_16         ResShiftCount;
-    unsigned_16         NumTypes;
-    unsigned_16         NumResources;
-    unsigned_16         TableSize;
-    FullTypeRecord      *Head;
-    FullTypeRecord      *Tail;
-} ExeResDir;
-
-typedef struct {
-    ExeResDir       Dir;
-    StringsBlock    Str;
-} ResTable;
-
+#define STUB_ALIGN  16U
 
 static void ReadNameTable( f_handle the_file )
 /*********************************************
@@ -147,7 +119,8 @@ static void ReadOldLib( void )
     fname = FmtData.u.os2fam.old_lib_name;
     the_file = QOpenR( fname );
     QRead( the_file, &head, sizeof( dos_exe_header ), fname );
-    if( head.dos.signature != EXESIGN_DOS || !NE_HEADER_FOLLOWS( head.dos.reloc_offset ) ) {
+    if( head.dos.signature != EXESIGN_DOS
+      || !NE_HEADER_FOLLOWS( head.dos.reloc_offset ) ) {
         LnkMsg( WRN + MSG_INV_OLD_DLL, NULL );
     } else {
         QSeek( the_file, NE_HEADER_OFFSET, fname );
@@ -161,7 +134,8 @@ static void ReadOldLib( void )
             ReadNameTable( the_file );
             QSeek( the_file, head.os2.nonres_off, fname );
             ReadNameTable( the_file );
-        } else if( signature == EXESIGN_LE || signature == EXESIGN_LX ) {
+        } else if( signature == EXESIGN_LE
+          || signature == EXESIGN_LX ) {
             QRead( the_file, &head.os2f, sizeof( head.os2f ), fname );
             if( head.os2f.resname_off != 0 ) {
                 QSeek( the_file, ne_header_off + head.os2f.resname_off, fname );
@@ -177,7 +151,7 @@ static void ReadOldLib( void )
             QRead( the_file, &head.pe, PE_HDR_SIZE, fname );
             QRead( the_file, (char *)&head.pe + PE_HDR_SIZE, PE_OPT_SIZE( head.pe ), fname );
             num_objects = head.pe.fheader.num_objects;
-            _ChkAlloc( objects, num_objects * sizeof( pe_object ) );
+            objects = MemAllocSafe( num_objects * sizeof( pe_object ) );
             QRead( the_file, objects, num_objects * sizeof( pe_object ), fname );
             currobj = objects;
             for( ; num_objects > 0; --num_objects ) {
@@ -189,7 +163,7 @@ static void ReadOldLib( void )
                 }
                 currobj++;
             }
-            _LnkFree( objects );
+            MemFree( objects );
             if( num_objects == 0 ) {
                 LnkMsg( WRN + MSG_INV_OLD_DLL, NULL );
             }
@@ -198,7 +172,7 @@ static void ReadOldLib( void )
         }
     }
     QClose( the_file, fname );
-    _LnkFree( fname );
+    MemFree( fname );
     FmtData.u.os2fam.old_lib_name = NULL;
 }
 
@@ -210,7 +184,7 @@ static void AssignOrdinals( void )
     entry_export        *exp;
     entry_export        *place;
     entry_export        *prev;
-    bool                isspace;
+    bool                is_space;
 
     if( FmtData.u.os2fam.exports != NULL ) {
         if( FmtData.u.os2fam.old_lib_name != NULL ) {
@@ -218,7 +192,7 @@ static void AssignOrdinals( void )
         }
         prev = FmtData.u.os2fam.exports;
         place = prev->next;
-        isspace = false;
+        is_space = false;
         for( exp = FmtData.u.os2fam.exports; exp->ordinal == 0; exp = FmtData.u.os2fam.exports ) {
             /*
              * while still unassigned values
@@ -226,9 +200,10 @@ static void AssignOrdinals( void )
              */
             for( ;; ) {
                 if( place != NULL ) {
-                    isspace = ( ( place->ordinal - prev->ordinal ) > 1 );
+                    is_space = ( ( place->ordinal - prev->ordinal ) > 1 );
                 }
-                if( place == NULL || isspace ) {
+                if( place == NULL
+                  || is_space ) {
                     if( FmtData.u.os2fam.exports != prev ) {
                         FmtData.u.os2fam.exports = exp->next;
                         prev->next = exp;
@@ -257,12 +232,12 @@ static unsigned long WriteOS2Relocs( group_entry *group )
     unsigned long relocsize;
     unsigned long relocnum;
 
-    relocsize = RelocSize( group->g.grp_relocs );
+    relocsize = RelocSize( group->g.reloclist );
     relocnum = relocsize / sizeof( os2_reloc_item );
     if( relocnum == 0 )
         return( 0 );
     WriteLoadU16( relocnum );
-    DumpRelocList( group->g.grp_relocs );
+    DumpRelocList( group->g.reloclist );
     return( relocsize );
 }
 
@@ -271,17 +246,17 @@ static void WriteOS2Data( unsigned_32 stub_len, os2_exe_header *exe_head )
  * copy code from extra memory to loadfile.
  */
 {
-    group_entry         *group;
-    unsigned            group_num;
-    unsigned long       off;
-    segment_record      segrec;
-    unsigned_32         seg_addr;
-    unsigned long       relocsize;
+    group_entry     *group;
+    unsigned        group_num;
+    unsigned long   off;
+    segment_record  segrec;
+    unsigned_32     seg_addr;
+    unsigned long   relocsize;
 
     DEBUG(( DBG_BASE, "Writing data" ));
 
     group_num = 0;
-    for( group = Groups; group != NULL; group = group->next_group ) {
+    for( group = Groups; group != NULL; group = group->next ) {
         if( group->totalsize == 0 )
             continue;   // DANGER DANGER DANGER <--!!!
         segrec.info = group->segflags;
@@ -336,8 +311,8 @@ static void AddLLItemAtEnd( void *head, void *tail, void *item )
     }
 }
 
-static unsigned_16 findResOrTypeName( ResTable *restab, WResID *name )
-/********************************************************************/
+static unsigned_16 findResIdName( ResTable *restab, WResID *name )
+/****************************************************************/
 {
     unsigned_16 name_id;
     signed_32   str_offset;
@@ -350,7 +325,7 @@ static unsigned_16 findResOrTypeName( ResTable *restab, WResID *name )
             name_id = str_offset + restab->Dir.TableSize;
         }
     } else {
-        name_id = name->ID.Num | 0x8000;
+        name_id = name->ID.Num | NE_ORDID;
     }
 
     return( name_id );
@@ -362,11 +337,10 @@ static FullTypeRecord *addExeTypeRecord( ResTable *restab,
 {
     FullTypeRecord      *exe_type;
 
-    _ChkAlloc( exe_type, sizeof( FullTypeRecord ) );
-
+    exe_type = MemAllocSafe( sizeof( FullTypeRecord ) );
     exe_type->Info.reserved = 0;
     exe_type->Info.num_resources = type->NumResources;
-    exe_type->Info.type = findResOrTypeName( restab, &(type->TypeName) );
+    exe_type->Info.type_id = findResIdName( restab, &(type->TypeName) );
     exe_type->Head = NULL;
     exe_type->Tail = NULL;
     exe_type->Next = NULL;
@@ -378,18 +352,18 @@ static FullTypeRecord *addExeTypeRecord( ResTable *restab,
 }
 
 static void addExeResRecord( ResTable *restab, FullTypeRecord *type,
-                            WResID *name, unsigned_16 mem_flags,
+                            WResID *name, ResMemFlags res_flags,
                       unsigned_16 exe_offset, unsigned_16 exe_length )
 /********************************************************************/
 {
     FullResourceRecord          *exe_res;
 
-    _ChkAlloc( exe_res, sizeof( FullResourceRecord ) );
+    exe_res = MemAllocSafe( sizeof( FullResourceRecord ) );
     exe_res->Info.offset = exe_offset;
     exe_res->Info.length = exe_length;
-    exe_res->Info.flags = mem_flags;
+    exe_res->Info.flags = (unsigned_16)res_flags;
     exe_res->Info.reserved = 0;
-    exe_res->Info.name = findResOrTypeName( restab, name );
+    exe_res->Info.res_id = findResIdName( restab, name );
     exe_res->Next = NULL;
     exe_res->Prev = NULL;
     AddLLItemAtEnd( &(type->Head), &(type->Tail), exe_res );
@@ -404,18 +378,20 @@ static FullTypeRecord *findExeTypeRecord( ResTable *restab,
 
     for( exe_type = restab->Dir.Head; exe_type != NULL;
                 exe_type = exe_type->Next ) {
-        if( type->TypeName.IsName && (exe_type->Info.type & 0x8000) == 0 ) {
+        if( type->TypeName.IsName
+          && (exe_type->Info.type_id & NE_ORDID) == 0 ) {
             /* if they are both names */
             exe_type_name = (StringItem16 *)((char *)restab->Str.StringBlock +
-                            ( exe_type->Info.type - restab->Dir.TableSize ));
+                            ( exe_type->Info.type_id - restab->Dir.TableSize ));
             if( exe_type_name->NumChars == type->TypeName.ID.Name.NumChars
-                && strnicmp( exe_type_name->Name, type->TypeName.ID.Name.Name,
+              && strnicmp( exe_type_name->Name, type->TypeName.ID.Name.Name,
                             exe_type_name->NumChars ) == 0 ) {
                 break;
             }
-        } else if( !(type->TypeName.IsName) && (exe_type->Info.type & 0x8000) ) {
+        } else if( !(type->TypeName.IsName)
+          && (exe_type->Info.type_id & NE_ORDID) ) {
             /* if they are both numbers */
-            if( type->TypeName.ID.Num == (exe_type->Info.type & ~0x8000) ) {
+            if( type->TypeName.ID.Num == (exe_type->Info.type_id & ~NE_ORDID) ) {
                 break;
             }
         }
@@ -427,23 +403,19 @@ static FullTypeRecord *findExeTypeRecord( ResTable *restab,
 } /* findExeTypeRecord */
 
 static void FreeResTable( ResTable *restab )
-/*******************************************/
+/******************************************/
 {
     FullTypeRecord              *type;
-    FullTypeRecord              *type_next;
     FullResourceRecord          *res;
-    FullResourceRecord          *res_next;
 
-    for( type = restab->Dir.Head; type != NULL; type = type_next ) {
-        type_next = type->Next;
-        for( res = type->Head; res != NULL; res = res_next ) {
-            res_next = res->Next;
-            _LnkFree( res );
+    while( (type = restab->Dir.Head) != NULL ) {
+        restab->Dir.Head = type->Next;
+        while( (res = type->Head) != NULL ) {
+            type->Head = res->Next;
+            MemFree( res );
         }
-        _LnkFree( type );
+        MemFree( type );
     }
-
-    restab->Dir.Head = NULL;
     restab->Dir.Tail = NULL;
 }
 
@@ -486,7 +458,7 @@ static void WriteOS2Resources( FILE *res_fp, WResDir inRes, ResTable *outRes )
     WResDirWindow       wind;
     FullTypeRecord      *exe_type;
     WResResInfo         *res;
-    WResLangInfo        *lang;
+    WResLangInfo        *langinfo;
 
     if( inRes == NULL )
         return;
@@ -495,19 +467,18 @@ static void WriteOS2Resources( FILE *res_fp, WResDir inRes, ResTable *outRes )
     exe_type = NULL;
     wind = WResFirstResource( inRes );
     while( !WResIsEmptyWindow( wind ) ) {
-        lang = WResGetLangInfo( wind );
-
+        langinfo = WResGetLangInfo( wind );
         if( WResIsFirstResOfType( wind ) ) {
             exe_type = findExeTypeRecord( outRes, WResGetTypeInfo( wind ) );
         }
         res = WResGetResInfo( wind );
         addExeResRecord( outRes, exe_type, &(res->ResName),
-                        lang->MemoryFlags, outRes_off,
-                        (lang->Length + align - 1) >> shift_count );
-        QSeek( FP2POSIX( res_fp ), lang->Offset, FmtData.resource );
-        CopyResData( res_fp, lang->Length );
+                        langinfo->res_flags, outRes_off,
+                        (langinfo->Length + align - 1) >> shift_count );
+        QSeek( FP2POSIX( res_fp ), langinfo->Offset, FmtData.resource );
+        CopyResData( res_fp, langinfo->Length );
         NullAlign( align );
-        outRes_off += (lang->Length + align - 1) >> shift_count;
+        outRes_off += (langinfo->Length + align - 1) >> shift_count;
 
         wind = WResNextResource( wind, inRes );
     }
@@ -567,7 +538,7 @@ static unsigned long ModRefTable( void )
     unsigned long       nodenum;
     unsigned long       off;
 
-    if( FmtData.type & (MK_OS2_NE | MK_WIN_NE) ) {
+    if( FmtData.type & MK_NE ) {
         off = 1;
         for( inode = FmtData.u.os2fam.imp_tab_list; inode != NULL; inode = inode->next ) {
             off += inode->len + 1;
@@ -584,25 +555,6 @@ static unsigned long ModRefTable( void )
     return( nodenum );
 }
 
-static size_t create_exp_extname( entry_export *exp, char *ext_name, bool ucase )
-{
-    size_t  len;
-    size_t  i;
-
-    len = strlen( exp->name.u.ptr );
-    if( len > 255 )
-        len = 255;
-    if( ucase ) {
-        for( i = 0; i < len; ++i ) {
-            ext_name[i] = toupper( exp->name.u.ptr[i] );
-        }
-    } else {
-        memcpy( ext_name, exp->name.u.ptr, len );
-    }
-    ext_name[len] = '\0';
-    return( len );
-}
-
 unsigned long ResNonResNameTable( bool dores )
 /*********************************************
  * NOTE: this routine assumes INTEL byte ordering (in the use of namelen)
@@ -612,69 +564,116 @@ unsigned long ResNonResNameTable( bool dores )
     unsigned long   size;
     const char      *name;
     size_t          len;
+    size_t          i;
+    char            external_name[255 + 1];
 
     size = 0;
     if( dores ) {
+        /*
+         * resident names table
+         * get first item - module name
+         */
         if( FmtData.u.os2fam.module_name != NULL ) {
             name = FmtData.u.os2fam.module_name;
             len = strlen( name );
         } else {
             name = GetBaseName( Root->outfile->fname, 0, &len );
+            if( FmtData.type & (MK_OS2_LE | MK_OS2_LX) ) {
+                /*
+                 * use base name + extension
+                 */
+                len = strlen( name );
+            }
         }
-    } else {     /* in non-resident names table */
+        /*
+         * for 16-bit NE and VxD format module name is truncated to 8 characters
+         */
+        if( (FmtData.type & MK_NE )
+          && len > 8 ) {
+            len = 8;
+        } else if( FmtData.type & MK_WIN_VXD ) {
+            /*
+             * for VxD format module name is always 8 characters
+             * if length > 8 then it is truncated to 8 characters
+             * if length < 8 then it is expanded up to 8 characters
+             *      by space character ( )
+             */
+            if( len < 8 ) {
+                for( i = 0; i < 8; i++ ) {
+                    external_name[i] = ( i < len ) ? name[i] : ' ';
+                }
+                name = external_name;
+            }
+            len = 8;
+        }
+    } else {
+        /*
+         * non-resident names table
+         * get first idem - module description
+         */
         if( FmtData.description != NULL ) {
             name = FmtData.description;
-        } else if( FmtData.type & (MK_OS2_NE | MK_WIN_NE) ) {
+        } else if( FmtData.type & MK_NE ) {
             name = Root->outfile->fname;
         } else {
             name = "";
         }
         len = strlen( name );
     }
-    if( dores || len > 0 ) {
-        size += WriteLoadU8Name( name, len, false );
-        WriteLoadU16( 0 );
+    /*
+     * resident name table - always write module name upper-cased
+     * non-resident name table - write module description if not blank
+     */
+    if( dores
+      || len > 0 ) {
+        size += WriteLoadU8Name( name, len, dores );
+        WriteLoadU16( 0 );  /* first item in table - ordinal 0 */
         size += 2;
-    }
-    if( dores ) {
-        if( FmtData.u.os2fam.module_name != NULL ) {
-            _LnkFree( FmtData.u.os2fam.module_name );
-            FmtData.u.os2fam.module_name = NULL;
-        }
-    } else {     /* in non-resident names table */
-        if( FmtData.description != NULL ) {
-            _LnkFree( FmtData.description );
-            FmtData.description = NULL;
-        }
     }
     for( exp = FmtData.u.os2fam.exports; exp != NULL; exp = exp->next ) {
         if( !exp->isexported )
             continue;
         if( exp->isanonymous )
             continue;
-        if( (dores && exp->isresident) || (!dores && !exp->isresident) ) {
-            char    ext_name[255 + 1];
-
-            len = create_exp_extname( exp, ext_name, (LinkFlags & LF_CASE_FLAG) == 0 );
-            size += WriteLoadU8Name( ext_name, len, false );
-            WriteLoadU16( exp->ordinal );
-            size += 2;
-            if( !exp->isprivate ) {
-                if( exp->impname != NULL ) {
-                    AddImpLibEntry( exp->impname, ext_name, 0, true );
-                } else {
-                    AddImpLibEntry( exp->sym->name.u.ptr, NULL, exp->ordinal, false );
-                }
+        if( exp->isresident && !dores )
+            continue;
+        if( !exp->isresident && dores )
+            continue;
+        /*
+         * get external name for export
+         */
+        name = exp->name.u.ptr;
+        len = strlen( name );
+        if( len > 255 )
+            len = 255;
+        if( LinkFlags & LF_CASE_FLAG ) {
+            memcpy( external_name, name, len );
+        } else {
+            for( i = 0; i < len; i++ ) {
+                external_name[i] = toupper( *(unsigned char *)name++ );
+            }
+        }
+        external_name[len] = '\0';
+        /*
+         * write external name to name table
+         */
+        size += WriteLoadU8Name( external_name, len, false );
+        WriteLoadU16( exp->ordinal );
+        size += 2;
+        if( !exp->isprivate ) {
+            if( exp->impname != NULL ) {
+                AddImpLibEntry( exp->impname, external_name, 0, true );
+            } else {
+                AddImpLibEntry( exp->sym->name.u.ptr, NULL, exp->ordinal, false );
             }
         }
     }
     if( size > 0 ) {
-        PadLoad( 1 );
+        WriteLoadU8( 0 ); /* name table terminating zero byte */
         ++size;
     }
     return( size );
 }
-
 
 /*
  * NOTE: The routine WriteFlatEntryTable in LOADFLAT.C is very similar to this
@@ -782,7 +781,7 @@ static unsigned long WriteEntryTable( void )
 void SetOS2SegFlags( void )
 /*************************/
 {
-    SetSegFlags( (xxx_seg_flags *)FmtData.u.os2fam.seg_flags );
+    SetSegFlags( FmtData.u.os2fam.seg_flags );
     FmtData.u.os2fam.seg_flags = NULL;
 }
 
@@ -792,18 +791,17 @@ void SetOS2SegFlags( void )
 static void CheckGrpFlags( void *_leader )
 /****************************************/
 {
-    seg_leader     *leader = _leader;
-    unsigned_16     sflags;
+    seg_leader      *leader = _leader;
+    seg_flags_type  sflags;
 
     sflags = leader->segflags;
     // if any of these flags are on, turn it on for the entire group.
     leader->group->segflags |= sflags & DEF_SEG_OFF;
     // if any of these flags off, make sure they are off in the group.
     leader->group->segflags &= (sflags & DEF_SEG_ON) | ~DEF_SEG_ON;
-    if( (sflags & SEG_LEVEL_MASK) == SEG_LEVEL_2 ) {
+    if( GET_SEG_PMODE_DPL( sflags ) == 2 ) {
         /* if any are level 2 then all have to be. */
-        leader->group->segflags &= ~SEG_LEVEL_MASK;
-        leader->group->segflags |= SEG_LEVEL_2;
+        SET_SEG_PMODE_DPL( leader->group->segflags, 2 );
     }
 }
 
@@ -815,7 +813,7 @@ void SetOS2GroupFlags( void )
 {
     group_entry     *group;
 
-    for( group = Groups; group != NULL; group = group->next_group ) {
+    for( group = Groups; group != NULL; group = group->next ) {
         if( group->totalsize == 0 )
             continue;   // DANGER DANGER DANGER <--!!!
         group->segflags |= DEF_SEG_ON;
@@ -823,14 +821,14 @@ void SetOS2GroupFlags( void )
         /*
          * for some insane reason, level 2 segments must be marked as movable
          */
-        if( (group->segflags & SEG_LEVEL_MASK) == SEG_LEVEL_2 ) {
+        if( GET_SEG_PMODE_DPL( group->segflags ) == 2 ) {
             group->segflags |= SEG_MOVABLE;
         }
     }
 }
 
 void ChkOS2Exports( void )
-/********************************
+/*************************
  * NOTE: there is a continue in this loop!
  */
 {
@@ -846,7 +844,8 @@ void ChkOS2Exports( void )
         sym = exp->sym;
         if( IS_SYM_ALIAS( sym ) ) {
             sym = UnaliasSym( ST_FIND, sym );
-            if( sym == NULL || (sym->info & SYM_DEFINED) == 0 ) {
+            if( sym == NULL
+              || (sym->info & SYM_DEFINED) == 0 ) {
                 LnkMsg( ERR+MSG_EXP_SYM_NOT_FOUND, "s", exp->sym->name.u.ptr );
                 continue;               // <----- DANGER weird control flow!
             } else if( exp->sym->info & SYM_WAS_LAZY ) {
@@ -855,7 +854,7 @@ void ChkOS2Exports( void )
             // Keep the import name. If an alias is exported, we want the
             // alias name in the import lib, not the substitute name
             if( exp->impname == NULL ) {
-                exp->impname = ChkStrDup( exp->sym->name.u.ptr );
+                exp->impname = MemStrdupSafe( exp->sym->name.u.ptr );
             }
 
             exp->sym = sym;
@@ -864,7 +863,8 @@ void ChkOS2Exports( void )
             LnkMsg( ERR+MSG_EXP_SYM_NOT_FOUND, "s", sym->name );
         } else {
             exp->addr = sym->addr;
-            if( sym->p.seg == NULL || IS_SYM_IMPORTED( sym ) ) {
+            if( sym->p.seg == NULL
+              || IS_SYM_IMPORTED( sym ) ) {
                 if( FmtData.type & (MK_OS2_FLAT | MK_WIN_VXD) ) {
                     // MN: Create a forwarder - add a special flag?
                     // Currently WriteFlatEntryTable() in loadflat.c will
@@ -875,16 +875,16 @@ void ChkOS2Exports( void )
             } else {
                 group = sym->p.seg->u.leader->group;
                 if( FmtData.type & (MK_OS2_FLAT | MK_WIN_VXD) ) {
-                    exp->addr.off -= group->grp_addr.off;
-                    if( (group->segflags & SEG_LEVEL_MASK) == SEG_LEVEL_2 ) {
+                    exp->addr.off -= group->addr.off;
+                    if( GET_SEG_PMODE_DPL( group->segflags ) == 2 ) {
                         exp->isiopl = true; // Conforming or not doesn't matter!
                         if( exp->addr.off > 65535 ) {
                             // Call gates are 16-bit only
-                            LnkMsg( LOC+ERR+MSG_BAD_TARG_OFF, "a", &exp->addr );
+                            LnkMsg( ERR+LOC+MSG_BAD_TARG_OFF, "a", &exp->addr );
                         }
                     }
                 } else if( FmtData.type & MK_PE ) {
-                    exp->addr.off += (group->linear - group->grp_addr.off);
+                    exp->addr.off += (group->linear - group->addr.off);
                 }
                 if( group->segflags & SEG_MOVABLE ) {
                     exp->ismovable = true;
@@ -893,13 +893,14 @@ void ChkOS2Exports( void )
         }
     }   // NOTE: there is a continue in this loop!
     AssignOrdinals();    /* make sure all exports have ordinals */
-    if( (FmtData.type & MK_WIN_VXD) && ( num_entries != 1 ) ) {
+    if( (FmtData.type & MK_WIN_VXD)
+      && ( num_entries != 1 ) ) {
         LnkMsg( FTL+MSG_VXD_INCORRECT_EXPORT, NULL );
     }
 }
 
 void PhoneyStack( void )
-/******************************
+/***********************
  * signal that we will be making a fake stack later on.
  */
 {
@@ -912,31 +913,24 @@ static FILE *InitNEResources( WResDir *inRes, ResTable *outRes )
     WResDir     dir;
     FILE        *res_fp;
     bool        dup_discarded;
-    bool        error;
 
     dir = NULL;
     res_fp = NULL;
     if( FmtData.resource != NULL ) {
         res_fp = POSIX2FP( QOpenR( FmtData.resource ) );
         if( res_fp != NULL ) {
-            dir = WResInitDir();
-            if( dir != NULL ) {
-                error = WResReadDir( res_fp, dir, &dup_discarded );
-                if( error ) {
-                    LnkMsg( WRN+MSG_PROBLEM_IN_RESOURCE, NULL );
-                    WResFreeDir( dir );
-                    dir = NULL;
-                } else {
-                    outRes->Dir.NumTypes = WResGetNumTypes( dir );
-                    outRes->Dir.NumResources = WResGetNumResources( dir );
-                    outRes->Dir.TableSize = outRes->Dir.NumTypes * sizeof( resource_type_record ) +
+            if( WResReadDir( res_fp, &dir, &dup_discarded ) ) {
+                LnkMsg( WRN+MSG_PROBLEM_IN_RESOURCE, NULL );
+            } else {
+                outRes->Dir.NumTypes = dir->NumTypes;
+                outRes->Dir.NumResources = dir->NumResources;
+                outRes->Dir.TableSize = outRes->Dir.NumTypes * sizeof( resource_type_record ) +
                                         outRes->Dir.NumResources * sizeof( resource_record ) +
                                         2 * sizeof( unsigned_16 );
-                    /* the 2 * unsigned_16 are the resource shift count and the type 0 record */
-                    outRes->Dir.Head = NULL;
-                    outRes->Dir.Tail = NULL;
-                    StringBlockBuild( &outRes->Str, dir, false );
-                }
+                /* the 2 * unsigned_16 are the resource shift count and the type 0 record */
+                outRes->Dir.Head = NULL;
+                outRes->Dir.Tail = NULL;
+                StringIDNamesBlockBuild( &outRes->Str, dir, false );
             }
         }
     }
@@ -949,11 +943,11 @@ static void FiniNEResources( FILE *res_fp, WResDir inRes, ResTable *outRes )
 {
     if( inRes != NULL ) {
         if( outRes->Str.StringBlock != NULL ) {
-            _LnkFree( outRes->Str.StringBlock );
+            MemFree( outRes->Str.StringBlock );
             outRes->Str.StringBlock = NULL;
         }
         if( outRes->Str.StringList != NULL ) {
-            _LnkFree( outRes->Str.StringList );
+            MemFree( outRes->Str.StringList );
             outRes->Str.StringList = NULL;
         }
         WResFreeDir( inRes );
@@ -987,7 +981,7 @@ static unsigned_32 ComputeResourceSize( WResDir dir )
 #define MAX_DGROUP_SIZE _64K
 
 void FiniOS2LoadFile( void )
-/****************************
+/***************************
  * terminate writing of load file
  */
 {
@@ -1015,7 +1009,7 @@ void FiniOS2LoadFile( void )
     dgroup_size = 0;
     imageguess = 0;
     if( DataGroup != NULL ) {
-        adseg = DataGroup->grp_addr.seg;
+        adseg = DataGroup->addr.seg;
         if( DataGroup->segflags & SEG_PURE ) {
             FmtData.u.os2fam.flags |= SHARABLE_DGROUP;
         }
@@ -1029,7 +1023,7 @@ void FiniOS2LoadFile( void )
         }
         dgroup_size = DataGroup->totalsize;
     }
-    for( group = Groups; group != NULL; group = group->next_group ) {
+    for( group = Groups; group != NULL; group = group->next ) {
         if( group->totalsize == 0 )
             continue;   // DANGER DANGER DANGER <--!!!
         imageguess += group->size;
@@ -1047,7 +1041,10 @@ void FiniOS2LoadFile( void )
     }
     exe_head.resident_off = temp;
     SeekLoad( stub_len + temp );
-    temp += ResNonResNameTable( true );  // true - do resident table.
+    /*
+     * do resident names table (true value)
+     */
+    temp += ResNonResNameTable( true );
     exe_head.module_off = temp;
     exe_head.modrefs = ModRefTable();
     temp += exe_head.modrefs * sizeof( unsigned_16 );
@@ -1059,7 +1056,10 @@ void FiniOS2LoadFile( void )
     temp += size;
     temp += stub_len;
     exe_head.nonres_off = temp;
-    exe_head.nonres_size = ResNonResNameTable( false );  // false = do non-res.
+    /*
+     * do non-resident names table (false value)
+     */
+    exe_head.nonres_size = ResNonResNameTable( false );
     temp += exe_head.nonres_size;
     /*
      * if no segment shift specified, figure out the best one, assuming that
@@ -1108,10 +1108,11 @@ void FiniOS2LoadFile( void )
     } else {
         adseg = 0;    // no automatic data segment.
     }
-    if( FmtData.u.os2fam.flags & PM_NOT_COMPATIBLE ) {
-        exe_head.info |= OS2_NOT_PM_COMPATIBLE;
-    } else if( FmtData.u.os2fam.flags & PM_APPLICATION ) {
+    if( (FmtData.type & MK_WIN_NE)
+      || (FmtData.u.os2fam.flags & PM_APPLICATION) ) {
         exe_head.info |= OS2_PM_APP;
+    } else if( FmtData.u.os2fam.flags & PM_NOT_COMPATIBLE ) {
+        exe_head.info |= OS2_NOT_PM_COMPATIBLE;
     } else {
         exe_head.info |= OS2_PM_COMPATIBLE;
     }
@@ -1211,7 +1212,7 @@ void FiniOS2LoadFile( void )
 }
 
 void FreeImpNameTab( void )
-/********************************/
+/*************************/
 {
     FmtData.u.os2fam.mod_ref_list = NULL;  /* these are permalloc'd */
     FmtData.u.os2fam.imp_tab_list = NULL;
@@ -1230,7 +1231,6 @@ unsigned_32 WriteStubFile( unsigned_32 stub_align )
     unsigned_32     the_reloc;
     unsigned_32     code_start;
     char            fullname[PATH_MAX];
-    size_t          len;
 
     if( FmtData.u.os2fam.no_stub ) {
         stub_len = 0;
@@ -1245,10 +1245,8 @@ unsigned_32 WriteStubFile( unsigned_32 stub_align )
             LnkMsg( WRN+MSG_CANT_OPEN_NO_REASON, "s", FmtData.u.os2fam.stub_file_name );
             return( WriteDOSDefStub( stub_align ) );   // NOTE: <== a return here.
         }
-        _LnkFree( FmtData.u.os2fam.stub_file_name );
-        len = strlen( fullname ) + 1;
-        _ChkAlloc( FmtData.u.os2fam.stub_file_name, len );
-        memcpy( FmtData.u.os2fam.stub_file_name, fullname, len );
+        MemFree( FmtData.u.os2fam.stub_file_name );
+        FmtData.u.os2fam.stub_file_name = MemStrdupSafe( fullname );
         QRead( the_file, &dosheader, sizeof( dos_exe_header ), FmtData.u.os2fam.stub_file_name );
         if( dosheader.signature != EXESIGN_DOS ) {
             LnkMsg( ERR + MSG_INV_STUB_FILE, NULL );
@@ -1293,4 +1291,4 @@ unsigned_32 WriteStubFile( unsigned_32 stub_align )
     return( stub_len );
 }
 
-#endif
+#endif /* _OS2 */

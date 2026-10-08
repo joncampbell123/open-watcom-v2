@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -30,6 +30,7 @@
 ****************************************************************************/
 
 
+#include <stdlib.h>
 #include <limits.h>
 #include "dbgdefn.h"
 #if !defined( BUILD_RFX )
@@ -37,7 +38,7 @@
 #else
 #include "rfxdata.h"
 #endif
-#include "dbgmem.h"
+#include "memfuncs.h"
 #include "tinyio.h"
 #include "dbgio.h"
 #include "doserr.h"

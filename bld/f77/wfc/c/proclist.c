@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -41,6 +41,7 @@
 #include "opr.h"
 #include "global.h"
 #include "stmtsw.h"
+#include "namecod.h"
 #include "recog.h"
 #include "ferror.h"
 #include "insert.h"
@@ -89,12 +90,12 @@ static  void    PrSFList( void ) {
     AdjSFList( CITNode );
     num_parms = 0;
     parm = sf_sym->u.ns.si.sf.header->parm_list;
-    if( RecNOpn() ) {
+    if( RecNoOpn() ) {
         AdvanceITPtr();
-        done_list = RecCloseParen() || RecColon();
+        done_list = RecCloseParenOpr() || RecColonOpr();
     } else {
         done_list = false;
-        for(;;) {
+        for( ;; ) {
             if( done_list )
                 break;
             if( parm == NULL )
@@ -118,17 +119,16 @@ static  void    PrSFList( void ) {
                             ( (flags & SY_SUBSCRIPTED) == 0 ) ) {
                             GSFArg( sym_ptr );
                         } else {
-                            ClassNameErr( SF_ILL_PARM_PASSED,
-                                          CITNode->sym_ptr );
+                            SymClassErr( SF_ILL_PARM_PASSED, CITNode->sym_ptr );
                         }
                     } else {
-                        ClassNameErr( SF_ILL_PARM_PASSED, CITNode->sym_ptr );
+                        SymClassErr( SF_ILL_PARM_PASSED, CITNode->sym_ptr );
                     }
                 }
             }
             AdvanceITPtr();
             parm = parm->link;
-            done_list = RecCloseParen() || RecColon();
+            done_list = RecCloseParenOpr() || RecColonOpr();
         }
     }
     if( ( parm != NULL ) || !done_list ) {
@@ -140,7 +140,7 @@ static  void    PrSFList( void ) {
     }
     GSFCall( sfunc_node );
     GSFRetVal( sfunc_node );
-    if( RecColon() ) {
+    if( RecColonOpr() ) {
         GBegSFSS( sfunc_node );
         SubStrArgs( sfunc_node );
     }
@@ -151,15 +151,15 @@ static  void    PrSubList( itnode *array_node ) {
 //===============================================
 
     GBegSubScr( array_node );
-    for(;;) {
+    for( ;; ) {
         GSubScr();
         AdvanceITPtr();
-        if( RecCloseParen() || RecColon() ) {
+        if( RecCloseParenOpr() || RecColonOpr() ) {
             break;
         }
     }
     GEndSubScr( array_node );
-    if( RecColon() ) {
+    if( RecColonOpr() ) {
         GBegSSStr( array_node );
         SubStrArgs( array_node );
     } else {
@@ -187,7 +187,7 @@ static  void    PrCallList( itnode *subpgm_node ) {
 
     GBegCall( subpgm_node );
     GEndCall( subpgm_node, GParms( subpgm_node ) );
-    if( RecColon() ) {
+    if( RecColonOpr() ) {
         GBegFSS( subpgm_node );
         SubStrArgs( subpgm_node );
     }

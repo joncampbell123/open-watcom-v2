@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -62,6 +62,8 @@
 #include "vhandle.h"
 #include "gui.h"
 #include "strvbuf.h"
+#include "memfuncs.h"
+#include "roundmac.h"
 
 
 #ifdef __OS2__
@@ -94,25 +96,11 @@
 
 #define IS_VALID_DIR(p)     ((p)->d_name[0] != '.' || (p)->d_name[1] != '\0' && ((p)->d_name[1] != '.' || (p)->d_name[2] != '\0'))
 
-#define SKIP_SPACES(s)      while(isspace(*s)) s++
-#define SKIP_CHAR_SPACES(s) while(isspace(*++s))
-
 #define TEST_UNC(x)         ((x)[0] == '\\' && (x)[1] == '\\')
-#define TEST_DRIVE(x)       (isalpha( (x)[0] ) && (x)[1] == ':')
+#define TEST_DRIVE(x)       (isalpha( ((unsigned char *)(x))[0] ) && (x)[1] == ':')
 #define TEST_NODE(x)        ((x)[0] == '/' && (x)[1] == '/')
 
 #define SEEK_POSBACK(p)     (-(long)(p))
-
-typedef enum {
-    CFE_NOERROR,
-    CFE_NOMEMORY,
-    CFE_CANTOPENSRC,
-    CFE_CANTOPENDST,
-    CFE_ERROR,
-    CFE_ABORT,
-    CFE_BAD_CRC,
-    CFE_DSTREADONLY
-} COPYFILE_ERROR;
 
 #if defined( __NT__ )
 enum {

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -125,7 +125,7 @@ WdeDialogBoxInfo *WdeLoadDialogFromRes( WdeResInfo *res_info, WResLangNode *lnod
 
     if( ok ) {
         file_name = res_info->info->tmp_file;
-        dlg_info = (WdeDialogBoxInfo *)WRMemAlloc( sizeof( WdeDialogBoxInfo ) );
+        dlg_info = MemAlloc( sizeof( WdeDialogBoxInfo ) );
         ok = ( dlg_info != NULL );
     }
 
@@ -137,12 +137,12 @@ WdeDialogBoxInfo *WdeLoadDialogFromRes( WdeResInfo *res_info, WResLangNode *lnod
     if( ok ) {
         dlg_info->dialog_header->is32bit = is32bit;
         dlg_info->control_list = NULL;
-        dlg_info->MemoryFlags = 0;
+        dlg_info->res_flags = DEFAULT_FLAGS_NONE;
         ok = ( (fp = ResOpenFileRO( file_name )) != NULL );
     }
 
     if( ok ) {
-        dlg_info->MemoryFlags = lnode->Info.MemoryFlags;
+        dlg_info->res_flags = lnode->Info.res_flags;
         ok = !ResSeek( fp, lnode->Info.Offset, SEEK_SET );
     }
 

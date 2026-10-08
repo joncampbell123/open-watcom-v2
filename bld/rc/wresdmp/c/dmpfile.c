@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -43,8 +44,8 @@
 #include "dmpfile.h"
 #include "wresdefn.h"
 
-static void ConvertIDToStr( WResID * id, char * str, int maxlen )
-/***************************************************************/
+static void ConvertIDToStr( WResID *id, char * str, int maxlen )
+/**************************************************************/
 {
     int     numchars;
 
@@ -59,13 +60,13 @@ static void ConvertIDToStr( WResID * id, char * str, int maxlen )
     }
 }
 
-static void ConvertTypeIDToStr( WResID * id, char * str, int maxlen )
-/*******************************************************************/
+static void ConvertTypeIDToStr( WResID *type_id, char *str, int maxlen )
+/**********************************************************************/
 {
-    if (id->IsName) {
-        ConvertIDToStr( id, str, maxlen );
+    if (type_id->IsName) {
+        ConvertIDToStr( type_id, str, maxlen );
     } else {
-        switch (id->ID.Num) {
+        switch (type_id->ID.Num) {
         case RESOURCE2INT( RT_CURSOR ):
             strncpy( str, "cursor", maxlen );
             break;
@@ -112,7 +113,7 @@ static void ConvertTypeIDToStr( WResID * id, char * str, int maxlen )
             strncpy( str, "versioninfo", maxlen );
             break;
         default:
-            ConvertIDToStr( id, str, maxlen );
+            ConvertIDToStr( type_id, str, maxlen );
             break;
         }
     }
@@ -120,40 +121,40 @@ static void ConvertTypeIDToStr( WResID * id, char * str, int maxlen )
 
 static char * MemFlagsOnList[16] = {
     NULL,               /* 0x0001 */
-    NULL,
-    NULL,
-    NULL,
+    NULL,               /* 0x0002 */
+    NULL,               /* 0x0004 */
+    NULL,               /* 0x0008 */
     "MOVEABLE",         /* 0x0010 */
     "PURE",             /* 0x0020 */
     "PRELOAD",          /* 0x0040 */
-    NULL,
+    NULL,               /* 0x0080 */
     NULL,               /* 0x0100 */
-    NULL,
-    NULL,
-    NULL,
+    NULL,               /* 0x0200 */
+    NULL,               /* 0x0400 */
+    NULL,               /* 0x0800 */
     "DISCARDABLE",      /* 0x1000 */
-    NULL,
-    NULL,
-    NULL
+    NULL,               /* 0x2000 */
+    NULL,               /* 0x4000 */
+    "SEGALIGN"          /* 0x8000 */
 };
 
 static char * MemFlagsOffList[16] = {
     NULL,               /* 0x0001 */
-    NULL,
-    NULL,
-    NULL,
+    NULL,               /* 0x0002 */
+    NULL,               /* 0x0004 */
+    NULL,               /* 0x0008 */
     "FIXED",            /* 0x0010 */
     "IMPURE",           /* 0x0020 */
     "LOADONCALL",       /* 0x0040 */
-    NULL,
+    NULL,               /* 0x0080 */
     NULL,               /* 0x0100 */
-    NULL,
-    NULL,
-    NULL,
+    NULL,               /* 0x0200 */
+    NULL,               /* 0x0400 */
+    NULL,               /* 0x0800 */
     NULL,               /* 0x1000 */
-    NULL,
-    NULL,
-    NULL
+    NULL,               /* 0x2000 */
+    NULL,               /* 0x4000 */
+    NULL                /* 0x8000 */
 };
 
 static bool DumpResource( WResDirWindow wind, FILE *fp, WResTargetOS res_os )
@@ -164,11 +165,11 @@ static bool DumpResource( WResDirWindow wind, FILE *fp, WResTargetOS res_os )
     char            typename[20];
     WResTypeInfo    *type;
     WResResInfo     *res;
-    WResLangInfo    *lang;
+    WResLangInfo    *langinfo;
 
     type = WResGetTypeInfo( wind );
     res = WResGetResInfo( wind );
-    lang = WResGetLangInfo( wind );
+    langinfo = WResGetLangInfo( wind );
 
     if( CmdLineParms.Type != NULL ) {
         if( !WResIDCmp( CmdLineParms.Type, &(type->TypeName) ) ) {
@@ -184,12 +185,12 @@ static bool DumpResource( WResDirWindow wind, FILE *fp, WResTargetOS res_os )
     ConvertIDToStr( &(res->ResName), resname, 15 );
     ConvertTypeIDToStr( &(type->TypeName), typename, 20 );
 
-    fprintf( stdout, "%-20.20s  %-15.15s  0x%04X 0x%02X  ", typename,
-                resname, (int)lang->lang.lang, (int)lang->lang.sublang );
-    PrintUint16Flags( lang->MemoryFlags, MemFlagsOnList, MemFlagsOffList, 53 );
+    fprintf( stdout, "%-20.20s  %-15.15s  0x%04X 0x%02X  0x%04X ", typename,
+                resname, (int)langinfo->lang.lang, (int)langinfo->lang.sublang, langinfo->res_flags );
+    PrintUint16Flags( langinfo->res_flags, MemFlagsOnList, MemFlagsOffList, 53 );
 
     if( CmdLineParms.DumpContents ) {
-        error = DumpContents( type, res, lang, fp, res_os );
+        error = DumpContents( type, res, langinfo, fp, res_os );
         if( error ) {
             return( true );
         }
@@ -212,7 +213,7 @@ static int DumpDir( WResDir dir, FILE *fp )
     if( WResIsEmpty( dir ) ) {
         printf( "Directory in file %s is empty\n", CmdLineParms.FileName );
     } else {
-        res_os = WResGetTargetOS( dir );
+        res_os = dir->TargetOS;
         wind = WResFirstResource( dir );
         while( !WResIsLastResource( wind, dir ) ) {
             error = DumpResource( wind, fp, res_os );
@@ -233,7 +234,6 @@ static int DumpDir( WResDir dir, FILE *fp )
 extern int DumpFile( void )
 /*************************/
 {
-    int             error;
     int             retcode;
     FILE            *fp;
     WResDir         dir;
@@ -249,17 +249,11 @@ extern int DumpFile( void )
         puts( "MS format .RES file" );
     }
 
-    dir = WResInitDir();
-    if( dir == NULL ) {
-        FatalError( "Out of memory" );
-    }
-
-    error = WResReadDir( fp, dir, NULL );
-    if (error) {
+    if( WResReadDir( fp, &dir, NULL ) ) {
         puts( "Unable to read directory" );
         retcode = 2;
     } else {
-        if( WResGetTargetOS( dir ) == WRES_OS_WIN16 ) {
+        if( dir->TargetOS == WRES_OS_WIN16 ) {
             puts( "Target OS: Win16" );
         } else {
             puts( "Target OS: Win32" );
@@ -267,9 +261,9 @@ extern int DumpFile( void )
         puts( "Type                  Name             Language     Flags" );
         puts( "====                  ====             ========     =====" );
         retcode = DumpDir( dir, fp );
+        WResFreeDir( dir );
     }
 
-    WResFreeDir( dir );
 
     ResCloseFile( fp );
 

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -47,7 +47,9 @@
 #include "wde.rh"
 #include "wdedefin.h"
 #include "jdlg.h"
-#include "wclbproc.h"
+#ifdef __WINDOWS__
+    #include "wclbproc.h"
+#endif
 
 
 /****************************************************************************/
@@ -110,7 +112,6 @@ bool WdeGenericDefine( WdeDefineObjectInfo *info )
     INT_PTR              redraw;
     bool                 quick;
     bool                 destroy_children;
-    DLGPROC              dlgproc;
     HINSTANCE            app_inst;
 
     if( info->obj == NULL ) {
@@ -129,11 +130,15 @@ bool WdeGenericDefine( WdeDefineObjectInfo *info )
     redraw = FALSE;
 
     app_inst = WdeGetAppInstance();
-
-    dlgproc = MakeProcInstance_DLG( WdeGenericDefineDlgProc, app_inst );
-    redraw = JDialogBoxParam( app_inst, "WdeDefineGeneric", info->win, dlgproc, (LPARAM)info );
-    FreeProcInstance_DLG( dlgproc );
-
+#ifdef __WINDOWS__
+    {
+        DLGPROC dlgproc = MakeProcInstance_DLG( WdeGenericDefineDlgProc, app_inst );
+        redraw = JDialogBoxParam( app_inst, "WdeDefineGeneric", info->win, dlgproc, (LPARAM)info );
+        FreeProcInstance_DLG( dlgproc );
+    }
+#else
+    redraw = JDialogBoxParam( app_inst, "WdeDefineGeneric", info->win, WdeGenericDefineDlgProc, (LPARAM)info );
+#endif
     if( redraw == -1 ) {
         WdeWriteTrail( "WdeGenericDefine: Dialog not created!" );
         return( false );
@@ -244,7 +249,7 @@ bool WdeGenericGetDefineInfo( WdeDefineObjectInfo *info, HWND hDlg )
         vp = (void *)WdeGetStrFromEdit ( hDlg, IDB_TEXT, &mod );
         if( mod && vp != NULL ) {
             if( GETHDR_CAPTION( info->info.d.header ) ) {
-                WRMemFree( GETHDR_CAPTION( info->info.d.header ) );
+                MemFree( GETHDR_CAPTION( info->info.d.header ) );
             }
             SETHDR_CAPTION( info->info.d.header, (char *)vp );
         }
@@ -253,7 +258,7 @@ bool WdeGenericGetDefineInfo( WdeDefineObjectInfo *info, HWND hDlg )
         vp = (void *)WdeGetResNameOrFromEdit ( hDlg, IDB_TEXT, &mod );
         if ( mod && vp != NULL ) {
             if( GETCTL_TEXT( info->info.c.info ) ) {
-                WRMemFree( GETCTL_TEXT( info->info.c.info ) );
+                MemFree( GETCTL_TEXT( info->info.c.info ) );
             }
             SETCTL_TEXT( info->info.c.info, (ResNameOrOrdinal *)vp );
         }

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -62,7 +62,9 @@
 #include "jdlg.h"
 #include "wreres.h"
 #include "wresdefn.h"
-#include "wclbproc.h"
+#ifdef __WINDOWS__
+    #include "wclbproc.h"
+#endif
 
 
 /****************************************************************************/
@@ -120,7 +122,9 @@ static LIST             *WREResList             = NULL;
 static unsigned         WREResCounter           = 0;
 static int              WRENumRes               = 0;
 static WREResInfo       *WRECurrentRes          = NULL;
+#ifdef __WINDOWS__
 static DLGPROC          WREResInfoWinProc       = NULL;
+#endif
 static HINSTANCE        WREAppInst              = NULL;
 static HBRUSH           WREResInfoBrush         = NULL;
 
@@ -481,7 +485,7 @@ bool PleaseOpenFile( UINT msg )
     }
 
     if( name != NULL ) {
-        WRMemFree( name );
+        MemFree( name );
     }
 
     if( title != NULL ) {
@@ -577,7 +581,7 @@ WREResInfo *WRECreateNewResource( char *filename )
     }
 
     if( ok && filename != NULL ) {
-        res_info->info->save_name = WREStrDup( filename );
+        res_info->info->save_name = WREStrdup( filename );
         ok = (res_info->info->save_name != NULL);
     }
 
@@ -621,7 +625,7 @@ bool WREOpenResource( char *fn )
 
     if( fn != NULL ) {
         if( WRFileExists( fn ) ) {
-            ok = ((name = WREStrDup( fn )) != NULL);
+            ok = ((name = WREStrdup( fn )) != NULL);
         } else {
             ok = false;
         }
@@ -656,7 +660,7 @@ bool WREOpenResource( char *fn )
     }
 
     if( name != NULL ) {
-        WRMemFree( name );
+        MemFree( name );
     }
 
     return( ok );
@@ -905,7 +909,7 @@ bool WRESaveResource( WREResInfo *res_info, bool prompt_name )
             fn = res_info->info->save_name;
         } else {
             res_info->info->save_type = res_info->info->file_type;
-            fn = WREStrDup( res_info->info->file_name );
+            fn = WREStrdup( res_info->info->file_name );
             got_name = true;
         }
 
@@ -924,7 +928,7 @@ bool WRESaveResource( WREResInfo *res_info, bool prompt_name )
 
     if( ok ) {
         if( got_name && res_info->info->save_name != NULL ) {
-            WRMemFree( res_info->info->save_name );
+            MemFree( res_info->info->save_name );
         }
         res_info->info->save_name = fn;
         if( res_info->info->save_type == WR_DONT_KNOW ) {
@@ -1077,7 +1081,7 @@ bool WRECreateResourceWindow( WREResInfo *res_info )
         } else {
             WREResCounter++;
             win_title_len = strlen( WREResUntitled ) + 7;
-            win_title = (char *)WRMemAlloc( win_title_len );
+            win_title = MemAlloc( win_title_len );
             sprintf( win_title, "%s.%d", WREResUntitled, 0xffff & WREResCounter );
             mdics.szTitle = win_title;
         }
@@ -1118,7 +1122,7 @@ bool WRECreateResourceWindow( WREResInfo *res_info )
     }
 
     if( win_title != NULL ) {
-        WRMemFree( win_title );
+        MemFree( win_title );
     }
 
     return( ok );
@@ -1197,7 +1201,9 @@ bool WREInitResources( HINSTANCE inst )
 {
     WREResInfoBrush = CreateSolidBrush( GetSysColor( COLOR_BTNFACE ) );
     WREAppInst = inst;
+#ifdef __WINDOWS__
     WREResInfoWinProc = MakeProcInstance_DLG( WREResInfoDlgProc, inst );
+#endif
     return( WREInitStaticVars() );
 }
 
@@ -1206,18 +1212,22 @@ void WREFiniResources( void )
     if( WREResInfoBrush != NULL ) {
         DeleteObject( WREResInfoBrush );
     }
+#ifdef __WINDOWS__
     FreeProcInstance_DLG( WREResInfoWinProc );
+#endif
     WREFiniStaticVars();
 }
 
 bool WRECreateResInfoWindow( WREResInfo *info )
 {
+#ifdef __WINDOWS__
     info->info_win = JCreateDialogParam( WREAppInst, "WREResource", info->res_win, WREResInfoWinProc, (LPARAM)(LPVOID)info );
-
+#else
+    info->info_win = JCreateDialogParam( WREAppInst, "WREResource", info->res_win, WREResInfoDlgProc, (LPARAM)(LPVOID)info );
+#endif
     if( info->info_win == (HWND)NULL ) {
         return( false );
     }
-
     return( true );
 }
 

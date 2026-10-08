@@ -31,11 +31,11 @@
 
 
 #include "variety.h"
+#include "seterrno.h"
 #include <stddef.h>
 #include <signal.h>
 #include <float.h>
 #include "rtdata.h"
-#include "rterrno.h"
 #include "rtfpehdl.h"
 #include "rtfpesig.h"
 #include "sigtab.h"
@@ -140,7 +140,7 @@ _WCRTLINK __sig_func signal( int sig, __sig_func func )
     __sig_func  prev_func;
 
     if(( sig < 1 ) || ( sig > __SIGLAST )) {
-        _RWD_errno = EINVAL;
+        lib_set_errno( EINVAL );
         return( SIG_ERR );
     }
     _RWD_abort = __sigabort;           /* change the abort rtn address */

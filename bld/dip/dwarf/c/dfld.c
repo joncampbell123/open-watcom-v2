@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -73,94 +73,183 @@ static uint Lookup_section_name( const char *name )
     return( sect );
 }
 
-
-static void ByteSwapShdr( Elf32_Shdr *elf_sec, bool byteswap )
-/************************************************************/
+static uint_16 BufReadU16( void *u16, bool big_endian )
 {
-    if( byteswap ) {
-        SWAP_32( elf_sec->sh_name );
-        SWAP_32( elf_sec->sh_type );
-        SWAP_32( elf_sec->sh_flags );
-        SWAP_32( elf_sec->sh_addr );
-        SWAP_32( elf_sec->sh_offset );
-        SWAP_32( elf_sec->sh_size );
-        SWAP_32( elf_sec->sh_link );
-        SWAP_32( elf_sec->sh_info );
-        SWAP_32( elf_sec->sh_addralign );
-        SWAP_32( elf_sec->sh_entsize );
+    if( big_endian ) {
+        return( MGET_BE_U32( u16 ) );
+    } else {
+        return( MGET_LE_U32( u16 ) );
     }
 }
 
+static uint_32 BufReadU32( void *u32, bool big_endian )
+{
+    if( big_endian ) {
+        return( MGET_BE_U32( u32 ) );
+    } else {
+        return( MGET_LE_U32( u32 ) );
+    }
+}
 
-static dip_status GetSectInfo( FILE *fp, unsigned long *sizes, unsigned long *bases, bool *byteswap )
-/****************************************************************************************************
- * Fill in the starting offset & length of the dwarf sections
- */
+static bool read_Shdr( FILE *fp, Elf32_Shdr *elf_sec, bool big_endian )
+/*********************************************************************/
+{
+    char    tmp32[4];
+
+    if( DCRead( fp, tmp32, sizeof( tmp32 ) ) != sizeof( tmp32 ) )
+        return( true );
+    elf_sec->sh_name = BufReadU32( tmp32, big_endian );
+    if( DCRead( fp, tmp32, sizeof( tmp32 ) ) != sizeof( tmp32 ) )
+        return( true );
+    elf_sec->sh_name = BufReadU32( tmp32, big_endian );
+    if( DCRead( fp, tmp32, sizeof( tmp32 ) ) != sizeof( tmp32 ) )
+        return( true );
+    elf_sec->sh_type = BufReadU32( tmp32, big_endian );
+    if( DCRead( fp, tmp32, sizeof( tmp32 ) ) != sizeof( tmp32 ) )
+        return( true );
+    elf_sec->sh_flags = BufReadU32( tmp32, big_endian );
+    if( DCRead( fp, tmp32, sizeof( tmp32 ) ) != sizeof( tmp32 ) )
+        return( true );
+    elf_sec->sh_addr = BufReadU32( tmp32, big_endian );
+    if( DCRead( fp, tmp32, sizeof( tmp32 ) ) != sizeof( tmp32 ) )
+        return( true );
+    elf_sec->sh_offset = BufReadU32( tmp32, big_endian );
+    if( DCRead( fp, tmp32, sizeof( tmp32 ) ) != sizeof( tmp32 ) )
+        return( true );
+    elf_sec->sh_size = BufReadU32( tmp32, big_endian );
+    if( DCRead( fp, tmp32, sizeof( tmp32 ) ) != sizeof( tmp32 ) )
+        return( true );
+    elf_sec->sh_link = BufReadU32( tmp32, big_endian );
+    if( DCRead( fp, tmp32, sizeof( tmp32 ) ) != sizeof( tmp32 ) )
+        return( true );
+    elf_sec->sh_info = BufReadU32( tmp32, big_endian );
+    if( DCRead( fp, tmp32, sizeof( tmp32 ) ) != sizeof( tmp32 ) )
+        return( true );
+    elf_sec->sh_addralign = BufReadU32( tmp32, big_endian );
+    if( DCRead( fp, tmp32, sizeof( tmp32 ) ) != sizeof( tmp32 ) )
+        return( true );
+    elf_sec->sh_entsize = BufReadU32( tmp32, big_endian );
+    return( false );
+}
+
+static bool read_Ehdr( FILE *fp, Elf32_Ehdr *elf_head, bool big_endian )
+/**********************************************************************/
+{
+    char    tmp16[2];
+    char    tmp32[4];
+
+    if( DCRead( fp, tmp16, sizeof( tmp16 ) ) != sizeof( tmp16 ) )
+        return( true );
+    elf_head->e_type = BufReadU16( tmp16, big_endian );
+    if( DCRead( fp, tmp16, sizeof( tmp16 ) ) != sizeof( tmp16 ) )
+        return( true );
+    elf_head->e_machine = BufReadU16( tmp16, big_endian );
+    if( DCRead( fp, tmp32, sizeof( tmp32 ) ) != sizeof( tmp32 ) )
+        return( true );
+    elf_head->e_version = BufReadU32( tmp32, big_endian );
+    if( DCRead( fp, tmp32, sizeof( tmp32 ) ) != sizeof( tmp32 ) )
+        return( true );
+    elf_head->e_entry = BufReadU32( tmp32, big_endian );
+    if( DCRead( fp, tmp32, sizeof( tmp32 ) ) != sizeof( tmp32 ) )
+        return( true );
+    elf_head->e_phoff = BufReadU32( tmp32, big_endian );
+    if( DCRead( fp, tmp32, sizeof( tmp32 ) ) != sizeof( tmp32 ) )
+        return( true );
+    elf_head->e_shoff = BufReadU32( tmp32, big_endian );
+    if( DCRead( fp, tmp32, sizeof( tmp32 ) ) != sizeof( tmp32 ) )
+        return( true );
+    elf_head->e_flags = BufReadU32( tmp32, big_endian );
+    if( DCRead( fp, tmp16, sizeof( tmp16 ) ) != sizeof( tmp16 ) )
+        return( true );
+    elf_head->e_ehsize = BufReadU16( tmp16, big_endian );
+    if( DCRead( fp, tmp16, sizeof( tmp16 ) ) != sizeof( tmp16 ) )
+        return( true );
+    elf_head->e_phentsize = BufReadU16( tmp16, big_endian );
+    if( DCRead( fp, tmp16, sizeof( tmp16 ) ) != sizeof( tmp16 ) )
+        return( true );
+    elf_head->e_phnum = BufReadU16( tmp16, big_endian );
+    if( DCRead( fp, tmp16, sizeof( tmp16 ) ) != sizeof( tmp16 ) )
+        return( true );
+    elf_head->e_shentsize = BufReadU16( tmp16, big_endian );
+    if( DCRead( fp, tmp16, sizeof( tmp16 ) ) != sizeof( tmp16 ) )
+        return( true );
+    elf_head->e_shnum = BufReadU16( tmp16, big_endian );
+    if( DCRead( fp, tmp16, sizeof( tmp16 ) ) != sizeof( tmp16 ) )
+        return( true );
+    elf_head->e_shstrndx = BufReadU16( tmp16, big_endian );
+    return( false );
+}
+
+static bool find_TIS_trailer( FILE *fp )
 {
     TISTrailer          dbg_head;
-    Elf32_Ehdr          elf_head;
-    Elf32_Shdr          elf_sec;
-    unsigned long       offset;
     unsigned long       start;
-    char                *string_table;
-    int                 i;
-    uint                sect;
+    char                tmp32[4];
 
-    // Find TIS header seek to elf header
     if( DCSeek( fp, DIG_SEEK_POSBACK( sizeof( dbg_head ) ), DIG_SEEK_END ) )
-        return( DS_FAIL );
+        return( true );
     start = DCTell( fp );
     for( ;; ) {
-        if( DCRead( fp, &dbg_head, sizeof( dbg_head ) ) != sizeof( dbg_head ) ) {
-            return( DS_FAIL );
-        }
-        if( dbg_head.signature != TIS_TRAILER_SIGNATURE ) {
+        if( DCRead( fp, dbg_head.signature, sizeof( dbg_head.signature ) ) != sizeof( dbg_head.signature ) )
+            return( true );
+        if( DCRead( fp, tmp32, sizeof( tmp32 ) ) != sizeof( tmp32 ) )
+            return( true );
+        dbg_head.vendor = MGET_LE_U32( tmp32 );
+        if( DCRead( fp, tmp32, sizeof( tmp32 ) ) != sizeof( tmp32 ) )
+            return( true );
+        dbg_head.type = MGET_LE_U32( tmp32 );
+        if( DCRead( fp, tmp32, sizeof( tmp32 ) ) != sizeof( tmp32 ) )
+            return( true );
+        dbg_head.size = MGET_LE_U32( tmp32 );
+        if( memcmp( dbg_head.signature, TIS_TRAILER_SIGNATURE, sizeof( TIS_TRAILER_SIGNATURE ) ) != 0 ) {
             /*
              * Seek to start of file and hope it's in ELF format
              */
             start = 0;
-            DCSeek( fp, 0, DIG_SEEK_ORG );
+            DCSeek( fp, start, DIG_SEEK_ORG );
             break;
         }
         start -= dbg_head.size - sizeof( dbg_head );
         DCSeek( fp, start, DIG_SEEK_ORG );
-        if( dbg_head.vendor == TIS_TRAILER_VENDOR_TIS && dbg_head.type == TIS_TRAILER_TYPE_TIS_DWARF ) {
+        if( dbg_head.vendor == TIS_TRAILER_VENDOR_TIS
+          && dbg_head.type == TIS_TRAILER_TYPE_TIS_DWARF ) {
             break;
         }
     }
+    return( false );
+}
+
+static dip_status GetSectInfo( FILE *fp, unsigned long *sizes, unsigned long *bases, bool *pbig_endian )
+/*******************************************************************************************************
+ * Fill in the starting offset & length of the dwarf sections
+ */
+{
+    Elf32_Ehdr          elf_head;
+    Elf32_Shdr          elf_sec;
+    unsigned long       offset;
+    char                *string_table;
+    int                 i;
+    uint                sect;
+    unsigned long       start;
+    bool                big_endian;
+
+    // Find TIS header and seek to elf header
+    if( find_TIS_trailer( fp ) )
+        return( DS_FAIL );
+    start = DCTell( fp );
     // read elf header find dwarf info
-    if( DCRead( fp, &elf_head, sizeof( elf_head ) ) != sizeof( elf_head ) ) {
+    if( DCRead( fp, &elf_head.e_ident, EI_NIDENT ) != EI_NIDENT )
         return( DS_FAIL );
-    }
-    if( memcmp( elf_head.e_ident, ELF_SIGNATURE, ELF_SIGNATURE_LEN ) != 0 ) {
+    if( memcmp( elf_head.e_ident, ELF_SIGNATURE, ELF_SIGNATURE_LEN ) != 0 )
         return( DS_FAIL );
-    }
     if( elf_head.e_ident[EI_CLASS] == ELFCLASS64 ) {
         // no support yet
         return( DS_FAIL );
     }
+    *pbig_endian = big_endian = ( elf_head.e_ident[EI_DATA] == ELFDATA2MSB );
 
-    *byteswap = false;
-#ifdef __BIG_ENDIAN__
-    if( elf_head.e_ident[EI_DATA] == ELFDATA2LSB ) {
-#else
-    if( elf_head.e_ident[EI_DATA] == ELFDATA2MSB ) {
-#endif
-        *byteswap = true;
-        SWAP_16( elf_head.e_type );
-        SWAP_16( elf_head.e_machine );
-        SWAP_32( elf_head.e_version );
-        SWAP_32( elf_head.e_entry );
-        SWAP_32( elf_head.e_phoff );
-        SWAP_32( elf_head.e_shoff );
-        SWAP_32( elf_head.e_flags );
-        SWAP_16( elf_head.e_ehsize );
-        SWAP_16( elf_head.e_phentsize );
-        SWAP_16( elf_head.e_phnum );
-        SWAP_16( elf_head.e_shentsize );
-        SWAP_16( elf_head.e_shnum );
-        SWAP_16( elf_head.e_shstrndx );
-    }
+    if( read_Ehdr( fp, &elf_head, big_endian ) )
+        return( DS_FAIL );
 
     // grab the string table, if it exists
     if( !elf_head.e_shstrndx ) {
@@ -173,15 +262,15 @@ static dip_status GetSectInfo( FILE *fp, unsigned long *sizes, unsigned long *ba
     memset( sizes, 0, DR_DEBUG_NUM_SECTS * sizeof( unsigned long ) );
     offset = elf_head.e_shoff + elf_head.e_shstrndx * elf_head.e_shentsize + start;
     DCSeek( fp, offset, DIG_SEEK_ORG );
-    DCRead( fp, &elf_sec, sizeof( Elf32_Shdr ) );
-    ByteSwapShdr( &elf_sec, *byteswap );
+    if( read_Shdr( fp, &elf_sec, big_endian ) )
+        return( DS_FAIL );
     string_table = DCAlloc( elf_sec.sh_size );
     DCSeek( fp, elf_sec.sh_offset + start, DIG_SEEK_ORG );
     DCRead( fp, string_table, elf_sec.sh_size );
     for( i = 0; i < elf_head.e_shnum; i++ ) {
         DCSeek( fp, elf_head.e_shoff + i * elf_head.e_shentsize + start, DIG_SEEK_ORG );
-        DCRead( fp, &elf_sec, sizeof( Elf32_Shdr ) );
-        ByteSwapShdr( &elf_sec, *byteswap );
+        if( read_Shdr( fp, &elf_sec, big_endian ) )
+            return( DS_FAIL );
         sect = Lookup_section_name( &string_table[elf_sec.sh_name] );
         if( sect < DR_DEBUG_NUM_SECTS ) {
             bases[sect] = elf_sec.sh_offset + start;
@@ -287,9 +376,9 @@ static dip_status InitDwarf( imp_image_handle *iih )
     dwarf = DCAlloc( sizeof( *dwarf ) );
     if( dwarf != NULL ) {
         iih->dwarf = dwarf;
-        ds = GetSectInfo( iih->sym_fp, sect_sizes, dwarf->sect_offsets, &iih->is_byteswapped );
+        ds = GetSectInfo( iih->sym_fp, sect_sizes, dwarf->sect_offsets, &iih->big_endian );
         if( ds == DS_OK ) {
-            dwarf->handle = DRDbgInitNFT( iih, sect_sizes, iih->is_byteswapped );
+            dwarf->handle = DRDbgInitNFT( iih, sect_sizes, iih->big_endian );
             if( dwarf->handle != NULL ) {
                 iih->has_pubnames = ( sect_sizes[DR_DEBUG_PUBNAMES] > 0 );
                 return( ds );

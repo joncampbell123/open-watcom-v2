@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,7 +34,7 @@
 #include "dbgdata.h"
 #include "dbgwind.h"
 #include "dbgerr.h"
-#include "dbgmem.h"
+#include "memfuncs.h"
 #include "strutil.h"
 #include "dbgscan.h"
 #include "dbgutil.h"
@@ -140,7 +140,7 @@ char    *GetWndFont( a_window wnd )
 
 static void SetFont( wnd_class_wv wndclass, char *font )
 {
-    GUIMemFree( WndFontInfo[wndclass] );
+    MemFree( WndFontInfo[wndclass] );
     WndFontInfo[wndclass] = font;
 }
 
@@ -208,19 +208,6 @@ void FiniFont( void )
     }
 }
 
-static char *GUIDupStrLen( const char *str, size_t len )
-{
-    char        *dup;
-
-    dup = GUIMemAlloc( len + 1 );
-    if( dup != NULL ) {
-        memcpy( dup, str, len );
-        dup[len] = NULLCHAR;
-    }
-    return( dup );
-}
-
-
 void ProcFont( void )
 {
     wnd_class_wv    wndclass;
@@ -237,7 +224,7 @@ void ProcFont( void )
             SetFont( wndclass1, NULL );
         }
     }
-    SetFont( wndclass, GUIDupStrLen( start, len ) );
+    SetFont( wndclass, MemToStringSafe( start, len ) );
     _SwitchOn( SW_PENDING_REPAINT );
 }
 
@@ -442,9 +429,9 @@ static void ProcStatus( void )
 }
 
 
-static bool DoneRefresh( inp_data_handle dummy, inp_rtn_action action )
+static bool DoneRefresh( inp_data_handle handle, inp_rtn_action action )
 {
-    /* unused parameters */ (void)dummy;
+    /* unused parameters */ (void)handle;
 
     switch( action ) {
     case INP_RTN_INIT:
@@ -463,8 +450,9 @@ static bool DoneRefresh( inp_data_handle dummy, inp_rtn_action action )
 
 static void PushRefresh( void )
 {
-    PushInpStack( NULL, DoneRefresh, false );
-    TypeInpStack( INP_NO_CMD );
+    if( PushInpStack( (inp_data_handle)NULL, DoneRefresh, false ) ) {
+        TypeInpStack( INP_NO_CMD );
+    }
 }
 
 /*

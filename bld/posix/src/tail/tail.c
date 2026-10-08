@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -66,7 +66,7 @@ typedef struct {
 static void addCharToString( string **p, int ch )
 {
     string *s = *p;
-    if( s->off == s->size ) {
+    if( s->size == s->off ) {
         s->size += STRING_INC;
         s = MemRealloc( s, sizeof( string ) + s->size );
         *p = s;
@@ -187,7 +187,7 @@ int main( int argc, char *argv[] )
 
     tailCount = 10;
     rxflag = false;
-    for(;;) {
+    for( ;; ) {
         ch = GetOpt( &argc, argv1, "#X", usageMsg );
         if( ch == -1 ) {
             break;
@@ -209,7 +209,7 @@ int main( int argc, char *argv[] )
     } else {
         for( i = 1; i < argc; i++ ) {
             if( argc > 2 ) {
-                printf( "\n%s:\n", strupr( argv[i] ) );
+                printf( "\n%s:\n", argv[i] );
             }
             tailFile( argv[i] );
         }

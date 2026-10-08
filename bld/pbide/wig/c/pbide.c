@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -140,10 +140,10 @@ BOOL IDE_EXPORT WatIDE_DirIsOk( const char *dllname )
 
     say( "DirIsOk %s", dllname );
     _splitpath2( dllname, pg.buffer, &pg.drive, &pg.dir, NULL, NULL );
-    _makepath( mask, pg.drive, pg.dir, "*", CPP_EXT );
+    _makepath( mask, pg.drive, pg.dir, "*", FEXT_CPP );
     if( matchsExist( mask ) )
         return( FALSE );
-    _makepath( mask, pg.drive, pg.dir, "*", HPP_EXT );
+    _makepath( mask, pg.drive, pg.dir, "*", FEXT_HPP );
     if( matchsExist( mask ) )
         return( FALSE );
     return( TRUE );
@@ -177,12 +177,12 @@ BOOL IDE_EXPORT WatIDE_RunWig( const char *sruname, const char *parentname,
 
     say( "RunWig %s", sruname );
     argv[0] = "";
-    argv[1] = MemMalloc( strlen( sruname ) + 1 );
+    argv[1] = MemAlloc( strlen( sruname ) + 1 );
     strcpy( argv[1], sruname );
     argv[2] = "-r";
     argc = 3;
     if( parentname != NULL ) {
-        argv[3] = MemMalloc( strlen( parentname ) + 4 );
+        argv[3] = MemAlloc( strlen( parentname ) + 4 );
         sprintf( argv[3], "-in=%s", parentname );
         argc++;
     }
@@ -234,7 +234,7 @@ static void mkProjectName( char *buf, const char *dllname )
     pgroup2     pg;
 
     _splitpath2( dllname, pg.buffer, &pg.drive, &pg.dir, &pg.fname, NULL );
-    _makepath( buf, pg.drive, pg.dir, pg.fname, WPJ_EXT );
+    _makepath( buf, pg.drive, pg.dir, pg.fname, FEXT_WPJ );
 }
 
 static char     CmdBuffer[ _MAX_PATH * 4 ];

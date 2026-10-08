@@ -27,7 +27,7 @@ wv_os2pm = 1
 !endif
 !endif
 
-additional_clean = *.gh *.grc
+additional_clean = *.gh *.grc *.grh
 !ifdef wv_os2pm
 additional_clean += *.dlg
 !endif
@@ -35,7 +35,6 @@ additional_clean += *.dlg
 !include cproj.mif
 !include defrule.mif
 !include deftarg.mif
-!include trmem.mif
 
 dig_arch = all
 
@@ -56,7 +55,7 @@ dig_arch = all
 .c: ../c;../../c;$(aui_dir)/c;$(dig_srcs);$(watcom_dir)/c;$(trmem_dir)
 
 inc_dirs = -I. -I"../h" -I"../../h" -I"../../res" -I"$(dig_dir)/h" $(cli_aui_inc_dirs) &
-	$(cli_ui_inc_dirs_internal) $(cli_hlpview_inc_dirs) $(cli_wpi_inc_dirs)
+	$(cli_ui_inc_dirs_internal) $(cli_hlpview_inc_dirs) $(cli_wpi_inc_dirs) -I"$(trmem_dir)"
 !ifdef sys_rtdll
 !else
 inc_dirs += $(cli_gui_inc_dirs_internal)
@@ -75,8 +74,6 @@ extra_cpp_flags_os2 = -D__OS2_PM__
 !endif
 extra_cpp_flags_nt = -DENABLE_TRAP_LOGGING
 
-extra_cpp_flags_f_dynmem = $(trmem_cpp_flags)
-
 extra_c_flags_win = -zW -zc
 extra_c_flags_qnx = -I"$(clib_dir)/h"
 !ifdef sys_windowed
@@ -85,10 +82,11 @@ extra_c_flags_os2i86 = -zc -zu
 extra_c_flags_os2i86 = -zc
 !endif
 
-extra_c_flags_f_dynmem = $(trmem_cover_cflags)
 extra_c_flags_f_dipld = -I"$(dig_dir)/c"
 extra_c_flags_f_madld = -I"$(dig_dir)/c"
 extra_c_flags_f_trpld = -I"$(dig_dir)/c"
+
+extra_c_flags_f_srcmgt = 
 
 #
 # aflags

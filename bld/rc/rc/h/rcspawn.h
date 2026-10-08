@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -30,12 +31,9 @@
 
 
 #include <setjmp.h>
+#include "wnoret.h"
 
 extern int     RCSpawn( void (*fn)( void ) );
-#if defined(__WATCOMC__)
-#pragma aux RCSuicide __aborts
-#endif
-extern void    RCSuicide( int );
+NO_RETURN( extern void RCSuicide( int ) );
 
 extern jmp_buf jmpbuf_RCFatalError;
-

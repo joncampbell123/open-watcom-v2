@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2023      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2023-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -38,18 +38,18 @@
 #include "yaccins.h"
 #include "alloc.h"
 
-typedef struct traceback traceback;
-struct traceback {
-    traceback   *next;
-    a_state     *state;
-    a_sym       *sym;
-};
+
+typedef struct traceback {
+    struct traceback    *next;
+    a_state             *state;
+    a_sym               *sym;
+} traceback;
 
 static void pushTrace( traceback **h, a_state *state, a_sym *sym )
 {
-    traceback   *token;
+    traceback       *token;
 
-    token = MALLOC( 1, traceback );
+    token = MemAllocSafe( sizeof( traceback ) );
     token->next = *h;
     token->state = state;
     token->sym = sym;
@@ -58,22 +58,20 @@ static void pushTrace( traceback **h, a_state *state, a_sym *sym )
 
 static void popTrace( traceback **h )
 {
-    traceback   *token;
+    traceback       *token;
 
-    token = *h;
-    if( token != NULL ) {
+    if( (token = *h) != NULL ) {
         *h = token->next;
-        FREE( token );
+        MemFree( token );
     }
 }
 
 static a_state *findNewShiftState( a_state *state, a_sym *sym )
 {
     a_shift_action  *saction;
-    a_sym           *shift_sym;
 
-    for( saction = state->trans; (shift_sym = saction->sym) != NULL; ++saction ) {
-        if( shift_sym == sym ) {
+    for( saction = state->trans; saction->sym != NULL; ++saction ) {
+        if( saction->sym == sym ) {
             return( saction->state );
         }
     }
@@ -82,7 +80,7 @@ static a_state *findNewShiftState( a_state *state, a_sym *sym )
 
 static void performShift( traceback **h, a_sym *sym )
 {
-    a_state     *state;
+    a_state         *state;
 
     state = findNewShiftState( (*h)->state, sym );
     pushTrace( h, state, sym );
@@ -90,9 +88,9 @@ static void performShift( traceback **h, a_sym *sym )
 
 static void performReduce( traceback **h, a_pro *pro )
 {
-    an_item     *p;
+    an_item         *p;
 
-    for( p = pro->items; p->p.sym != NULL; ++p ) {
+    for( p = pro->items; p->u.sym != NULL; ++p ) {
         popTrace( h );
     }
     performShift( h, pro->sym );
@@ -101,17 +99,17 @@ static void performReduce( traceback **h, a_pro *pro )
 
 static a_sym *terminalInKernel( an_item *p )
 {
-    a_sym       *sym_after_dot;
-    a_sym       *post_sym;
-    an_item     *q;
-    a_pro       *pro;
+    a_sym           *sym_after_dot;
+    a_sym           *post_sym;
+    an_item         *q;
+    a_pro           *pro;
 
-    for( q = p; q->p.sym != NULL; ) {
+    for( q = p; q->u.sym != NULL; ) {
         ++q;
     }
-    pro = q[1].p.pro;
+    pro = q[1].u.pro;
     sym_after_dot = NULL;
-    for( q = pro->items; (post_sym = q->p.sym) != NULL; ++q ) {
+    for( q = pro->items; (post_sym = q->u.sym) != NULL; ++q ) {
         if( q == p ) {
             if( post_sym->pro == NULL ) {
                 sym_after_dot = post_sym;
@@ -124,7 +122,7 @@ static a_sym *terminalInKernel( an_item *p )
 
 static bool notInTraceback( traceback **h, a_sym *sym )
 {
-    traceback   *t;
+    traceback       *t;
 
     for( t = *h; t != NULL; t = t->next ) {
         if( t->sym == sym ) {
@@ -137,26 +135,26 @@ static bool notInTraceback( traceback **h, a_sym *sym )
 static a_sym *findNewShiftSym( a_state *state, traceback **h )
 {
     a_shift_action  *saction;
-    a_sym           *shift_sym;
+    a_sym           *sym;
     an_item         **item;
 
     if( state->trans[0].sym != NULL && state->trans[1].sym == NULL ) {
-        shift_sym = state->trans[0].sym;
-        if( notInTraceback( h, shift_sym ) ) {
-            return( shift_sym );
+        sym = state->trans[0].sym;
+        if( notInTraceback( h, sym ) ) {
+            return( sym );
         }
     }
     for( item = state->items; *item != NULL; ++item ) {
-        shift_sym = terminalInKernel( *item );
-        if( shift_sym != NULL ) {
-            if( notInTraceback( h, shift_sym ) ) {
-                return( shift_sym );
+        sym = terminalInKernel( *item );
+        if( sym != NULL ) {
+            if( notInTraceback( h, sym ) ) {
+                return( sym );
             }
         }
     }
-    for( saction = state->trans; (shift_sym = saction->sym) != NULL; ++saction ) {
-        if( notInTraceback( h, shift_sym ) ) {
-            return( shift_sym );
+    for( saction = state->trans; (sym = saction->sym) != NULL; ++saction ) {
+        if( notInTraceback( h, sym ) ) {
+            return( sym );
         }
     }
     return( NULL );
@@ -171,11 +169,11 @@ static void flushStack( traceback **h )
 
 static void doRunUntilShift( traceback **h, a_sym *sym, traceback **ht, unsigned count )
 {
-    index_n             sym_idx;
-    a_sym               *chk_sym;
-    a_state             *state;
-    a_state             *top_state;
-    a_reduce_action     *raction;
+    index_n         sym_idx;
+    a_sym           *chk_sym;
+    a_state         *state;
+    a_state         *top_state;
+    a_reduce_action *raction;
 
     for( ; *h != NULL; ) {
         top_state = (*h)->state;
@@ -200,7 +198,7 @@ static void doRunUntilShift( traceback **h, a_sym *sym, traceback **ht, unsigned
         }
         sym_idx = sym->idx;
         for( raction = top_state->redun; raction->pro != NULL; ++raction ) {
-            if( IsBitSet( raction->follow, sym_idx ) ) {
+            if( IsBitSet( raction->follow, sym_idx, WSIZE ) ) {
                 performReduce( h, raction->pro );
                 break;
             }
@@ -243,8 +241,8 @@ static void runUntilShift( traceback **h, a_sym *sym, traceback **ht )
 
 static traceback *reverseStack( traceback *s )
 {
-    traceback   *h;
-    traceback   *n;
+    traceback       *h;
+    traceback       *n;
 
     h = NULL;
     while( s != NULL ) {
@@ -258,11 +256,11 @@ static traceback *reverseStack( traceback *s )
 
 static void printAndFreeStack( traceback *top )
 {
-    size_t      column;
-    size_t      len;
-    a_sym       *sym;
-    char        *min;
-    traceback   *token;
+    size_t          column;
+    size_t          len;
+    a_sym           *sym;
+    char            *min;
+    traceback       *token;
 
     column = 0;
     while( top != NULL ) {
@@ -279,14 +277,14 @@ static void printAndFreeStack( traceback *top )
             fputs( min, stdout );
             column += len;
         }
-        FREE( token );
+        MemFree( token );
     }
 }
 
 static traceback *makeReversedCopy( traceback *top )
 {
-    traceback   *parse_stack;
-    traceback   *curr;
+    traceback       *parse_stack;
+    traceback       *curr;
 
     parse_stack = NULL;
     for( curr = top; curr != NULL; curr = curr->next ) {
@@ -313,7 +311,7 @@ static traceback *getStatePrefix( a_state *state, a_state *initial_parent )
             min_state = parent->state;
             for( parent = parent->next; parent != NULL; parent = parent->next ) {
                 min_state_check = parent->state;
-                if( min_state->idx > min_state_check->idx ) {
+                if( min_state->sidx > min_state_check->sidx ) {
                     min_state = min_state_check;
                 }
             }
@@ -331,17 +329,17 @@ static traceback *getStatePrefix( a_state *state, a_state *initial_parent )
 void ShowSentence( a_state *state, a_sym *sym, a_pro *pro, a_state *to_state )
 /****************************************************************************/
 {
-    traceback   *list;
-    traceback   *parse_stack;
-    traceback   *token_stack;
-    a_parent    *parent;
+    traceback       *list;
+    traceback       *parse_stack;
+    traceback       *token_stack;
+    a_parent        *parent;
 
     for( parent = state->parents; parent != NULL; parent = parent->next ) {
         if( to_state != NULL ) {
             /*
              * S/R conflict
              */
-            printf( "Sample sentence(s) for shift to state %u:\n", to_state->idx );
+            printf( "Sample sentence(s) for shift to state %u:\n", to_state->sidx );
         } else {
             /*
              * R/R conflict
@@ -360,10 +358,12 @@ void ShowSentence( a_state *state, a_sym *sym, a_pro *pro, a_state *to_state )
         printf( "  " );
         printAndFreeStack( list );
         if( parse_stack == NULL ) {
+            flushStack( &token_stack );  /* FIX: uvolnit token_stack při chybové větvi */
             printf( ". %s\n  Will never shift token '%s' in this context\n", sym->name, sym->name );
         } else {
             printf( ".\n" );
             runUntilShift( &parse_stack, eofsym, &token_stack );
+            flushStack( &parse_stack );  /* FIX: uvolnit parse_stack po posledním runUntilShift */
             token_stack = reverseStack( token_stack );
             printAndFreeStack( token_stack );
             putchar( '\n' );
@@ -379,7 +379,7 @@ void ShowSentence( a_state *state, a_sym *sym, a_pro *pro, a_state *to_state )
 
 static char *my_stpcpy( char *d, char const *s )
 {
-    size_t  len;
+    size_t          len;
 
     len = strlen( s );
     memcpy( d, s, len + 1 );
@@ -388,25 +388,25 @@ static char *my_stpcpy( char *d, char const *s )
 
 static size_t symHasMinLen( a_sym *sym, a_pro *pro, a_sym *disallow_error )
 {
-    size_t      len;
-    an_item     *p;
+    size_t          len;
+    an_item         *p;
 
     /* unused parameters */ (void)sym;
 
-    for( p = pro->items; p->p.sym != NULL; ++p ) {
-        if( p->p.sym == disallow_error ) {
+    for( p = pro->items; p->u.sym != NULL; ++p ) {
+        if( p->u.sym == disallow_error ) {
             /*
              * derivations using the error sym are not desirable
              */
             return( 0 );
         }
-        if( p->p.sym->min == NULL ) {
+        if( p->u.sym->min == NULL ) {
             return( 0 );
         }
     }
     len = 0;
-    for( p = pro->items; p->p.sym != NULL; ++p ) {
-        len += strlen( p->p.sym->min ) + 1;
+    for( p = pro->items; p->u.sym != NULL; ++p ) {
+        len += strlen( p->u.sym->min ) + 1;
     }
     ++len;
     return( len );
@@ -414,21 +414,21 @@ static size_t symHasMinLen( a_sym *sym, a_pro *pro, a_sym *disallow_error )
 
 static a_sym *symHasMin( a_sym *sym, a_pro *pro, a_sym *disallow_error )
 {
-    size_t      len;
-    an_item     *p;
-    char        *min;
-    char        *cat;
+    size_t          len;
+    an_item         *p;
+    char            *min;
+    char            *cat;
 
     len = symHasMinLen( sym, pro, disallow_error );
     if( len == 0 ) {
         return( NULL );
     }
-    min = MALLOC( len, char );
+    min = MemAllocSafe( len );
     min[0] = '\0';
     cat = min;
-    for( p = pro->items; p->p.sym != NULL; ++p ) {
-        if( p->p.sym->min[0] != '\0' ) {
-            cat = my_stpcpy( cat, p->p.sym->min );
+    for( p = pro->items; p->u.sym != NULL; ++p ) {
+        if( p->u.sym->min[0] != '\0' ) {
+            cat = my_stpcpy( cat, p->u.sym->min );
         }
     }
     if( cat != min && cat[-1] != ' ' ) {
@@ -440,13 +440,13 @@ static a_sym *symHasMin( a_sym *sym, a_pro *pro, a_sym *disallow_error )
 
 static void setMinToName( a_sym *sym )
 {
-    size_t      len;
-    char        *min;
-    char        *cat;
+    size_t          len;
+    char            *min;
+    char            *cat;
 
     len = strlen( sym->name );
     len += 2;
-    min = MALLOC( len, char );
+    min = MemAllocSafe( len );
     min[0] = '\0';
     cat = min;
     cat = my_stpcpy( cat, sym->name );
@@ -458,18 +458,18 @@ static void setMinToName( a_sym *sym )
 
 static void propagateMin( a_sym *disallow_error )
 {
-    a_sym       *last;
-    a_sym       *sym;
-    a_sym       *has_min;
-    a_pro       *pro;
-    unsigned    i;
-    size_t      min_len;
-    size_t      len;
+    a_sym           *last;
+    a_sym           *sym;
+    a_sym           *has_min;
+    a_pro           *pro;
+    sym_n           sym_idx;
+    size_t          min_len;
+    size_t          len;
 
     do {
         last = NULL;
-        for( i = 0; i < nsym; ++i ) {
-            sym = symtab[i];
+        for( sym_idx = 0; sym_idx < nsym; ++sym_idx ) {
+            sym = symtab[sym_idx];
             if( sym->min == NULL ) {
                 min_len = (size_t)-1;
                 for( pro = sym->pro; pro != NULL; pro = pro->next ) {
@@ -495,17 +495,17 @@ static void propagateMin( a_sym *disallow_error )
 
 static void seedWithSimpleMin( void )
 {
-    a_sym       *sym;
-    unsigned    i;
+    a_sym           *sym;
+    sym_n           sym_idx;
 
     /*
      * set terminals to their name and set nullable syms
      */
-    for( i = 0; i < nsym; ++i ) {
-        sym = symtab[i];
+    for( sym_idx = 0; sym_idx < nsym; ++sym_idx ) {
+        sym = symtab[sym_idx];
         if( sym->pro != NULL ) {
             if( sym->nullable ) {
-                sym->min = strdup( "" );
+                sym->min = MemStrdupSafe( "" );
             }
         } else {
             setMinToName( sym );
@@ -515,11 +515,11 @@ static void seedWithSimpleMin( void )
 
 static void verifyAllHaveMin( void )
 {
-    a_sym       *sym;
-    unsigned    i;
+    a_sym           *sym;
+    sym_n           sym_idx;
 
-    for( i = 0; i < nsym; ++i ) {
-        sym = symtab[i];
+    for( sym_idx = 0; sym_idx < nsym; ++sym_idx ) {
+        sym = symtab[sym_idx];
         if( sym->min == NULL ) {
             printf( "%s has no minimum expansion! (mutually recursive?)\n", sym->name );
             setMinToName( sym );

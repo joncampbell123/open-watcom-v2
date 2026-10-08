@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -76,35 +76,36 @@ static char *InitAsmSym( asm_sym_handle sym, const char *name )
     void        *handle;
 #endif
 
-    sym->name = AsmStrDup( name );
-    if( sym->name != NULL ) {
-        sym->next = NULL;
-        sym->fixup = NULL;
 #if defined( _STANDALONE_ )
-        sym->segment = NULL;
-        sym->offset = 0;
-        sym->public = false;
-        sym->referenced = false;
-        sym->langtype = WASM_LANG_NONE;
-        sym->first_size = 0;
-        sym->first_length = 0;
-        sym->total_size = 0;
-        sym->total_length = 0;
-        sym->count = 0;
-        sym->mangler = NULL;
-        sym->state = SYM_UNDEFINED;
-        sym->mem_type = MT_EMPTY;
+    sym->name = MemStrdupSafe( name );
+    sym->next = NULL;
+    sym->fixup = NULL;
+    sym->segment = NULL;
+    sym->offset = 0;
+    sym->public = false;
+    sym->referenced = false;
+    sym->langtype = WASM_LANG_NONE;
+    sym->first_size = 0;
+    sym->first_length = 0;
+    sym->total_size = 0;
+    sym->total_length = 0;
+    sym->count = 0;
+    sym->mangler = NULL;
+    sym->state = SYM_UNDEFINED;
+    sym->mem_type = MT_EMPTY;
 #else
-        sym->addr = 0;
-        handle = AsmQuerySymbol( sym->name );
-        sym->state = AsmQueryState( handle );
-        if( sym->state == SYM_UNDEFINED ) {
-            sym->mem_type = MT_EMPTY;
-        } else {
-            sym->mem_type = CvtTable[ AsmQueryType( handle ) ];
-        }
-#endif
+    sym->name = MemStrdupSafe( name );
+    sym->next = NULL;
+    sym->fixup = NULL;
+    sym->addr = 0;
+    handle = AsmQuerySymbol( sym->name );
+    sym->state = AsmQueryState( handle );
+    if( sym->state == SYM_UNDEFINED ) {
+        sym->mem_type = MT_EMPTY;
+    } else {
+        sym->mem_type = CvtTable[ AsmQueryType( handle ) ];
     }
+#endif
     return( sym->name );
 }
 
@@ -114,23 +115,21 @@ static asm_sym_handle AllocASym( const char *name )
     asm_sym_handle  sym;
 
 #if defined( _STANDALONE_ )
-    sym = AsmAlloc( sizeof( dir_node ) );
+    sym = MemAllocSafe( sizeof( dir_node ) );
 #else
-    sym = AsmAlloc( sizeof( *sym ) );
+    sym = MemAllocSafe( sizeof( *sym ) );
 #endif
-    if( sym != NULL ) {
-        if( InitAsmSym( sym, name ) == NULL ) {
-            AsmFree( sym );
-            return( NULL );
-        }
-#if defined( _STANDALONE_ )
-        ((dir_node_handle)sym)->next = NULL;
-        ((dir_node_handle)sym)->prev = NULL;
-        ((dir_node_handle)sym)->line_num = 0;
-        ((dir_node_handle)sym)->e.seginfo = NULL;
-#endif
+    if( InitAsmSym( sym, name ) == NULL ) {
+        MemFree( sym );
+        return( NULL );
     }
-    return sym;
+#if defined( _STANDALONE_ )
+    ((dir_node_handle)sym)->next = NULL;
+    ((dir_node_handle)sym)->prev = NULL;
+    ((dir_node_handle)sym)->line_num = 0;
+    ((dir_node_handle)sym)->e.seginfo = NULL;
+#endif
+    return( sym );
 }
 
 static asm_sym_handle *AsmFind( const char *name )
@@ -147,11 +146,7 @@ static asm_sym_handle *AsmFind( const char *name )
 #endif
     for( ; *sym != NULL; sym = &((*sym)->next) ) {
 #if defined( _STANDALONE_ )
-        if( Options.mode & MODE_IDEAL ) {
-            if( strcmp( name, (*sym)->name ) == 0 ) {
-                break;
-            }
-        } else if( Options.symbols_nocasesensitive ) {
+        if( Options.symbols_nocasesensitive ) {
             if( stricmp( name, (*sym)->name ) == 0 ) {
                 break;
             }
@@ -196,7 +191,7 @@ static bool AddLocalLabel( asm_sym_handle sym )
         sym->mem_type = MT_SHORT;
     }
     info = CurrProc->e.procinfo;
-    label = AsmAlloc( sizeof( label_list ) );
+    label = MemAllocSafe( sizeof( label_list ) );
     label->label = NULL;
     label->size = 0;
     label->replace = NULL;
@@ -305,11 +300,11 @@ void FreeASym( asm_sym_handle sym )
     --AsmSymCount;
     for( ; (fixup = sym->fixup) != NULL; ) {
         sym->fixup = fixup->next;
-        AsmFree( fixup );
+        MemFree( fixup );
     }
 #endif
-    AsmFree( sym->name );
-    AsmFree( sym );
+    MemFree( sym->name );
+    MemFree( sym );
 }
 
 #if defined( _STANDALONE_ )
@@ -324,8 +319,8 @@ bool AsmChangeName( const char *old, const char *new )
     if( *sym_ptr != NULL ) {
         sym = *sym_ptr;
         *sym_ptr = sym->next;
-        AsmFree( sym->name );
-        sym->name = AsmStrDup( new );
+        MemFree( sym->name );
+        sym->name = MemStrdupSafe( new );
         sym_ptr = AsmFind( new );
         if( *sym_ptr != NULL )
             return( true );
@@ -334,6 +329,17 @@ bool AsmChangeName( const char *old, const char *new )
         *sym_ptr = sym;
     }
     return( false );
+}
+
+void AsmSetMandatoryName( asm_sym_handle sym, const char *name )
+/**************************************************************/
+{
+    if( Options.symbols_nocasesensitive ) {
+        if( strcmp( sym->name, name ) != 0 ) {
+            MemFree( sym->name );
+            sym->name = MemStrdupSafe( name );
+        }
+    }
 }
 
 void AsmTakeOut( const char *name )
@@ -347,7 +353,7 @@ void AsmTakeOut( const char *name )
         /* found it -- so take it out */
         sym = *sym_ptr;
         *sym_ptr = sym->next;
-        FreeInfo( (dir_node_handle)sym );
+        dir_fini( (dir_node_handle)sym );
         FreeASym( sym );
     }
     return;
@@ -463,7 +469,7 @@ void AsmSymFini( void )
     for( i = 0; i < HASH_TABLE_SIZE; i++ ) {
         for( sym = sym_table[i]; sym != NULL; sym = next ) {
             next = sym->next;
-            FreeInfo( (dir_node_handle)sym );
+            dir_fini( (dir_node_handle)sym );
             FreeASym( sym );
         }
     }
@@ -496,17 +502,15 @@ static asm_sym_handle *SortAsmSyms( void )
     unsigned        i;
     unsigned        j;
 
-    syms = AsmAlloc( AsmSymCount * sizeof( asm_sym * ) );
-    if( syms != NULL ) {
-        /* copy symbols to table */
-        for( i = j = 0; i < HASH_TABLE_SIZE; i++ ) {
-            for( sym = sym_table[i]; sym != NULL; sym = sym->next ) {
-                syms[j++] = sym;
-            }
+    syms = MemAllocSafe( AsmSymCount * sizeof( asm_sym * ) );
+    /* copy symbols to table */
+    for( i = j = 0; i < HASH_TABLE_SIZE; i++ ) {
+        for( sym = sym_table[i]; sym != NULL; sym = sym->next ) {
+            syms[j++] = sym;
         }
-        /* sort 'em */
-        qsort( syms, AsmSymCount, sizeof( asm_sym * ), compare_fn );
     }
+    /* sort 'em */
+    qsort( syms, AsmSymCount, sizeof( asm_sym * ), compare_fn );
     return( syms );
 }
 
@@ -655,14 +659,14 @@ static void log_symbol( asm_sym_handle sym )
 {
     if( sym->state == SYM_CONST ) {
         dir_node_handle dir = (dir_node_handle)sym;
-        const_info      *cst = dir->e.constinfo;
+        const_info      *constinfo = dir->e.constinfo;
 
         LstMsg( "%s %s        ", sym->name, dots + strlen( sym->name ) + 1 );
-        if( cst->count
-          && cst->tokens[0].class != TC_NUM ) {
-            LstMsg( "Text     %s\n", cst->tokens[0].string_ptr );
+        if( constinfo->count
+          && constinfo->tokens[0].class != TC_NUM ) {
+            LstMsg( "Text     %s\n", constinfo->tokens[0].string_ptr );
         } else {
-            LstMsg( "Number   %04Xh\n", ( cst->count ) ? cst->tokens[0].u.value : 0 );
+            LstMsg( "Number   %04Xh\n", ( constinfo->count ) ? constinfo->tokens[0].u.value : 0 );
         }
     } else if( sym->state == SYM_INTERNAL
       && !IS_SYM_COUNTER( sym->name ) ) {
@@ -708,7 +712,7 @@ void WriteListing( void )
     asm_sym_handle  *syms;
     unsigned        i;
 
-    if( AsmFiles.file[LST] == NULL ) {
+    if( AsmFiles.fp[LST] == NULL ) {
         return; // no point going through the motions if lst file isn't open
     }
     syms = SortAsmSyms();
@@ -746,7 +750,7 @@ void WriteListing( void )
         LstMsg( "\n" );
 
         /* free the sorted symbols */
-        AsmFree( syms );
+        MemFree( syms );
     }
 }
 
@@ -758,7 +762,7 @@ static void DumpSymbol( asm_sym_handle sym )
 //    dir_node_handle dir;
     char        *type;
     char        value[512];
-    const char  *langtype;
+    const char  *langstr;
     char        *public;
 
 //    dir = (dir_node_handle)sym;
@@ -766,21 +770,21 @@ static void DumpSymbol( asm_sym_handle sym )
     switch( sym->state ) {
     case SYM_SEG:
         type = "SEGMENT";
-//        dir->e.seginfo = AsmAlloc( sizeof( seg_info ) );
+//        dir->e.seginfo = MemAllocSafe( sizeof( seg_info ) );
 //        dir->e.seginfo->idx = 0;
 //        dir->e.seginfo->grpidx = 0;
 //        dir->e.seginfo->segrec = NULL;
         break;
     case SYM_GRP:
         type = "GROUP";
-//        dir->e.grpinfo = AsmAlloc( sizeof( grp_info ) );
+//        dir->e.grpinfo = MemAllocSafe( sizeof( grp_info ) );
 //        dir->e.grpinfo->idx = 0;
 //        dir->e.grpinfo->seglist = NULL;
 //        dir->e.grpinfo->numseg = 0;
         break;
     case SYM_EXTERNAL:
         type = "EXTERNAL";
-//        dir->e.extinfo = AsmAlloc( sizeof( ext_info ) );
+//        dir->e.extinfo = MemAllocSafe( sizeof( ext_info ) );
 //        dir->e.extinfo->idx = 0;
 //        dir->e.extinfo->use32 = Use32;
 //        dir->e.extinfo->comm = false;
@@ -790,13 +794,13 @@ static void DumpSymbol( asm_sym_handle sym )
         break;
     case SYM_CONST:
         type = "CONSTANT";
-//        dir->e.constinfo = AsmAlloc( sizeof( const_info ) );
+//        dir->e.constinfo = MemAllocSafe( sizeof( const_info ) );
 //        dir->e.constinfo->tokens = NULL;
 //        dir->e.constinfo->count = 0;
         break;
     case SYM_PROC:
         type = "PROCEDURE";
-//        dir->e.procinfo = AsmAlloc( sizeof( proc_info ) );
+//        dir->e.procinfo = MemAllocSafe( sizeof( proc_info ) );
 //        dir->e.procinfo->regslist = NULL;
 //        dir->e.procinfo->params.head = NULL;
 //        dir->e.procinfo->params.tail = NULL;
@@ -805,7 +809,7 @@ static void DumpSymbol( asm_sym_handle sym )
         break;
     case SYM_MACRO:
         type = "MACRO";
-//        dir->e.macroinfo = AsmAlloc( sizeof( macro_info ) );
+//        dir->e.macroinfo = MemAllocSafe( sizeof( macro_info ) );
 //        dir->e.macroinfo->params.head = NULL;
 //        dir->e.macroinfo->params.tail = NULL;
 //        dir->e.macroinfo->labels.head = NULL;
@@ -816,12 +820,12 @@ static void DumpSymbol( asm_sym_handle sym )
         break;
     case SYM_CLASS_LNAME:
         type = "CLASS";
-//        dir->e.lnameinfo = AsmAlloc( sizeof( lname_info ) );
+//        dir->e.lnameinfo = MemAllocSafe( sizeof( lname_info ) );
 //        dir->e.lnameinfo->idx = 0;
         break;
     case SYM_STRUCT:
         type = "STRUCTURE";
-//        dir->e.structinfo = AsmAlloc( sizeof( struct_info ) );
+//        dir->e.structinfo = MemAllocSafe( sizeof( struct_info ) );
 //        dir->e.structinfo->size = 0;
 //        dir->e.structinfo->alignment = 0;
 //        dir->e.structinfo->fields.head = NULL;
@@ -848,8 +852,8 @@ static void DumpSymbol( asm_sym_handle sym )
     } else {
         public = "";
     }
-    langtype = get_sym_lang( sym );
-    DoDebugMsg( "%-30s\t%s\t%s%s\t%8X\t%s\n", sym->name, type, public, langtype, sym->offset, value );
+    langstr = get_sym_lang( sym );
+    DoDebugMsg( "%-30s\t%s\t%s%s\t%8X\t%s\n", sym->name, type, public, langstr, sym->offset, value );
 }
 
 void DumpASym( void )

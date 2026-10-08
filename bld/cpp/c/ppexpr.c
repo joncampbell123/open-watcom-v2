@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -31,6 +31,7 @@
 
 
 #include "_preproc.h"
+#include "memfuncs.h"
 
 
 static long PP_HexNumber( void )
@@ -67,6 +68,7 @@ static void PP_CharConst( PREPROC_VALUE *val )
         ++PPTokenPtr;
         // look for hex constant or octal escape sequence
         switch( PPTokenPtr[0] ) {
+        /* control characters */
         case 'a':       value = '\a';   break;
         case 'b':       value = '\b';   break;
         case 'f':       value = '\f';   break;
@@ -74,11 +76,20 @@ static void PP_CharConst( PREPROC_VALUE *val )
         case 'r':       value = '\r';   break;
         case 't':       value = '\t';   break;
         case 'v':       value = '\v';   break;
+        /* extra characters */
+        case '\\':
+        case '\'':
+        case '\"':
+        case '?':
+            value = PPTokenPtr[0];
+            break;
+        /* hexa esc sequence */
         case 'x':
             ++PPTokenPtr;
             value = PP_HexNumber();
             --PPTokenPtr;
             break;
+        /* octal esc sequence */
         case '0':
         case '1':
         case '2':
@@ -99,6 +110,10 @@ static void PP_CharConst( PREPROC_VALUE *val )
                 }
             }
             break;
+        /*
+         * invalid esc sequence
+         * should be somehow handled as error etc.
+         */
         default:
             value = PPTokenPtr[0];
             break;
@@ -176,13 +191,13 @@ static void PP_Identifier( PREPROC_VALUE *val )
     value = 0;
     ptr = PP_ScanName( PPTokenPtr );
     len = ptr - PPTokenPtr;
-    if( len == 7 && memcmp( PPTokenPtr, "defined", 7 ) == 0 ) {
+    if( len == 7 && strncmp( PPTokenPtr, "defined", 7 ) == 0 ) {
         PPTokenPtr = PP_SkipWhiteSpace( ptr, &white_space );
         if( PPTokenPtr[0] == '(' ) {
             ++PPTokenPtr;
             ptr = PPNextTokenPtr;
             value = PP_ScanMacroLookup( PPTokenPtr ) != NULL;
-            PPTokenPtr = PPNextTokenPtr;                     /* 23-sep-94 */
+            PPTokenPtr = PPNextTokenPtr;
             PPNextTokenPtr = ptr;
             PPTokenPtr = PP_SkipWhiteSpace( PPTokenPtr, &white_space );
             if( PPTokenPtr[0] == ')' ) {
@@ -226,7 +241,7 @@ static void PP_AdvanceToken( void )
         if( PPTokenPtr[0] != '\0' )
             break;
         if( PPCurToken != NULL ) {
-            PP_Free( PPCurToken );
+            MemFree( PPCurToken );
             PPCurToken = PPNextToken();
         }
         if( PPCurToken == NULL ) {

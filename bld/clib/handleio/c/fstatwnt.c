@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2017-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2017-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -31,6 +31,7 @@
 
 
 #include "variety.h"
+#include "seterrno.h"
 #include <stdio.h>
 #include <stddef.h>
 #include <io.h>
@@ -38,18 +39,15 @@
 #include <sys/stat.h>
 #include <direct.h>
 #include <windows.h>
-#include "rterrno.h"
 #include "defwin.h"
 #include "iomode.h"
 #include "fileacc.h"
 #include "ntext.h"
 #include "rtcheck.h"
-#include "seterrno.h"
 #include "thread.h"
-#include "i64.h"
+#include "libi64.h"
+#include "filei64.h"
 
-
-#define MAKE_SIZE64(__x,__hi,__lo)    ((unsigned_64 *)&__x)->u._32[I64LO32] = __lo; ((unsigned_64 *)&__x)->u._32[I64HI32] = __hi
 
 /*
     DWORD GetFileSize(
@@ -58,11 +56,7 @@
     );
  */
 
-#ifdef __INT64__
- _WCRTLINK int _fstati64( int handle, struct _stati64 *buf )
-#else
- _WCRTLINK int fstat( int handle, struct stat *buf )
-#endif
+_WCRTLINK int __64_NAME(fstat,_fstati64)( int handle, struct __64_NAME(stat,_stati64) *buf )
 {
     DWORD                       size;
 #ifdef __INT64__
@@ -130,29 +124,20 @@
         if( buf->st_mode & S_IFDIR ) {
             buf->st_size = 0;
         } else {
+            size = GetFileSize( osfh, __64_NAME(NULL,&highorder) );
+            if( size == INVALID_FILE_SIZE ) {
+                DWORD   error;
+
+                error = GetLastError();
+                if( error != NO_ERROR ) {
+                    _ReleaseFileH( handle );
+                    return( __set_errno_dos( error ) );
+                }
+            }
 #ifdef __INT64__
-            size = GetFileSize( osfh, &highorder );
-            if( size == INVALID_FILE_SIZE ) {
-                DWORD   error;
-
-                error = GetLastError();
-                if( error != NO_ERROR ) {
-                    _ReleaseFileH( handle );
-                    return( __set_errno_dos( error ) );
-                }
-            }
-            MAKE_SIZE64( buf->st_size, highorder, size );
+            LIB_LODWORD( buf->st_size ) = size;
+            LIB_HIDWORD( buf->st_size ) = highorder;
 #else
-            size = GetFileSize( osfh, NULL );
-            if( size == INVALID_FILE_SIZE ) {
-                DWORD   error;
-
-                error = GetLastError();
-                if( error != NO_ERROR ) {
-                    _ReleaseFileH( handle );
-                    return( __set_errno_dos( error ) );
-                }
-            }
             buf->st_size = size;
 #endif
         }

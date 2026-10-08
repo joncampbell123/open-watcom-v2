@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -38,6 +38,7 @@
 #include <stdarg.h>
 #include "iopath.h"
 #include "swchar.h"
+#include "memfuncs.h"
 
 
 typedef enum {
@@ -102,17 +103,6 @@ static void wcpp_quit( const char * const usage_msg[], const char *str, ... )
     exit( EXIT_FAILURE );
 }
 
-static char *my_strdup( const char *str )
-/***************************************/
-{
-    size_t     len;
-    char       *ptr;
-
-    len = strlen( str ) + 1;
-    ptr = malloc( len );
-    return( memcpy( ptr, str, len ) );
-}
-
 static bool scanString( char *buf, const char *str, size_t len )
 /**************************************************************/
 {
@@ -148,8 +138,9 @@ static bool ScanOptionsArg( const char * arg, pp_flags *ppflags )
         break;
     case 'd':
         ++arg;
-        defines = realloc( (void *)defines, ( numdefs + 1 ) * sizeof( char * ) );
-        defines[numdefs++] = my_strdup( arg );
+        defines = MemReallocSafe( (void *)defines, ( numdefs + 1 ) * sizeof( char * ) );
+        defines[numdefs] = MemStrdupSafe( arg );
+        ++numdefs;
         break;
     case 'h':
         wcpp_quit( usageMsg, NULL );
@@ -160,10 +151,10 @@ static bool ScanOptionsArg( const char * arg, pp_flags *ppflags )
 
             ++arg;
             len = strlen( arg );
-            p = malloc( len + 1 );
+            p = MemAllocSafe( len + 1 );
             scanString( p, arg, len );
             PP_IncludePathAdd( PPINCLUDE_USR, p );
-            free( p );
+            MemFree( p );
         }
         break;
     case 'l':
@@ -172,10 +163,10 @@ static bool ScanOptionsArg( const char * arg, pp_flags *ppflags )
     case 'o':
         ++arg;
         if( out_filename != NULL ) {
-            free( out_filename );
+            MemFree( out_filename );
         }
         len = strlen( arg );
-        out_filename = malloc( len + 1 );
+        out_filename = MemAllocSafe( len + 1 );
         scanString( out_filename, arg, len );
         break;
     case 'z':
@@ -209,12 +200,12 @@ static bool ScanOptionsArg( const char * arg, pp_flags *ppflags )
     return( contok );
 } /* ScanOptionsArg */
 
-static bool CmdScanSwitchChar( char c )
+static bool CmdScanSwitchChar( int ch )
 {
 #ifdef __UNIX__
-    return( c == '-' );
+    return( ch == '-' );
 #else
-    return( c == '-' || c == '/' );
+    return( ch == '-' || ch == '/' );
 #endif
 }
 
@@ -242,20 +233,20 @@ static int ParseVariable( const char *var, char **argv, char *buf )
     argc = 0;
     for( ;; ) {
         got_quote = false;
-        while( isspace( *var ) && *var != '\0' )
+        while( isspace( *(unsigned char *)var ) && *var != '\0' )
             var++;
         start = var;
         if( output_data ) {
             bufstart = bufend;
         }
-        if( CmdScanSwitchChar( *var ) ) {
+        if( CmdScanSwitchChar( *(unsigned char *)var ) ) {
             if( output_data ) {
                 *bufend++ = *var;
             }
             var++;
         }
-        while( ( got_quote || !isspace( *var ) ) && *var != '\0' ) {
-            if( *var == '\"' ) {
+        while( ( got_quote || !isspace( *(unsigned char *)var ) ) && *var != '\0' ) {
+            if( *(unsigned char *)var == '\"' ) {
                 got_quote = !got_quote;
             }
             if( output_data ) {
@@ -333,7 +324,7 @@ static bool scanEnvVarOrFile( const char *name, pp_flags *ppflags )
     argbufsize = strlen( optstring ) + 1 + argc;    // inter-parameter spaces map to 0
     argvsize = argc * sizeof( char * );             // sizeof argv[argc+1]
     varlen = strlen( name ) + 1;                    // Copy taken to detect recursion.
-    info = malloc( sizeof( *info ) + argbufsize + argvsize + varlen );
+    info = MemAllocSafe( sizeof( *info ) + argbufsize + argvsize + varlen );
     info->next = stack;
     stack = info;                                   // push info on stack
     info->argv = (char **)info->buf;
@@ -343,7 +334,7 @@ static bool scanEnvVarOrFile( const char *name, pp_flags *ppflags )
     contok = doScanParams( argc, info->argv, ppflags );
 
     stack = info->next;                             // pop stack
-    free( info );
+    MemFree( info );
     return( contok );
 }
 
@@ -353,20 +344,23 @@ static bool doScanParams( int argc, char *argv[], pp_flags *ppflags )
     const char  *arg;
     bool        contok;         /* continue with main execution */
     int         currarg;
+    int         ch;
 
     contok = true;
     for( currarg = 0; currarg < argc && contok; currarg++ ) {
         arg = argv[currarg];
-        if( CmdScanSwitchChar( *arg ) ) {
+        ch = *(unsigned char *)arg;
+        if( CmdScanSwitchChar( ch ) ) {
             contok = ScanOptionsArg( arg + 1, ppflags ) && contok;
-        } else if( *arg == '@' ) {
+        } else if( ch == '@' ) {
             contok = scanEnvVarOrFile( arg + 1, ppflags ) && contok;
-        } else if( *arg == '?' ) {
+        } else if( ch == '?' ) {
             wcpp_quit( usageMsg, NULL );
 //            contok = false;
         } else {
-            filenames = realloc( (void *)filenames, ( nofilenames + 1 ) * sizeof( char * ) );
-            filenames[nofilenames++] = my_strdup( arg );
+            filenames = MemReallocSafe( (void *)filenames, ( nofilenames + 1 ) * sizeof( char * ) );
+            filenames[nofilenames] = MemStrdupSafe( arg );
+            ++nofilenames;
         }
     }
     return( contok );
@@ -405,6 +399,8 @@ int main( int argc, char *argv[] )
     int         rc;
     FILE        *fo;
     pp_flags    ppflags;
+
+    PP_MemInit();
 
     if( argc < 2 ) {
         wcpp_quit( usageMsg, "No filename specified" );
@@ -476,22 +472,24 @@ int main( int argc, char *argv[] )
     }
 
     if( out_filename != NULL ) {
-        free( out_filename );
+        MemFree( out_filename );
     }
     for( i = 0; i < nofilenames; ++i ) {
-        free( filenames[i] );
+        MemFree( filenames[i] );
     }
-    free( (void *)filenames );
+    MemFree( (void *)filenames );
     for( i = 0; i < numdefs; i++ ) {
-        free( defines[i] );
+        MemFree( defines[i] );
     }
-    free( (void *)defines );
+    MemFree( (void *)defines );
 
     rc = PP_Fini() | rc;
 
     if( rc == 0 && nofilenames == 0 ) {
         wcpp_quit( usageMsg, "No filename specified" );
     }
+
+    PP_MemFini();
 
     return( ( rc ) ? EXIT_FAILURE : EXIT_SUCCESS );
 }

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -80,7 +80,7 @@ String table for sections
 #ifdef _ELF
 
 static stringtable      SymStrTab;
-static ElfSymTable *    ElfSymTab;
+static ElfSymTable      *ElfSymTab;
 
 static int              NumPhdr = 0;    /* just for now untill dynamic objects supported */
 
@@ -92,8 +92,8 @@ static int              NumPhdr = 0;    /* just for now untill dynamic objects s
 static void InitSections( ElfHdr *hdr )
 /*************************************/
 {
-    unsigned    num;
-    group_entry *group;
+    unsigned        num;
+    group_entry     *group;
 
     num = 1;
     memset( &hdr->i, 0, sizeof( hdr->i ) );
@@ -109,8 +109,8 @@ static void InitSections( ElfHdr *hdr )
     }
     num += hdr->i.grpnum;
     hdr->i.relbase = num;
-    for( group = Groups; group != NULL; group = group->next_group ) {
-        if( group->g.grp_relocs != NULL ) {
+    for( group = Groups; group != NULL; group = group->next ) {
+        if( group->g.reloclist != NULL ) {
             hdr->i.relnum++;
         }
     }
@@ -126,7 +126,7 @@ static void InitSections( ElfHdr *hdr )
     num += FmtData.u.elf.extrasects;
     hdr->eh.e_shnum = num;
     hdr->sh_size = sizeof( Elf32_Shdr ) * hdr->eh.e_shnum;
-    _ChkAlloc( hdr->sh, hdr->sh_size );
+    hdr->sh = MemAllocSafe( hdr->sh_size );
     memset( hdr->sh, 0, hdr->sh_size );
     hdr->sh[hdr->i.symtab].sh_name = AddSecName( hdr, ".symtab" );
 }
@@ -179,7 +179,7 @@ static void SetHeaders( ElfHdr *hdr )
     hdr->eh.e_phnum = NumGroups + NumPhdr;
     hdr->eh.e_phoff = sizeof( Elf32_Ehdr );
     hdr->ph_size = sizeof( Elf32_Phdr ) * hdr->eh.e_phnum;
-    _ChkAlloc( hdr->ph, hdr->ph_size );
+    hdr->ph = MemAllocSafe( hdr->ph_size );
     if( NumPhdr ) {
         hdr->ph->p_type = PT_PHDR;
         hdr->ph->p_offset = sizeof( Elf32_Ehdr );
@@ -201,7 +201,7 @@ static void SetHeaders( ElfHdr *hdr )
 unsigned GetElfHeaderSize( void )
 /**************************************/
 {
-    unsigned    size;
+    unsigned        size;
 
     size = sizeof( Elf32_Ehdr ) + sizeof( Elf32_Phdr ) * ( NumGroups + NumPhdr );
     return( __ROUND_UP_SIZE_PAGE( size ) );
@@ -217,7 +217,7 @@ size_t AddSecName( ElfHdr *hdr, const char *name )
 static void WriteSHStrings( ElfHdr *hdr, int str_idx, stringtable *strtab )
 /*************************************************************************/
 {
-    Elf32_Shdr *sh;
+    Elf32_Shdr      *sh;
 
     sh = hdr->sh + str_idx;
     sh->sh_name = AddSecName( hdr, ".shstrtab" );
@@ -272,8 +272,8 @@ static void InitBSSSect( Elf32_Shdr *sh, offset off, offset size, offset start )
     sh->sh_entsize = 0;
 }
 
-static char * GroupSecName( group_entry *group )
-/**********************************************/
+static const char *GroupSecName( group_entry *group )
+/***************************************************/
 {
     if( group->segflags & SEG_DATA ) {
         return( ".data" );
@@ -285,16 +285,16 @@ static char * GroupSecName( group_entry *group )
 static void WriteELFGroups( ElfHdr *hdr )
 /***************************************/
 {
-    group_entry *group;
-    Elf32_Shdr *sh;
-    Elf32_Phdr *ph;
-    offset      off;
-    offset      linear;
+    group_entry     *group;
+    Elf32_Shdr      *sh;
+    Elf32_Phdr      *ph;
+    offset          off;
+    offset          linear;
 
     sh = hdr->sh + hdr->i.grpbase;
     ph = hdr->ph + NumPhdr;
     off = hdr->curr_off;
-    for( group = Groups; group != NULL; group = group->next_group ) {
+    for( group = Groups; group != NULL; group = group->next ) {
         if( group->totalsize == 0 )
             continue;   // DANGER DANGER DANGER <--!!!
         SetGroupHeaders( group, off, ph, sh );
@@ -324,8 +324,8 @@ static void WriteELFGroups( ElfHdr *hdr )
 static size_t AddRelocSectName( ElfHdr *hdr, const char *secname )
 /****************************************************************/
 {
-    size_t      len;
-    char        *name;
+    size_t          len;
+    char            *name;
 
     len = strlen( secname );
     name = alloca( RELA_NAME_SIZE + len );
@@ -338,16 +338,16 @@ static size_t AddRelocSectName( ElfHdr *hdr, const char *secname )
 static void WriteRelocsSections( ElfHdr *hdr )
 /********************************************/
 {
-    group_entry *group;
-    unsigned    currgrp;
-    Elf32_Shdr  *sh;
-    void        *relocs;
+    group_entry     *group;
+    unsigned        currgrp;
+    Elf32_Shdr      *sh;
+    reloc_info      reloclist;
 
     currgrp = hdr->i.grpbase;
     sh = hdr->sh + hdr->i.relbase;
-    for( group = Groups; group != NULL; group = group->next_group ) {
-        relocs = group->g.grp_relocs;
-        if( relocs != NULL ) {
+    for( group = Groups; group != NULL; group = group->next ) {
+        reloclist = group->g.reloclist;
+        if( reloclist != NULL ) {
             sh->sh_offset = hdr->curr_off;
             sh->sh_entsize = sizeof( elf_reloc_item );
             sh->sh_type = SHT_RELA;
@@ -356,9 +356,9 @@ static void WriteRelocsSections( ElfHdr *hdr )
             sh->sh_link = hdr->i.symtab;
             sh->sh_info = currgrp;
             sh->sh_addralign = 4;
-            sh->sh_size = RelocSize( relocs );
+            sh->sh_size = RelocSize( reloclist );
             sh->sh_name = AddRelocSectName( hdr, GroupSecName( group ) );
-            DumpRelocList( relocs );
+            DumpRelocList( reloclist );
             hdr->curr_off += sh->sh_size;
             sh++;
         }
@@ -369,14 +369,14 @@ static void WriteRelocsSections( ElfHdr *hdr )
 void FiniELFLoadFile( void )
 /*********************************/
 {
-    ElfHdr      hdr;
+    ElfHdr          hdr;
 
     if( FmtData.dll )
         NumPhdr = 1;
 
     SetHeaders( &hdr );
 #if 0
-    if( (LinkState & LS_HAVE_PPC_CODE) && (FmtData.type & (MK_OS2 | MK_WIN_NE)) ) {
+    if( (LinkState & LS_HAVE_PPC_CODE) && (FmtData.type & (MK_NE | MK_OS2_FLAT)) ) {
         // Development temporarly on hold
         // BuildOS2Imports(); // Build .got section
     }
@@ -404,8 +404,8 @@ void FiniELFLoadFile( void )
     SeekLoad( 0 );
     WriteLoad( &hdr.eh, sizeof( Elf32_Ehdr ) );
     WriteLoad( hdr.ph, hdr.ph_size );
-    _LnkFree( hdr.sh );
-    _LnkFree( hdr.ph );
+    MemFree( hdr.sh );
+    MemFree( hdr.ph );
     FiniStringTable( &hdr.secstrtab );
     FiniStringTable( &SymStrTab );
     SeekLoad( hdr.curr_off );
@@ -414,11 +414,11 @@ void FiniELFLoadFile( void )
 void ChkElfData( void )
 /****************************/
 {
-    group_entry *group;
-    symbol *    sym;
+    group_entry     *group;
+    symbol          *sym;
 
     NumExports = NumImports = 0;
-    for( sym = HeadSym; sym != NULL; sym = sym->link ) {
+    for( sym = HeadSym; sym != NULL; sym = sym->next ) {
         if( IsSymElfImported( sym ) ) {
             NumImports++;
         } else if( IsSymElfExported( sym ) ) {
@@ -431,19 +431,19 @@ void ChkElfData( void )
     InitStringTable( &SymStrTab, false );
     AddCharStringTable( &SymStrTab, '\0' );
     ElfSymTab = CreateElfSymTable( NumImports + NumExports + NumGroups, &SymStrTab );
-    for( group = Groups; group != NULL; group = group->next_group ) {
+    for( group = Groups; group != NULL; group = group->next ) {
         if( group->totalsize != 0 ) {
             AddSymElfSymTable( ElfSymTab, group->sym );
         }
     }
     /* process local symbols */
-    for( sym = HeadSym; sym != NULL; sym = sym->link ) {
+    for( sym = HeadSym; sym != NULL; sym = sym->next ) {
         if( IsSymElfImpExp( sym ) && (sym->info & SYM_STATIC) ) {
             AddSymElfSymTable( ElfSymTab, sym );
         }
     }
     /* process global symbols */
-    for( sym = HeadSym; sym != NULL; sym = sym->link ) {
+    for( sym = HeadSym; sym != NULL; sym = sym->next ) {
         if( IsSymElfImpExp( sym ) && (sym->info & SYM_STATIC) == 0 ) {
             AddSymElfSymTable( ElfSymTab, sym );
         }

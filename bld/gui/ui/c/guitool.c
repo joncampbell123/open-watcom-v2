@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -44,7 +44,7 @@
 #define FIX_TOOLBAR     1
 
 static gui_menu_struct Menu[] = {
-    NULL, FIX_TOOLBAR, GUI_STYLE_MENU_ENABLED, NULL
+    NULL, FIX_TOOLBAR, GUI_STYLE_MENU_ENABLED, NULL, GUI_NO_MENU
 };
 
 static gui_control_info Button = {
@@ -73,7 +73,7 @@ bool GUIXCreateFixedToolbar( gui_window *wnd )
         with_excl = NULL;
         menu.label = tbar->toolinfo.toolbar[i].label;
         if( menu.label != NULL ) {
-            with_excl = (char *)GUIMemAlloc( strlen( menu.label ) + strlen( LIT_GUI( Exclamation ) ) + 1 );
+            with_excl = MemAlloc( strlen( menu.label ) + strlen( LIT_GUI( Exclamation ) ) + 1 );
             if( with_excl != NULL ) {
                 strcpy( with_excl, menu.label );
                 strcat( with_excl, LIT_GUI( Exclamation ) );
@@ -83,13 +83,13 @@ bool GUIXCreateFixedToolbar( gui_window *wnd )
         menu.id = tbar->toolinfo.toolbar[i].id;
         menu.hinttext = tbar->toolinfo.toolbar[i].hinttext;
         if( !GUIAppendToolbarMenu( wnd, &menu, ( i == ( tbar->toolinfo.num_items - 1 ) ) ) ) {
-            GUIMemFree( with_excl );
+            MemFree( with_excl );
             while( i-- > 0 ) {
                 GUIDeleteToolbarMenuItem( wnd, tbar->toolinfo.toolbar[i].id );
             }
             return( false );
         }
-        GUIMemFree( with_excl );
+        MemFree( with_excl );
     }
     GUIEVENT( wnd, GUI_TOOLBAR_FIXED, NULL );
     return( true );
@@ -171,10 +171,10 @@ bool GUIXCloseToolBar( gui_window *wnd )
     }
     if( ( tbar->toolinfo.num_items > 0 ) && !switching ) {
         for( i = 0; i < tbar->toolinfo.num_items; i++ ) {
-            GUIMemFree( (void *)tbar->toolinfo.toolbar[i].label );
+            MemFree( (void *)tbar->toolinfo.toolbar[i].label );
         }
-        GUIMemFree( (void *)tbar->toolinfo.toolbar );
-        GUIMemFree( tbar );
+        MemFree( (void *)tbar->toolinfo.toolbar );
+        MemFree( tbar );
         wnd->tbar = NULL;
     }
     if( !switching ) {
@@ -240,7 +240,7 @@ static bool CreateFloatingToolbar( gui_window *wnd, gui_ord height )
     FloatingToolbar.colours.colour = GUIGetWindowColours( wnd );
     FloatingToolbar.colours.colour[GUI_FRAME_INACTIVE] = FloatingToolbar.colours.colour[GUI_FRAME_ACTIVE];
     tbar->floattoolbar = GUICreateWindow( &FloatingToolbar );
-    GUIMemFree( FloatingToolbar.colours.colour );
+    MemFree( FloatingToolbar.colours.colour );
     FloatingToolbar.colours.colour = NULL;
     Button.parent = tbar->floattoolbar;
     loc = 0;
@@ -280,38 +280,40 @@ bool GUIXCreateToolBarWithTips( gui_window *wnd, bool fixed, gui_ord height,
     int                 i;
     toolbarinfo         *tbar;
     gui_toolbar_struct  *new_toolinfo;
-    bool                ok;
 
     /* unused parameters */ (void)float_pos; (void)use_tips;
 
     if( ( wnd->parent != NULL ) || ( plain == NULL ) || ( standout == NULL ) ) {
         return( false );
     }
-    tbar = wnd->tbar = (toolbarinfo *)GUIMemAlloc( sizeof( toolbarinfo ) );
+    wnd->tbar = tbar = MemAlloc( sizeof( *tbar ) );
     if( tbar == NULL ) {
         return( false );
     }
     if( toolinfo->num_items == 0 ) {
         tbar->toolinfo = NoToolbar;
     } else {
-        size = sizeof( gui_toolbar_struct ) * toolinfo->num_items;
-        new_toolinfo = (gui_toolbar_struct *)GUIMemAlloc( size );
+        size = sizeof( *new_toolinfo ) * toolinfo->num_items;
+        new_toolinfo = MemAlloc( size );
         if( new_toolinfo == NULL ) {
-            GUIMemFree( tbar );
+            MemFree( tbar );
             wnd->tbar = NULL;
             return( false );
         }
         memset( new_toolinfo, 0, size );
         for( i = 0; i < toolinfo->num_items; i++ ) {
-            new_toolinfo[i].label = GUIStrDupOK( toolinfo->toolbar[i].label, &ok );
-            if( !ok ) {
-                while( i-- > 0  ) {
-                    GUIMemFree( (void *)new_toolinfo[i].label );
+            new_toolinfo[i].label = NULL;
+            if( toolinfo->toolbar[i].label != NULL ) {
+                new_toolinfo[i].label = MemStrdup( toolinfo->toolbar[i].label );
+                if( new_toolinfo[i].label == NULL ) {
+                    while( i-- > 0  ) {
+                        MemFree( (void *)new_toolinfo[i].label );
+                    }
+                    MemFree( new_toolinfo );
+                    MemFree( tbar );
+                    wnd->tbar = NULL;
+                    return( false );
                 }
-                GUIMemFree( new_toolinfo );
-                GUIMemFree( tbar );
-                wnd->tbar = NULL;
-                return( false );
             }
             new_toolinfo[i].id = toolinfo->toolbar[i].id;
         }

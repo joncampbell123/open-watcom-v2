@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2017 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -37,6 +37,7 @@
 #include "global.h"
 #include "stmtsw.h"
 #include "fmemmgr.h"
+#include "namecod.h"
 #include "recog.h"
 #include "ferror.h"
 #include "insert.h"
@@ -54,7 +55,7 @@
 #include "brseinfo.h"
 
 
-static void InitLoop( int loop_type )
+static void InitLoop( cstype loop_type )
 {
     AddCSNode( loop_type );
     CSHead->branch = NextLabel();
@@ -73,9 +74,9 @@ static void FiniLoop( void )
 }
 
 void CpLoop( void )
-{
+//=================
 // Compile a LOOP statement.
-
+{
     CSExtn();
     InitLoop( CS_LOOP );
     BlockLabel();
@@ -83,8 +84,9 @@ void CpLoop( void )
 
 
 void CpEndLoop( void )
-{
+//====================
 // Compile an ENDLOOP statment.
+{
 
     if( CSHead->typ == CS_LOOP ) {
         GLabel( CSHead->cycle );
@@ -97,21 +99,21 @@ void CpEndLoop( void )
 }
 
 void CpWhile( void )
-{
 //=================
-
 // Compile a WHILE statement.
 //    WHILE( expr )DO <:label> -- block while
 //    WHILE( expr )   <:label> -- block while
 //    WHILE( expr ) STATEMENT  -- one line while
-
+{
     CSExtn();
     InitLoop( CS_WHILE );
     CSCond( CSHead->bottom );
-    if( RecNOpn() && RecNextOpr( OPR_COL ) ) {
+    if( RecNoOpn()
+      && RecNextOpr( OPR_COL ) ) {
         BlockLabel();
-    } else if( RecKeyWord( "DO" ) &&
-               ( RecNextOpr( OPR_TRM ) || RecNextOpr( OPR_COL ) ) ) {
+    } else if( RecKeyWordOpn( "DO" )
+      && ( RecNextOpr( OPR_TRM )
+      || RecNextOpr( OPR_COL ) ) ) {
         CITNode->opn.ds = DSOPN_PHI;
         BlockLabel();
     } else {
@@ -123,9 +125,9 @@ void CpWhile( void )
 }
 
 void CpEndWhile( void )
-{
+//=====================
 // Compile an ENDWHILE statement.
-
+{
     if( CSHead->typ == CS_WHILE ) {
         GLabel( CSHead->cycle );
         FiniLoop();
@@ -137,10 +139,11 @@ void CpEndWhile( void )
 }
 
 void CpUntil( void )
-{
+//==================
 // Compile an UNTIL statement.
-
-    if( ( CSHead->typ == CS_LOOP ) || ( CSHead->typ == CS_WHILE ) ) {
+{
+    if( ( CSHead->typ == CS_LOOP )
+      || ( CSHead->typ == CS_WHILE ) ) {
         GLabel( CSHead->cycle );
         CSCond( CSHead->branch );
         GLabel( CSHead->bottom );
@@ -154,50 +157,51 @@ void CpUntil( void )
     CSNoMore();
 }
 
-static unsigned_32 DoLabel( void )
+static stmt_num DoTermStmtNo( void )
 {
-    unsigned_32 term;
+    stmt_num    term_stmt_no;
 
-    if( RecNumber() ) {
-        term = LkUpDoTerm();
+    if( RecNumberOpn() ) {
+        term_stmt_no = LkUpDoTermStmtNo();
         AdvanceITPtr();
-        if( !RecNOpr() && !RecComma() ) {
+        if( !RecNoOpr()
+          && !RecCommaOpr() ) {
             Error( DO_NO_COMMA_OR_VAR );
         }
     } else {
-        term = 0;
+        term_stmt_no = 0;
     }
-    return( term );
+    return( term_stmt_no );
 }
 
 void CpDo( void )
-{
+//===============
 // Compile a DO statement.
-
-    signed_32   term;
+{
+    stmt_num    term_stmt_no;
 
     AddCSNode( CS_DO );
-    term = DoLabel();
-    if( term == 0 ) {
+    term_stmt_no = DoTermStmtNo();
+    if( term_stmt_no == 0 ) {
         Extension( DO_DO_EXT );
     }
-    InitDo( term );
+    InitDo( term_stmt_no );
     ColonLabel();
 }
 
 void CpDoWhile( void )
-{
+//====================
 // Compile a DO WHILE statement.
-
+{
     Extension( DO_DO_EXT );
     InitLoop( CS_DO_WHILE );
-    CSHead->cs_info.do_term = DoLabel();
-    if( RecKeyWord( "WHILE" ) ) {
+    CSHead->cs_info.term_stmt_no = DoTermStmtNo();
+    if( RecKeyWordOpn( "WHILE" ) ) {
         RemKeyword( CITNode, 5 );
         CSCond( CSHead->bottom );
         BlockLabel();
     } else {
-        if( ReqNOpn() ) {
+        if( ReqNoOpn() ) {
             BlockLabel();
         }
     }
@@ -212,17 +216,17 @@ static void BadDoEnd( void )
 }
 
 void CpEndDo( void )
-{
+//==================
 // Compile an ENDDO statement.
-
+{
     if( CSHead->typ == CS_DO ) {
-        if( CSHead->cs_info.do_parms->do_term == 0 ) {
+        if( CSHead->cs_info.do_parms->term_stmt_no == 0 ) {
             TermDo();
         } else {
             BadDoEnd();
         }
     } else if( CSHead->typ == CS_DO_WHILE ) {
-        if( CSHead->cs_info.do_term == 0 ) {
+        if( CSHead->cs_info.term_stmt_no == 0 ) {
             TermDoWhile();
         } else {
             BadDoEnd();
@@ -233,12 +237,11 @@ void CpEndDo( void )
     CSNoMore();
 }
 
-void InitDo( signed_32 term )
-{
+void InitDo( stmt_num term_stmt_no )
+//==================================
 // Initialize a DO or implied DO.
 // Process "do i=e1,e2,e3" where e1, e2 and e3 are numeric expressions.
-//
-
+{
     do_entry    *do_pointer;
     sym_id      do_var;
 
@@ -247,11 +250,11 @@ void InitDo( signed_32 term )
         CSHead->bottom = NextLabel();
         CSHead->cycle = NextLabel();
     }
-    do_pointer = FMemAlloc( sizeof( do_entry ) );
+    do_pointer = MemAllocSafe( sizeof( do_entry ) );
     CSHead->cs_info.do_parms = do_pointer;
-    do_pointer->do_term = term;
+    do_pointer->term_stmt_no = term_stmt_no;
     do_pointer->do_parm = NULL;
-    if( ReqDoVar() ) {
+    if( ReqDoVarOpn() ) {
         CkTypeDeclared();
         do_var = CITNode->sym_ptr;
         BIOutSymbol( do_var );
@@ -282,9 +285,9 @@ void ImpDo( void )
 }
 
 void TermDo( void )
-{
+//=================
 // Terminate a DO or an implied DO.
-
+{
     do_entry    *do_pointer;
     sym_id      do_var;
 
@@ -324,8 +327,8 @@ void TermDoWhile( void )
 }
 
 void CpContinue( void )
-{
+//=====================
 // Compile a CONTINUE statement.
-
+{
     CSNoMore();
 }

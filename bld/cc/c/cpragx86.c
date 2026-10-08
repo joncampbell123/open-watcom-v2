@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -32,6 +32,7 @@
 
 #include <ctype.h>
 #include "cvars.h"
+#include "i64.h"
 #include "cgswitch.h"
 #include "pdefn2.h"
 #include "asmstmt.h"
@@ -512,9 +513,9 @@ bool AsmInsertFixups( aux_info *info )
                 }
                 if( skip != 0 ) {
                     *dst++ = cg_fix;
-                    *(BYTE_SEQ_SYM *)dst = sym_handle;
+                    memcpy( dst, &sym_handle, sizeof( BYTE_SEQ_SYM ) );
                     dst += sizeof( BYTE_SEQ_SYM );
-                    *((BYTE_SEQ_OFF *)dst) = fix->u_offset;
+                    memcpy( dst, &fix->u_offset, sizeof( BYTE_SEQ_OFF ) );
                     dst += sizeof( BYTE_SEQ_OFF );
                     src += skip;
                 }
@@ -660,7 +661,7 @@ static bool GetByteSeq( aux_info *info )
                 use_fpu_emu = false;
             }
 #endif
-            AsmCodeBuffer[AsmCodeAddress++] = (unsigned char)Constant;
+            AsmCodeBuffer[AsmCodeAddress++] = U8FetchTrunc( Constant64 );
             PPNextToken();
         } else if( checkEnum( &byte_value ) ) {
             AsmCodeBuffer[AsmCodeAddress++] = byte_value;
@@ -682,18 +683,18 @@ static bool GetByteSeq( aux_info *info )
                 if( !IS_ID_OR_KEYWORD( CurToken ) ) {
                     CErr1( ERR_EXPECTING_ID );
                 } else {
-                    name = CMemStrDup( Buffer );
+                    name = CMemStrdup( Buffer );
                     PPNextToken();
                     if( CurToken == T_PLUS ) {
                         PPNextToken();
                         if( CurToken == T_CONSTANT ) {
-                            offset = Constant;
+                            offset = U32FetchTrunc( Constant64 );
                             PPNextToken();
                         }
                     } else if( CurToken == T_MINUS ) {
                         PPNextToken();
                         if( CurToken == T_CONSTANT ) {
-                            offset = -(int)Constant;
+                            offset = -(int)U32FetchTrunc( Constant64 );
                             PPNextToken();
                         }
                     }

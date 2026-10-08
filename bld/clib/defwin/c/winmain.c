@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -25,7 +25,7 @@
 *
 *  ========================================================================
 *
-* Description:  Default Windowing - Start/exit Windows Win16, WIN386 and Win32
+* Description:  Default Windowing - Start/exit Windows WIN16, WIN386 and WIN32
 *
 ****************************************************************************/
 
@@ -41,7 +41,6 @@
 #include "strdup.h"
 #include "initarg.h"
 #include "defwin.h"
-#include "wclbproc.h"
 #include "initwin.h"
 #include "wintitle.h"
 #include "winmenu.rh"
@@ -56,9 +55,9 @@ char    __init_default_win;
 
 static char *mainClass;
 
-static bool firstInstance( HANDLE );
-static bool windowsInit( HANDLE, int );
-static void windowsFini( void );
+static bool _WCNEAR firstInstance( HANDLE );
+static bool _WCNEAR windowsInit( HANDLE, int );
+static void _WCNEAR windowsFini( void );
 
 
 #if defined( __NT__ )
@@ -111,8 +110,8 @@ int PASCAL __export DefaultWinMain( HINSTANCE inst, HINSTANCE previnst,
 
     rc = pmain( ___Argc, ___Argv );
 
-    windowsFini();
     _WindowsExit();
+    windowsFini();
     return( rc );
 
 } /* DefaultWinMain */
@@ -121,7 +120,7 @@ int PASCAL __export DefaultWinMain( HINSTANCE inst, HINSTANCE previnst,
 /*
  * firstInstance - initialization at startup
  */
-static bool firstInstance( HANDLE inst )
+static bool _WCNEAR firstInstance( HANDLE inst )
 {
     char        tmp[128];
     WNDCLASS    wc;
@@ -177,7 +176,11 @@ static bool firstInstance( HANDLE inst )
      * register window classes
      */
     wc.style = 0;
+#ifdef __WINDOWS__
     wc.lpfnWndProc = GetWndProc( _MainDriver );
+#else
+    wc.lpfnWndProc = _MainDriver;
+#endif
     wc.cbClsExtra = 0;
     wc.cbWndExtra = 0;
     wc.hInstance = inst;
@@ -191,7 +194,11 @@ static bool firstInstance( HANDLE inst )
         return( false );
 
     wc.style = 0;
+#ifdef __WINDOWS__
     wc.lpfnWndProc = GetWndProc( _MainDriver );
+#else
+    wc.lpfnWndProc = _MainDriver;
+#endif
     wc.cbClsExtra = 0;
     wc.cbWndExtra = 0;
     wc.hInstance = inst;
@@ -210,7 +217,7 @@ static bool firstInstance( HANDLE inst )
 /*
  * windowsInit - windows-specific initialization
 */
-static bool windowsInit( HANDLE inst, int showcmd )
+static bool _WCNEAR windowsInit( HANDLE inst, int showcmd )
 {
     LOGFONT     logfont;
     WORD        x,y;
@@ -269,7 +276,7 @@ static bool windowsInit( HANDLE inst, int showcmd )
 /*
  * windowsFini - windows-specific initialization
 */
-static void windowsFini( void )
+static void _WCNEAR windowsFini( void )
 {
     _FiniMainWindowData();
 

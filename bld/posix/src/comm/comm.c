@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2019 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -74,13 +74,13 @@ static int getNextLine( FILE *fp, line *l )
 
     if( l->size == 0 ) {
         l->size = MIN_LINE_LEN * sizeof( char );
-        l->buff = (char *)MemAlloc( l->size );
+        l->buff = MemAlloc( l->size );
     }
 
     for( ;; ) {
-        if( os >= l->size - 1 ) {                   // Buffer getting small.
+        if( l->size <= os + 1 ) {                   // Buffer getting small.
             l->size += MIN_LINE_LEN * sizeof( char );
-            l->buff  = (char *)MemRealloc( l->buff, l->size );
+            l->buff  = MemRealloc( l->buff, l->size );
         }
         ch = fgetc( fp );
 

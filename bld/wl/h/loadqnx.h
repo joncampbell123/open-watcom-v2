@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2020 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -33,16 +33,6 @@
 
 #ifdef _QNX
 
-// the first 4 fields must be the same as the xxx_seg_flags structure
-// defined in objstruc.h
-
-typedef struct qnx_seg_flags {
-    struct qnx_seg_flags    *next;
-    unsigned_16             flags;
-    char                    *name;
-    segflag_type            type;
-} qnx_seg_flags;
-
 #define QNX_PRIV_SHIFT  0x0002
 #define QNX_RES_FILE    0x0080
 #define QNX_FLAG_MASK   0x007F
@@ -51,9 +41,9 @@ typedef struct qnx_seg_flags {
 
 #define QNX_SEL_NUM(selector) ((selector) >> 3)
 
-#define QNX_DEFAULT_BASE 0x1000
+#define QNX_DEFAULT_BASE _4K
 
-#define QNX_GROUP_ALIGN 0x1000
+#define QNX_GROUP_ALIGN _4K
 
 extern void             SetQNXSegFlags( void );
 extern void             SetQNXGroupFlags( void );

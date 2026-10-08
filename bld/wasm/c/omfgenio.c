@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,7 +34,6 @@
 #include <string.h>
 #include "asmglob.h"
 #include "asmalloc.h"
-#include "fatal.h"
 #include "omfgenio.h"
 #include "omfobjre.h"
 #include "myassert.h"
@@ -52,6 +51,78 @@ static struct {
     uint_8      buffer[1];  /* for writing                                  */
 } *pobjState;               /* object file buffering info                   */
 
+uint_16 get16le( uint_8 *p )
+/***************************
+ * read unaligned 16-bit LE data
+ */
+{
+    uint_16 u16;
+
+#if defined( __BIG_ENDIAN__ )
+    ((uint_8 *)&u16)[1] = *p++;
+    ((uint_8 *)&u16)[0] = *p++;
+#else
+    ((uint_8 *)&u16)[0] = *p++;
+    ((uint_8 *)&u16)[1] = *p++;
+#endif
+    return( u16 );
+}
+
+uint_32 get32le( uint_8 *p )
+/***************************
+ * read unaligned 32-bit LE data
+ */
+{
+    uint_32 u32;
+
+#if defined( __BIG_ENDIAN__ )
+    ((uint_8 *)&u32)[3] = *p++;
+    ((uint_8 *)&u32)[2] = *p++;
+    ((uint_8 *)&u32)[1] = *p++;
+    ((uint_8 *)&u32)[0] = *p++;
+#else
+    ((uint_8 *)&u32)[0] = *p++;
+    ((uint_8 *)&u32)[1] = *p++;
+    ((uint_8 *)&u32)[2] = *p++;
+    ((uint_8 *)&u32)[3] = *p++;
+#endif
+    return( u32 );
+}
+
+void *put16le( uint_8 *p, uint_16 word )
+/****************************************
+ * write unaligned 16-bit LE data
+ */
+{
+#if defined( __BIG_ENDIAN__ )
+    *p++ = ((uint_8 *)&word)[1];
+    *p++ = ((uint_8 *)&word)[0];
+#else
+    *p++ = ((uint_8 *)&word)[0];
+    *p++ = ((uint_8 *)&word)[1];
+#endif
+    return( p );
+}
+
+void *put32le( uint_8 *p, uint_32 dword )
+/****************************************
+ * write unaligned 32-bit LE data
+ */
+{
+#if defined( __BIG_ENDIAN__ )
+    *p++ = ((uint_8 *)&dword)[3];
+    *p++ = ((uint_8 *)&dword)[2];
+    *p++ = ((uint_8 *)&dword)[1];
+    *p++ = ((uint_8 *)&dword)[0];
+#else
+    *p++ = ((uint_8 *)&dword)[0];
+    *p++ = ((uint_8 *)&dword)[1];
+    *p++ = ((uint_8 *)&dword)[2];
+    *p++ = ((uint_8 *)&dword)[3];
+#endif
+    return( p );
+}
+
 /*
     Routines for buffered writing of an object file
 */
@@ -59,20 +130,20 @@ static struct {
 static void safeSeek( long offset, int mode )
 {
 /**/myassert( pobjState != NULL );
-/**/myassert( AsmFiles.file[OBJ] != NULL );
+/**/myassert( AsmFiles.fp[OBJ] != NULL );
 
-    if( fseek( AsmFiles.file[OBJ], offset, mode ) ) {
-        Fatal( MSG_OBJECT_FILE_ERROR, "fseek" );
+    if( fseek( AsmFiles.fp[OBJ], offset, mode ) ) {
+        Fatal( OBJECT_FILE_ERROR, "fseek" );
     }
 }
 
 static void safeWrite( const uint_8 *buf, uint_16 len )
 {
 /**/myassert( pobjState != NULL );
-/**/myassert( AsmFiles.file[OBJ] != NULL );
+/**/myassert( AsmFiles.fp[OBJ] != NULL );
 
-    if( fwrite( buf, 1, len, AsmFiles.file[OBJ] ) != len ) {
-        Fatal( MSG_OBJECT_FILE_ERROR, "fwrite" );
+    if( fwrite( buf, 1, len, AsmFiles.fp[OBJ] ) != len ) {
+        Fatal( OBJECT_FILE_ERROR, "fwrite" );
     }
 }
 
@@ -82,17 +153,17 @@ void ObjWriteOpen( void )
 /*
     pobjState.file_out = ObjWriteOpen( AsmFiles.fname[OBJ] );
     if( pobjState.file_out == NULL ) {
-        Fatal( MSG_CANNOT_OPEN_FILE, AsmFiles.fname[OBJ] );
+        Fatal( CANNOT_OPEN_FILE, AsmFiles.fname[OBJ] );
     }
 */
     char    *obj_name;
 
-    obj_name = CreateFileName( AsmFiles.fname[OBJ], OBJ_EXT, false );
-    AsmFiles.file[OBJ] = fopen( obj_name, "wb" );
-    if( AsmFiles.file[OBJ] == NULL ) {
-        Fatal( MSG_CANNOT_OPEN_FILE, obj_name );
+    obj_name = CreateFileName( AsmFiles.fname[OBJ], FEXT_OBJ, false );
+    AsmFiles.fp[OBJ] = fopen( obj_name, "wb" );
+    if( AsmFiles.fp[OBJ] == NULL ) {
+        Fatal( CANNOT_OPEN_FILE, obj_name );
     }
-    pobjState = AsmAlloc( sizeof( *pobjState ) + OBJ_BUFFER_SIZE );
+    pobjState = MemAllocSafe( sizeof( *pobjState ) + OBJ_BUFFER_SIZE );
     pobjState->in_buf = 0;
     pobjState->in_rec = false;
 }
@@ -106,11 +177,9 @@ void ObjWriteClose( bool del )
     if( pobjState->in_rec ) {
         ObjWEndRec();
     }
-    obj_name = CreateFileName( AsmFiles.fname[OBJ], OBJ_EXT, false );
-    if( fclose( AsmFiles.file[OBJ] ) ) {
-        Fatal( MSG_CANNOT_CLOSE_FILE, obj_name );
-    }
-    AsmFree( pobjState );
+    obj_name = CreateFileName( AsmFiles.fname[OBJ], FEXT_OBJ, false );
+    CloseAsmFile( OBJ );
+    MemFree( pobjState );
     pobjState = NULL;
     if( del ) {
         /* This remove works around an NT networking bug */
@@ -158,7 +227,7 @@ static void objWFlushBuffer( void )
 void ObjWEndRec( void )
 /*********************/
 {
-    uint_8  buf[2];
+    uint_16 length;
     uint_8  checksum;
 
 /**/myassert( pobjState->in_rec );
@@ -167,13 +236,13 @@ void ObjWEndRec( void )
         objWFlushBuffer();
     }
     pobjState->length++;                  /* add 1 for checksum byte */
-    MPUT_LE_16( buf, pobjState->length );
-    checksum = pobjState->checksum + buf[0] + buf[1];
+    put16le( (uint_8 *)&length, pobjState->length );
+    checksum = pobjState->checksum + ((unsigned char *)&length)[0] + ((unsigned char *)&length)[1];
     checksum = -checksum;
     safeWrite( &checksum, 1 );
         /* back up to length */
     safeSeek( SEEK_POSBACK( pobjState->length + 2 ), SEEK_CUR );
-    safeWrite( buf, 2 );                   /* write the length */
+    safeWrite( (uint_8 *)&length, 2 );                   /* write the length */
     safeSeek( 0L, SEEK_END );       /* move to end of file again */
     pobjState->in_rec = false;
 }
@@ -197,7 +266,7 @@ void ObjWrite16( uint_16 word )
     if( pobjState->in_buf >= OBJ_BUFFER_SIZE - 1 ) {
         objWFlushBuffer();
     }
-    MPUT_LE_16( pobjState->buffer + pobjState->in_buf, word );
+    put16le( pobjState->buffer + pobjState->in_buf, word );
     pobjState->in_buf += 2;
 }
 
@@ -209,7 +278,7 @@ void ObjWrite32( uint_32 dword )
     if( pobjState->in_buf >= OBJ_BUFFER_SIZE - 3 ) {
         objWFlushBuffer();
     }
-    MPUT_LE_32( pobjState->buffer + pobjState->in_buf, dword );
+    put32le( pobjState->buffer + pobjState->in_buf, dword );
     pobjState->in_buf += 4;
 }
 

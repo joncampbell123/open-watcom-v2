@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2025-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -31,40 +32,40 @@
 
 #include "opr.h"
 
-extern bool    RecEquSign( void );
+extern bool    RecEquOpr( void );
 extern bool    ReqOperator( OPR operator, int error );
-extern bool    ReqEquSign( void );
-extern bool    RecColon( void );
-extern bool    RecComma( void );
-extern bool    ReqComma( void );
-extern bool    ReqColon( void );
-extern bool    RecCloseParen( void );
-extern bool    ReqCloseParen( void );
-extern bool    RecOpenParen( void );
-extern bool    ReqOpenParen( void );
-extern bool    RecMul( void );
-extern bool    ReqMul( void );
-extern bool    RecDiv( void );
-extern bool    ReqDiv( void );
-extern bool    RecPlus( void );
-extern bool    RecMin( void );
-extern bool    RecCat( void );
-extern bool    RecNOpr( void );
-extern bool    RecFBr( void );
+extern bool    ReqEquOpr( void );
+extern bool    RecColonOpr( void );
+extern bool    ReqColonOpr( void );
+extern bool    RecCommaOpr( void );
+extern bool    ReqCommaOpr( void );
+extern bool    RecCloseParenOpr( void );
+extern bool    ReqCloseParenOpr( void );
+extern bool    RecOpenParenOpr( void );
+extern bool    ReqOpenParenOpr( void );
+extern bool    RecMulOpr( void );
+extern bool    ReqMulOpr( void );
+extern bool    RecDivOpr( void );
+extern bool    ReqDivOpr( void );
+extern bool    RecPlusOpr( void );
+extern bool    RecMinOpr( void );
+extern bool    RecCatOpr( void );
+extern bool    RecNoOpr( void );
+extern bool    RecFBrOpr( void );
 extern bool    RecTrmOpr( void );
-extern bool    RecEOS( void );
-extern bool    ReqEOS( void );
-extern bool    RecNOpn( void );
-extern bool    ReqNOpn( void );
-extern bool    RecKeyWord( char *key );
-extern bool    RecName( void );
-extern bool    ReqName( int index );
+extern bool    RecEOSOpr( void );
+extern bool    ReqEOSOpr( void );
+extern bool    RecNoOpn( void );
+extern bool    ReqNoOpn( void );
+extern bool    RecKeyWordOpn( const char *key );
+extern bool    RecNameOpn( void );
+extern bool    ReqNameOpn( clsname_id clsname );
 extern bool    RecNWL( void );
-extern bool    RecNumber( void );
-extern bool    RecLiteral( void );
+extern bool    RecNumberOpn( void );
+extern bool    RecLiteralOpn( void );
 extern bool    RecNextOpr( OPR operator );
 extern bool    ReqNextOpr( OPR operator, int error );
-extern bool    RecIntVar( void );
-extern bool    ReqIntVar( void );
-extern bool    ReqDoVar( void );
+extern bool    RecIntVarOpn( void );
+extern bool    ReqIntVarOpn( void );
+extern bool    ReqDoVarOpn( void );
 extern bool    RecArrName( void );

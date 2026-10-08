@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -41,12 +42,12 @@ bool WResMergeDirs( WResDir dstdir, WResDir srcdir, WResMergeError **errs )
 /*************************************************************************/
 {
     WResDirWindow       wind;
-    WResDirWindow       dup;
+    WResDirWindow       wind_dup;
     WResLangInfo        *langinfo;
     WResResInfo         *resinfo;
     WResTypeInfo        *typeinfo;
     void                *fileinfo;
-    WResMergeError      *newerr;
+    WResMergeError      *err;
 
     if( errs != NULL ) *errs = NULL;
     wind = WResFirstResource( srcdir );
@@ -56,15 +57,15 @@ bool WResMergeDirs( WResDir dstdir, WResDir srcdir, WResMergeError **errs )
         langinfo = WResGetLangInfo( wind );
         fileinfo = WResGetFileInfo( wind );
         WResAddResource2( &typeinfo->TypeName, &resinfo->ResName,
-                        langinfo->MemoryFlags, langinfo->Offset,
+                        langinfo->res_flags, langinfo->Offset,
                         langinfo->Length, dstdir, &langinfo->lang,
-                        &dup, fileinfo );
-        if( !WResIsEmptyWindow( dup ) && errs != NULL ) {
-            newerr = WRESALLOC( sizeof( WResMergeError ) );
-            newerr->next = *errs;
-            *errs = newerr;
-            newerr->dstres = dup;
-            newerr->srcres = wind;
+                        &wind_dup, fileinfo );
+        if( !WResIsEmptyWindow( wind_dup ) && errs != NULL ) {
+            err = WRESALLOC( sizeof( WResMergeError ) );
+            err->next = *errs;
+            *errs = err;
+            err->dstres = wind_dup;
+            err->srcres = wind;
         }
         wind = WResNextResource( wind, srcdir );
     }
@@ -74,11 +75,10 @@ bool WResMergeDirs( WResDir dstdir, WResDir srcdir, WResMergeError **errs )
 void WResFreeMergeErrors( WResMergeError *errs )
 /**********************************************/
 {
-    WResMergeError      *tmp;
+    WResMergeError      *err;
 
-    while( errs != NULL ) {
-        tmp = errs;
+    while( (err = errs) != NULL ) {
         errs = errs->next;
-        WRESFREE( tmp );
+        WRESFREE( err );
     }
 }

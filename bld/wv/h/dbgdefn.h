@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,12 +34,11 @@
 #include <stdio.h>
 #include "bool.h"
 #include "machtype.h"
+#include "memfuncs.h"
 
 
 #define NULLCHAR        '\0'
 #define ARG_TERMINATE   '\xff'
-
-#define GETWORD(x)      (MGET_U8((x)) + ( MGET_U8((x + 1)) << 8 ))
 
 #define FH2SYSH(sh,fh)  (sh).u._32[0]=fh;(sh).u._32[1]=0
 

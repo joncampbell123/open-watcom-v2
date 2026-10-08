@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,12 +34,12 @@
 #include "dbgdefn.h"
 #include "dbgdata.h"
 #include "liteng.h"
-#include "dbgmem.h"
+#include "memfuncs.h"
 #include "dbgerr.h"
 #include "dbgtback.h"
 #include "dbgrep.h"
 #include "dbgitem.h"
-#include "madinter.h"
+#include "wvmadcli.h"
 #include "dui.h"
 #include "strutil.h"
 #include "dbgscan.h"
@@ -59,7 +59,7 @@
 #include "dbgmisc.h"
 #include "removl.h"
 #include "dipimp.h"
-#include "dipinter.h"
+#include "wvdipcli.h"
 #include "dbgreg.h"
 #include "addarith.h"
 #include "dbgevent.h"
@@ -187,7 +187,7 @@ static memory_delta *NewMemDelta( address addr, mem_delta_size bytes )
 {
     memory_delta *new;
 
-    _Alloc( new, sizeof( *new ) - 1 + 2 * bytes );
+    new = MemAlloc( sizeof( *new ) - 1 + 2 * bytes );
     if( new != NULL ) {
         memset( new, 0, sizeof( *new ) );
         new->addr = addr;
@@ -255,7 +255,7 @@ void SetMemAfter( bool tracing )
           && memcmp( curr->data, curr->data + curr->size, curr->size ) == 0 ) {
             /* don't need the sucker */
             *owner = curr->next;
-            _Free( curr );
+            MemFree( curr );
         } else {
             owner = &curr->next;
         }
@@ -269,7 +269,7 @@ static void FreeMemDelta( save_state *state )
 
     for( mem = state->mem; mem != NULL; mem = next ) {
         next = mem->next;
-        _Free( mem );
+        MemFree( mem );
     }
     state->mem = NULL;
 }
@@ -282,9 +282,9 @@ static void FreeState( save_state *state )
         DbgRegs = NULL;
     if( PrevRegs == &state->s )
         PrevRegs = NULL;
-    _Free( state->s.ovl );
+    MemFree( state->s.ovl );
     FreeMemDelta( state );
-    _Free( state );
+    MemFree( state );
     --NumStateEntries;
 }
 
@@ -306,13 +306,13 @@ void ResizeRegData( void )
         state = StateCurr;
         for( ;; ) {
             old = state;
-            _Alloc( state, sizeof( save_state ) + new_size );
+            state = MemAlloc( sizeof( *state ) + new_size );
             if( state == NULL ) {
                 ReportMADFailure( MS_NO_MEM );
                 new_size = CurrRegSize;
             } else {
-                memset( state, 0, sizeof( save_state ) + new_size );
-                memcpy( state, old, sizeof( save_state ) );
+                memset( state, 0, sizeof( *state ) + new_size );
+                memcpy( state, old, sizeof( *state ) );
             }
             if( old == StateCurr )
                 StateCurr = state;
@@ -334,13 +334,13 @@ void ResizeRegData( void )
         if( !found_dbgregs ) {
             /* just a machine state on it's own */
             ms = DbgRegs;
-            _Alloc( ms, sizeof( machine_state ) + new_size );
+            ms = MemAlloc( sizeof( *ms ) + new_size );
             if( ms == NULL ) {
                 ReportMADFailure( MS_NO_MEM );
                 new_size = CurrRegSize;
             } else {
-                memset( ms, 0, sizeof( machine_state ) + new_size );
-                memcpy( ms, DbgRegs, sizeof( machine_state ) );
+                memset( ms, 0, sizeof( *ms ) + new_size );
+                memcpy( ms, DbgRegs, sizeof( *ms ) );
                 if( DbgRegs == PrevRegs )
                     PrevRegs = ms;
                 DbgRegs = ms;
@@ -356,14 +356,14 @@ static save_state *AllocState( void )
     save_state  *state;
 
     size = sizeof( *state ) + CurrRegSize;
-    _Alloc( state, size );
+    state = MemAlloc( size );
     if( state == NULL )
         return( NULL );
     memset( state, 0, size );
     if( OvlSize != 0 ) {
-        _Alloc( state->s.ovl, OvlSize );
+        state->s.ovl = MemAlloc( OvlSize );
         if( state->s.ovl == NULL ) {
-            _Free( state );
+            MemFree( state );
             return( NULL );
         }
     }
@@ -383,7 +383,7 @@ void ClearMachState( void )
     OvlSize = 0;
     state = StateCurr;
     do {
-        _Free( state->s.ovl );
+        MemFree( state->s.ovl );
         state->s.ovl = NULL;
         state->s.tid = 1;
         state->s.arch = DIG_ARCH_NIL;
@@ -404,6 +404,7 @@ void InitMachState( void )
     other = AllocState();
     if( StateCurr == NULL || other == NULL ) {
         StartupErr( LIT_ENG( ERR_NO_MEMORY ) );
+        /* never return */
     }
     StateCurr->action = ACTION_NONE;
     other->action = ACTION_NONE;
@@ -436,8 +437,8 @@ void SetupMachState( void )
         return;
     state = StateCurr;
     do {
-        _Free( state->s.ovl );
-        _Alloc( state->s.ovl, OvlSize );
+        MemFree( state->s.ovl );
+        state->s.ovl = MemAlloc( OvlSize );
         if( state->s.ovl == NULL ) {
             ReleaseProgOvlay( false );
             Error( ERR_NONE, LIT_ENG( ERR_NO_OVL_STATE ) );
@@ -466,24 +467,19 @@ machine_state *AllocMachState( void )
     machine_state   *state;
     unsigned        state_size;
 
-    state_size = sizeof( machine_state ) + CurrRegSize;
-    state = DbgMustAlloc( state_size );
-    memset( state, 0, sizeof( *state ) );
+    state_size = sizeof( *state ) + CurrRegSize;
+    state = MemAllocSafe( state_size );
+    memset( state, 0, state_size );
     if( OvlSize != 0 ) {
-        _Alloc( state->ovl, OvlSize );
-        if( state->ovl == NULL ) {
-            _Free( state );
-            state = NULL;
-            Error( ERR_NONE, LIT_ENG( ERR_NO_MEMORY ) );
-        }
+        state->ovl = MemAllocSafe( OvlSize );
     }
     return( state );
 }
 
 void FreeMachState( machine_state *state )
 {
-    _Free( state->ovl );
-    _Free( state );
+    MemFree( state->ovl );
+    MemFree( state );
 }
 
 
@@ -894,8 +890,8 @@ void ProcUndo( void )
 }
 
 
-char *GetActionString( int action )
-/*********************************/
+const char *GetActionString( int action )
+/***************************************/
 {
     switch( action ) {
     case ACTION_EXECUTE:
@@ -919,16 +915,16 @@ char *GetActionString( int action )
     }
 }
 
-char *GetUndoString( void )
-/*************************/
+const char *GetUndoString( void )
+/*******************************/
 {
     if( StateCurr == NULL )
         return( NULL );
     return( GetActionString( StateCurr->action ) );
 }
 
-char *GetRedoString( void )
-/*************************/
+const char *GetRedoString( void )
+/*******************************/
 {
     if( StateCurr == NULL )
         return( NULL );

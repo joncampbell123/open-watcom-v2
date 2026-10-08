@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -36,20 +36,27 @@
 
 typedef struct StringItem32 {
     uint_16     NumChars;       /* length */
-    char        Name[2];        /* followed by that many characters */
+    char        Name[1];        /* variable length array */
 } StringItem32;
 
 typedef struct StringItem16 {
     uint_8      NumChars;       /* length */
-    char        Name[1];        /* followed by that many characters */
+    char        Name[1];        /* variable length array */
 } StringItem16;
+
+typedef struct name_ptr {
+    union {
+        char        *str;
+        WResIDName  *name_id;
+    }           u;
+} name_ptr;
 
 typedef struct StringsBlock {
     bool        UseUnicode;
     uint_16     StringBlockSize;
-    void        *StringBlock;
+    char        *StringBlock;
     uint_16     StringListLen;  /* number of entries in the string list */
-    void        **StringList;   /* sorted array of pointers to strings in the StringBlock */
+    name_ptr    *StringList;    /* sorted array of pointers to strings in the StringBlock */
 } StringsBlock;
 
 #endif

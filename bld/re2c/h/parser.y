@@ -24,12 +24,12 @@ spec    :
                 { accept = 0;
                   spec = NULL; }
         |       spec rule
-                { spec = spec? mkAlt(spec, $2) : $2; }
+                { spec = ( spec != NULL ) ? MkAlt(spec, $2) : $2; }
         |       spec decl
         ;
 
 decl    :       ID '=' expr ';'
-                { if($1->re)
+                { if($1->re != NULL)
                       Scanner_fatal(in, "sym already defined");
                   $1->re = $3; }
         ;
@@ -47,14 +47,14 @@ look    :
 expr    :       diff
                 { $$ = $1; }
         |       expr '|' diff
-                { $$ =  mkAlt($1, $3); }
+                { $$ =  MkAlt($1, $3); }
         ;
 
 diff    :       term
                 { $$ = $1; }
         |       diff '\\' term
-                { $$ =  mkDiff($1, $3);
-                  if(!$$)
+                { $$ =  MkDiff($1, $3);
+                    if($$ == NULL)
                        Scanner_fatal(in, "can only difference char sets");
                 }
         ;
@@ -71,20 +71,18 @@ factor  :       primary
                 {
                     switch($2){
                     case '*':
-                        $$ = mkAlt(RegExp_new_CloseOp($1), RegExp_new_NullOp());
+                        $$ = MkAlt(RegExp_new_CloseOp($1), RegExp_new_NullOp());
                         break;
                     case '+':
                         $$ = RegExp_new_CloseOp($1);
                         break;
                     case '?':
-                        $$ = mkAlt($1, RegExp_new_NullOp());
+                        $$ = MkAlt($1, RegExp_new_NullOp());
                         break;
                     }
                 }
         |       primary CLOSESIZE
-                {
-                        $$ = RegExp_new_CloseVOp($1, $2.minsize, $2.maxsize);
-                }
+                { $$ = RegExp_new_CloseVOp($1, $2.minsize, $2.maxsize); }
         ;
 
 close   :       CLOSE
@@ -94,7 +92,7 @@ close   :       CLOSE
         ;
 
 primary :       ID
-                { if(!$1->re)
+                { if($1->re == NULL)
                       Scanner_fatal(in, "can't find symbol");
                   $$ = $1->re; }
         |       RANGE

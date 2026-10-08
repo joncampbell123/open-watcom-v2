@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -33,16 +33,17 @@
 #include <string.h>
 #include "sample.h"
 #include "dlgstat.h"
+#include "watcom.h"
 
 
 #define GUI_NO_ID   ((gui_ctl_id)-1)
 
 extern out_info Child1_Out;
 
-bool            DialogScaled    = false;
-bool            ButtonsScaled   = false;
-bool            ControlsScaled  = false;
-char * ListBoxData[] = { "one", "two", "three" };
+bool            DialogScaled   = false;
+bool            ButtonsScaled  = false;
+bool            ControlsScaled = false;
+const char      *ListBoxData[] = { "one", "two", "three" };
 int    NUM_LIST_BOX_DATA = GUI_ARRAY_SIZE( ListBoxData );
 
 static  const char  *LongText = "inserted_really_long_piece_of_text";
@@ -171,9 +172,9 @@ static gui_create_info DialogControl = {
     NULL                            // Menu Resource
 };
 
-static const char * GUICALLBACK ListBoxFunc( const void *data_handle, int item )
+static const char * GUICALLBACK ListBoxFunc( data_handle data, int item )
 {
-    return( ((const char **)data_handle)[item] );
+    return( data[item] );
 }
 
 static void GUICALLBACK ContrCallBack( gui_window *wnd, gui_ctl_id id, void *param )
@@ -276,10 +277,10 @@ bool StaticDialogWndGUIEventProc( gui_window *wnd, gui_event gui_ev, void *param
         GUIClearText( wnd, STATIC_CONTROL );
         GUISetText( wnd, STATIC_CONTROL, "default" );
         text = GUIGetText( wnd, STATIC_CONTROL );
-        GUIMemFree( text );
+        MemFree( text );
 
         text = GUIGetText( wnd, LISTBOX_CONTROL );
-        GUIMemFree( text );
+        MemFree( text );
 
         GUIClearText( wnd, LISTBOX_CONTROL );
 //      GUISetFocus( wnd, LISTBOX_CONTROL );
@@ -303,13 +304,13 @@ bool StaticDialogWndGUIEventProc( gui_window *wnd, gui_event gui_ev, void *param
             num = -1;
             GUIGetCurrSelect( wnd, id, &num );
             text = GUIGetListItem( wnd, id, num );
-            GUIMemFree( text );
-            GUISetListItemData( wnd, id, num, (void *)num );
-            num = (int)GUIGetListItemData( wnd, id, num );
+            MemFree( text );
+            GUISetListItemData( wnd, id, num, (void *)(pointer_uint)num );
+            num = (int)(pointer_uint)GUIGetListItemData( wnd, id, num );
             break;
         case EDIT_CONTROL:
             new = GUIGetText( wnd, id );
-            GUIMemFree( new );
+            MemFree( new );
             break;
         }
         return( true );
@@ -317,7 +318,7 @@ bool StaticDialogWndGUIEventProc( gui_window *wnd, gui_event gui_ev, void *param
         GUI_GETID( param, id );
         text = GUIGetText( wnd, id );
         GUIDisplayMessage( wnd, text, text, GUI_ABORT_RETRY_IGNORE );
-        GUIMemFree( text );
+        MemFree( text );
         GUIGetRect( wnd, &rect );
         rect.width += 25;
         GUIResizeWindow( wnd, &rect );
@@ -329,7 +330,7 @@ bool StaticDialogWndGUIEventProc( gui_window *wnd, gui_event gui_ev, void *param
             num = -1;
             GUIGetCurrSelect( wnd, id, &num );
             text = GUIGetListItem( wnd, id, num );
-            GUIMemFree( text );
+            MemFree( text );
             return( true );
         }
         break;
@@ -339,11 +340,11 @@ bool StaticDialogWndGUIEventProc( gui_window *wnd, gui_event gui_ev, void *param
         switch( id ) {
         case LISTBOX_CONTROL:
             text = GUIGetText( wnd, id );
-            GUIMemFree( text );
+            MemFree( text );
             num = -1;
             GUIGetCurrSelect( wnd, id, &num );
             text = GUIGetListItem( wnd, id, num );
-            GUIMemFree( text );
+            MemFree( text );
             // GUIDeleteItem( wnd, id, num );
             return( true );
         case OKBUTTON_CONTROL:
@@ -362,7 +363,7 @@ bool StaticDialogWndGUIEventProc( gui_window *wnd, gui_event gui_ev, void *param
                 }
             }
             text = GUIGetText( wnd, LISTBOX_CONTROL );
-            GUIMemFree( text );
+            MemFree( text );
             sel = -1;
             GUIGetCurrSelect( wnd, LISTBOX_CONTROL, &sel );
             if( wnd == DialogWindow ) {
@@ -372,12 +373,12 @@ bool StaticDialogWndGUIEventProc( gui_window *wnd, gui_event gui_ev, void *param
                                    GUI_ABORT_RETRY_IGNORE );
                 GUIGetNewVal( "Enter New Value", "wesley", &text );
                 if( text != NULL ) {
-                    GUIMemFree( text );
+                    MemFree( text );
                 }
                 GUISetFocus( wnd, EDIT_CONTROL );
 #if 0
                 new = GUIGetText( wnd, EDIT_CONTROL );
-                GUIMemFree( OldValue );
+                MemFree( OldValue );
                 OldValue = new;
                 GUIDisplayMessage( wnd, "OK Button", "Got dialog item : ",
                                    GUI_ABORT_RETRY_IGNORE );

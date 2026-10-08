@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2025-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -29,6 +30,8 @@
 ****************************************************************************/
 
 
+extern segment_id   CurrCodeSegId;
+
 extern void         InitSubSegs( void );
 extern segment_id   AllocImpSegId( void );
 extern void         InitSegs( void );
@@ -36,19 +39,19 @@ extern void         FiniSegs( void );
 extern void         AllocSegs( void );
 extern void         SubCodeSeg( void );
 extern void         DtInit( segment_id segid, seg_offset offset );
-extern void         DtIBytes( byte data, int size );
-extern void         DtStreamBytes( byte *data, int size );
-extern void         DtBytes( byte *data, int size );
+extern void         DtIBytes( byte data, uint size );
+extern void         DtStreamBytes( const char *data, uint size );
+extern void         DtBytes( const char *data, uint size );
 extern void         DtStartSequence( void );
 extern void         DtFiniSequence( void );
-extern segment_id   GetComSegId( sym_id sym, unsigned_32 offset );
+extern segment_id   GetComSegId( sym_id sym, uint offset );
 extern segment_id   GetDataSegId( sym_id sym );
-extern seg_offset   GetGlobalOffset( unsigned_32 g_offset );
-extern seg_offset   GetComOffset( unsigned_32 offset );
+extern seg_offset   GetGlobalOffset( uint g_offset );
+extern seg_offset   GetComOffset( uint offset );
 extern seg_offset   GetDataOffset( sym_id sym );
-extern segment_id   GetGlobalSegId( unsigned_32 g_offset );
+extern segment_id   GetGlobalSegId( uint g_offset );
 extern void         DefTypes( void );
 extern void         DefStructs( void );
-extern void         *ConstBack( sym_id c_ptr );
+extern back_handle  LitBack( sym_id c_ptr );
 extern void         FCMessage( fc_msg_class tipe, pointer x );
 extern char         *GetFullSrcName( void );

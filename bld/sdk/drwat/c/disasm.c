@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -37,6 +37,8 @@
 #include "watcom.h"
 #include "memwnd.h"
 #include "sdkasm.h"
+#include "dpmi.h"
+
 
 #define MAX_BUFF        256
 #define UNREADABLE      0
@@ -44,7 +46,7 @@
 extern DWORD            InsAddr;
 
 #ifdef __NT__
-static HANDLE           processHandle;
+static HANDLE           disasmProcessHdl;
 static ModuleNode       *curModule;
 static int              MinAddrSpaces = 20;
 #endif
@@ -73,6 +75,21 @@ static int LongToHex( char *str, DWORD value, int len )
 
 } /* LongToHex */
 
+
+static bool IsSeg32( WORD seg )
+{
+    return( PMIs32bitSelector( seg ) );
+}
+
+bool IsValidSelector( WORD sel )
+{
+    return( PMIsReadSelector( sel ) );
+}
+
+DWORD GetASelectorSize( WORD sel )
+{
+    return( PMGetSelectorSize( sel ) );
+}
 
 /*
  * ConvertAddress - convert a address into a string
@@ -218,7 +235,7 @@ static short DrWatGetNextByte( void )
 {
     char        byte;
 
-    if( ReadProcessMemory( processHandle, (LPVOID)currentAddr.offset, &byte, sizeof( char ), NULL ) )
+    if( ReadProcessMemory( disasmProcessHdl, (LPVOID)currentAddr.offset, &byte, sizeof( char ), NULL ) )
         return( byte );
     return( UNREADABLE );
 } /* DrWatGetNextByte */
@@ -227,7 +244,7 @@ static short DrWatGetDataByte( void )
 {
     char        byte;
 
-    if( ReadProcessMemory( processHandle, (LPVOID)currentAddr.offset, &byte, sizeof( char ), NULL ) ) {
+    if( ReadProcessMemory( disasmProcessHdl, (LPVOID)currentAddr.offset, &byte, sizeof( char ), NULL ) ) {
         currentAddr.offset++;
         return( byte );
     }
@@ -238,7 +255,7 @@ static short DrWatGetNextWord( void )
 {
     WORD        word;
 
-    if( ReadProcessMemory( processHandle, (LPVOID)currentAddr.offset, &word, sizeof( WORD ), NULL ) ) {
+    if( ReadProcessMemory( disasmProcessHdl, (LPVOID)currentAddr.offset, &word, sizeof( WORD ), NULL ) ) {
         return( word );
     }
     return( UNREADABLE );
@@ -249,7 +266,7 @@ static short DrWatGetDataWord( void )
 {
     WORD        word;
 
-    if( ReadProcessMemory( processHandle, (LPVOID)currentAddr.offset, &word, sizeof( WORD ), NULL ) ) {
+    if( ReadProcessMemory( disasmProcessHdl, (LPVOID)currentAddr.offset, &word, sizeof( WORD ), NULL ) ) {
         currentAddr.offset += 2;
         return( word );
     }
@@ -261,7 +278,7 @@ static long DrWatGetNextLong( void )
 {
     DWORD       dword;
 
-    if( ReadProcessMemory( processHandle, (LPVOID)currentAddr.offset, &dword, sizeof( DWORD ), NULL ) ) {
+    if( ReadProcessMemory( disasmProcessHdl, (LPVOID)currentAddr.offset, &dword, sizeof( DWORD ), NULL ) ) {
         return( dword );
     }
     return( UNREADABLE );
@@ -271,7 +288,7 @@ static long DrWatGetDataLong( void )
 {
     DWORD       dword;
 
-    if( ReadProcessMemory( processHandle, (LPVOID)currentAddr.offset, &dword, sizeof( DWORD ), NULL ) ) {
+    if( ReadProcessMemory( disasmProcessHdl, (LPVOID)currentAddr.offset, &dword, sizeof( DWORD ), NULL ) ) {
         currentAddr.offset += 4;
         return( dword );
     }
@@ -282,19 +299,13 @@ static char DrWatEndOfSegment( void )
 {
     char        byte;
 
-    return( !ReadProcessMemory( processHandle, (LPVOID)currentAddr.offset, &byte, sizeof( char ), NULL ) );
+    return( !ReadProcessMemory( disasmProcessHdl, (LPVOID)currentAddr.offset, &byte, sizeof( char ), NULL ) );
 } /* DrWatEndOfSegment */
 
 void SetDisasmInfo( HANDLE prochdl, ModuleNode *mod )
 {
-    processHandle = prochdl;
+    disasmProcessHdl = prochdl;
     curModule = mod;
-}
-
-static bool IsSeg32( WORD seg )
-{
-    seg = seg;
-    return( true );
 }
 
 static bool FindSymbol( ADDRESS *addr, syminfo *si )
@@ -585,7 +596,7 @@ unsigned Disassemble( ADDRESS *addr, char *buff, int addbytes )
         int     j;
 
 #ifdef __NT__
-        ReadProcessMemory( processHandle, (LPVOID)tmpaddr.offset, bytebuff, ins.ins_size, NULL );
+        ReadProcessMemory( disasmProcessHdl, (LPVOID)tmpaddr.offset, bytebuff, ins.ins_size, NULL );
 #else
         ReadMem( tmpaddr.seg, tmpaddr.offset, bytebuff, ins.ins_size );
 #endif

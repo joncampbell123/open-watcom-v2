@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,15 +35,15 @@
 #  include <wmsgdlg.hpp>
 #endif
 
-#include <stdio.h>
-#include <stdarg.h>
-#include <errno.h>
-#include <string.h>
-#include <ctype.h>
+#include <cstdio>
+#include <cstdarg>
+#include <cerrno>
+#include <cstring>
+#include <cctype>
 
 #include "rxwrap.h"
 #include "util.h"
-#include "brmem.h"
+#include "memfuncs.h"
 
 #ifndef STANDALONE_MERGER
 #  include "wbrwin.h"
@@ -89,30 +89,30 @@ void notYetImplemented()
 #ifndef STANDALONE_MERGER
     WMessageDialog::message( topWindow, MsgInfo, MsgOk, "Sorry -- this feature is not yet implemented", "Browser" );
 #else
-    fprintf( stderr, "Sorry -- feature not yet implemented\n" );
+    std::fprintf( stderr, "Sorry -- feature not yet implemented\n" );
 #endif
 }
 
 void cantOpenFile( const char * fname )
 //-------------------------------------
 {
-    errMessage( "Unable to open file: %s\n%s ", fname, strerror( errno ) );
+    errMessage( "Unable to open file: %s\n%s ", fname, std::strerror( errno ) );
 }
 
 void errMessage( const char * format, ... )
 //-----------------------------------------
 {
-    va_list args;
+    std::va_list args;
     char buffer[ 500 ];
 
     va_start( args, format );
-    vsprintf( buffer, format, args );
+    std::vsprintf( buffer, format, args );
     va_end( args );
 
 #ifndef STANDALONE_MERGER
     WMessageDialog::message( topWindow, MsgError, MsgOk, buffer, "Source Browser" );
 #else
-    fprintf( stderr, "%s\n", buffer );
+    std::fprintf( stderr, "%s\n", buffer );
 #endif
 }
 
@@ -145,16 +145,16 @@ static bool matchesAll( char * name )
 
     if( name == NULL || *name == '\0' )
         return true;
-    while( isspace( *name ) ) name++;
+    while( std::isspace( *name ) ) name++;
     if( name == '\0' )
         return true;
-    nameend = name + strlen(name) - 1;
-    while( isspace( *nameend ) ) {
+    nameend = name + std::strlen(name) - 1;
+    while( std::isspace( *nameend ) ) {
         *nameend = '\0';
         nameend--;
     }
-    return strcmp( name, "*" ) == 0 || strcmp( name, ".*" ) == 0
-           || strcmp( name, "*.*" ) == 0;
+    return std::strcmp( name, "*" ) == 0 || std::strcmp( name, ".*" ) == 0
+           || std::strcmp( name, "*.*" ) == 0;
 }
 
 void * WBRRegComp( const char * cname )
@@ -196,17 +196,3 @@ void * WBRRegComp( const char * )
 }
 
 #endif
-
-char * WBRStrDup( const char *src )
-//---------------------------------
-// this is a strdup which goes through our memory allocator.
-{
-    unsigned    len;
-    char        *dest;
-
-    if( src == NULL ) return NULL;
-    len = strlen( src ) + 1;
-    dest = (char *)WBRAlloc( len );
-    memcpy( dest, src, len );
-    return( dest );
-}

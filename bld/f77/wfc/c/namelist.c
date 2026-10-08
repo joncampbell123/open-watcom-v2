@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -58,19 +59,19 @@ void    CpNameList( void ) {
     grp_entry   *ge;
 
     StmtExtension( SP_STRUCTURED_EXT );
-    ReqNOpn();
+    ReqNoOpn();
     AdvanceITPtr();
     for( ;; ) {
-        ReqDiv();
-        if( ReqName( NAME_GROUP ) ) {
+        ReqDivOpr();
+        if( ReqNameOpn( NAME_GROUP ) ) {
             name_list = LkNameList();
         } else {
             name_list = NULL;
         }
         AdvanceITPtr();
-        ReqDiv();
+        ReqDivOpr();
         for( ;; ) {
-            if( ReqName( NAME_VAR_OR_ARR ) ) {
+            if( ReqNameOpn( NAME_VAR_OR_ARR ) ) {
                 sym = LkSym();
             } else {
                 sym = NULL;
@@ -94,16 +95,16 @@ void    CpNameList( void ) {
                 }
             }
             AdvanceITPtr();
-            if( RecComma() && RecNOpn() ) {
+            if( RecCommaOpr() && RecNoOpn() ) {
                 AdvanceITPtr();
             }
-            if( !RecComma() ) {
+            if( !RecCommaOpr() ) {
                 break;
             }
         }
-        if( !RecDiv() ) {
+        if( !RecDivOpr() ) {
             break;
         }
     }
-    ReqEOS();
+    ReqEOSOpr();
 }

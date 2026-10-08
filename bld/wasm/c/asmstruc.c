@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -58,7 +58,7 @@ asm_sym_handle FindStructureMember( asm_sym_handle symbol, const char *name )
 bool StructDef( token_buffer *tokbuf, token_idx i )
 /*************************************************/
 {
-    char            *name;
+    const char      *name;
     dir_node_handle dir;
     token_idx       n;
 
@@ -94,7 +94,7 @@ bool StructDef( token_buffer *tokbuf, token_idx i )
             } else if( ( dir->sym.state == SYM_STRUCT )
               && (Options.mode & MODE_IDEAL) ) {
                 /* Redefinition of structure */
-                FreeInfo( dir );
+                dir_fini( dir );
                 dir_init( dir, TAB_STRUCT );
             } else {
                 AsmError( SYMBOL_ALREADY_DEFINED );
@@ -150,7 +150,7 @@ bool InitializeStructure( asm_sym_handle sym, asm_sym_handle struct_symbol, toke
     dir = (dir_node_handle)struct_symbol;
 
     PushLineQueue();
-    if( tokbuf->tokens[i].class != TC_STRING ) {
+    if( !IS_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
         AsmError( SYNTAX_ERROR ); // fixme
         return( RC_ERROR );
     }
@@ -166,6 +166,13 @@ bool InitializeStructure( asm_sym_handle sym, asm_sym_handle struct_symbol, toke
         /* put the lines to define the fields of the structure in,
          * using the values specified ( if any ) or the default ones otherwise
          */
+        if( f->initializer == NULL ) {
+            /*
+             * LABEL members in structures define an offset alias only; they do
+             * not emit data and must not consume a structure initializer.
+             */
+            continue;
+        }
         len = strlen( f->initializer );
         p = CATSTR( buffer, f->initializer, len );
         *p++ = ' ' ;
@@ -213,7 +220,7 @@ int AddFieldToStruct( asm_sym_handle sym, token_buffer *tokbuf, token_idx loc )
 
     offset = the_struct->size; // offset of this element
 
-    f = AsmAlloc( sizeof( field_list ) );
+    f = MemAllocSafe( sizeof( field_list ) );
 
     if( ISINVALID_IDX( loc ) ) {
         for( loc = 0; ISVALID_IDX( loc ); ++loc ) {
@@ -228,7 +235,7 @@ int AddFieldToStruct( asm_sym_handle sym, token_buffer *tokbuf, token_idx loc )
         f->sym = NULL;
     }
     /* now add the initializer to the structure's list */
-    f->initializer = AsmStrDup( tokbuf->tokens[loc].string_ptr );
+    f->initializer = MemStrdupSafe( tokbuf->tokens[loc].string_ptr );
 
     /* now add the value to initialize the struct to */
     count = 0;
@@ -238,23 +245,23 @@ int AddFieldToStruct( asm_sym_handle sym, token_buffer *tokbuf, token_idx loc )
         if( tokbuf->tokens[i].string_ptr != NULL ) {
             count += strlen( tokbuf->tokens[i].string_ptr ) + 1;
         }
-        if( tokbuf->tokens[i].class == TC_STRING ) {
+        if( IS_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
             count += 2;
         }
     }
 
-    f->value = AsmAlloc( count + 1 );
+    f->value = MemAllocSafe( count + 1 );
     f->value[0] = '\0';
     for( i = loc + 1; ISVALID_IDX( i ); i++ ) {
         if( tokbuf->tokens[i].class == TC_FINAL )
             break;
-        if( tokbuf->tokens[i].class == TC_STRING ) {
+        if( IS_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
             strcat( f->value, "<" );
         }
         if( tokbuf->tokens[i].string_ptr != NULL ) {
             strcat( f->value, tokbuf->tokens[i].string_ptr );
         }
-        if( tokbuf->tokens[i].class == TC_STRING ) {
+        if( IS_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
             strcat( f->value, ">" );
         }
         strcat( f->value, " " );

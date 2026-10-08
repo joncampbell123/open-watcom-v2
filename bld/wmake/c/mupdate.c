@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -145,7 +145,7 @@ STATIC void getStats( TARGET *targ )
 
 
 #ifdef __WATCOMC__
-#pragma on (check_stack);
+#pragma on( check_stack );
 #endif
 STATIC bool targExists( TARGET *targ )
 /************************************/
@@ -170,7 +170,7 @@ STATIC bool targExists( TARGET *targ )
     return( false );
 }
 #ifdef __WATCOMC__
-#pragma off(check_stack);
+#pragma pop( check_stack );
 #endif
 
 
@@ -199,7 +199,7 @@ STATIC void getDate( TARGET *targ )
 
 
 #ifdef __WATCOMC__
-#pragma on (check_stack);
+#pragma on( check_stack );
 #endif
 STATIC RET_T carryOut( TARGET *targ, CLIST *clist, time_t max_time )
 /******************************************************************/
@@ -207,7 +207,7 @@ STATIC RET_T carryOut( TARGET *targ, CLIST *clist, time_t max_time )
     CLIST               *err;
     int                 i;
     struct utimbuf      times;
-    char                msg[max( MAX_RESOURCE_SIZE, _MAX_PATH )];
+    char                msg[_MAX_PATH];
 
     assert( targ != NULL
         && clist != NULL );
@@ -281,7 +281,7 @@ STATIC RET_T carryOut( TARGET *targ, CLIST *clist, time_t max_time )
     return( RET_ERROR );
 }
 #ifdef __WATCOMC__
-#pragma off(check_stack);
+#pragma pop( check_stack );
 #endif
 
 
@@ -617,7 +617,7 @@ STATIC RET_T imply( TARGET *targ, const char *drive, const char *dir,
         cursuf = cur->suffix;
 
         /* allocate a buffer */
-        buf = MallocSafe( _MAX_PATH );
+        buf = MemAllocSafe( _MAX_PATH );
         slist = NULL;
         slistDef = NULL;
         slistEmptyTargDepPath = NULL;
@@ -634,7 +634,7 @@ STATIC RET_T imply( TARGET *targ, const char *drive, const char *dir,
              * note the path of the current target must match the
              * path as specified in the slist
              */
-            if( stricmp( buf, curslist->targ_path ) == 0 ) {
+            if( FNameEq( buf, curslist->targ_path ) ) {
                 /* build filename for implied target */
                 _makepath( buf, NULL, curslist->dep_path, fname, cursuf->node.name );
                 /* try to find this file on path or in targets */
@@ -683,7 +683,7 @@ STATIC RET_T imply( TARGET *targ, const char *drive, const char *dir,
              * No Default Slist found so must continue and find
              * another slist
              */
-            FreeSafe( buf );
+            MemFree( buf );
             continue;
         }
 
@@ -701,8 +701,8 @@ STATIC RET_T imply( TARGET *targ, const char *drive, const char *dir,
 
             }
             newtarg = true;
-            imptarg = NewTarget( buf );
-            FreeSafe( buf );        /* don't need any more */
+            imptarg = NewTarget( FixName( MemStrdupSafe( buf ) ) );
+            MemFree( buf );        /* don't need any more */
             getStats( imptarg );
             imptarg->busy = true;   /* protect against recursion */
             ret = imply( imptarg, NULL, slist->dep_path, fname, cursuf->node.name, false );
@@ -720,7 +720,7 @@ STATIC RET_T imply( TARGET *targ, const char *drive, const char *dir,
         } else {
             /* We already know about imptarg, so just update it */
             assert( imptarg != NULL );
-            FreeSafe( buf );        /* don't need any more */
+            MemFree( buf );        /* don't need any more */
             newtarg = false;        /* this isn't a new target */
             Update( imptarg );
         }
@@ -798,7 +798,7 @@ STATIC void ExpandWildCards( TARGET *targ, DEPEND *depend )
            NodeName = DeMacroSpecial( tlist->target->node.name );
            exPop();
            WildTList( &temp, NodeName, true, true );
-           FreeSafe( NodeName );
+           MemFree( NodeName );
        } else {
            WildTList( &temp, tlist->target->node.name, true, true );
        }
@@ -1108,7 +1108,7 @@ char *GetCurDeps( bool younger, bool isMacInf )
       && cur.targ == NULL)
       || cur.dep == NULL
       || cur.dep->targs == NULL ) {
-        return( CharToStrSafe( NULLCHAR ) );
+        return( CharToStringSafe( NULLCHAR ) );
     }
 
     vec = StartVec();

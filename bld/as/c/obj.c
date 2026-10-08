@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -41,11 +41,11 @@
 
 
 #if defined( __UNIX__ )
-#define OBJ_EXT         "o"
+#define FEXT_OBJ        "o"
 #else
-#define OBJ_EXT         "obj"
+#define FEXT_OBJ        "obj"
 #endif
-#define ERR_EXT         "err"
+#define FEXT_ERR        "err"
 
 extern int              ExitStatus;
 
@@ -85,12 +85,12 @@ void ObjSetObjFile( char *obj_name )
 }
 
 typedef struct {
-    char                *name;
+    const char          *name;
     owl_section_type    type;
     owl_alignment       alignment;
 } sect_info;
 
-static sect_info reservedSecInfo[] = {
+static sect_info    reservedSecInfo[] = {
     #define PICK( a, b, c, d )  { b, c, d },
     #include "_section.h"
     #undef PICK
@@ -100,7 +100,7 @@ void ObjSwitchSection( reserved_section section )
 //***********************************************
 // Switch to a reserved section
 {
-    sect_info   *secinfo;
+    sect_info       *secinfo;
 
     secinfo = &reservedSecInfo[ section ];
     if( SectionLookup( secinfo->name ) ) {
@@ -136,11 +136,11 @@ bool ObjInit( const char *fname, const char *err_file )
     SectionInit();
     _splitpath2( fname, pg1.buffer, NULL, NULL, &pg1.fname, NULL );
     if( !objectDefined ) {
-        _makepath( objName, NULL, NULL, pg1.fname, OBJ_EXT );
+        _makepath( objName, NULL, NULL, pg1.fname, FEXT_OBJ );
     } else {
         _splitpath2( objName, pg2.buffer, &pg2.drive, &pg2.dir, &pg2.fname, &pg2.ext );
         if( pg2.ext[0] == '\0' )
-            pg2.ext = OBJ_EXT;
+            pg2.ext = FEXT_OBJ;
         if( pg2.fname[0] == '\0' )
             pg2.fname = pg1.fname;
         _makepath( objName, pg2.drive, pg2.dir, pg2.fname, pg2.ext );
@@ -163,23 +163,23 @@ bool ObjInit( const char *fname, const char *err_file )
             pg2.drive = NULL;
             pg2.dir = NULL;
             pg2.fname = pg1.fname;
-            pg2.ext = ERR_EXT;
+            pg2.ext = FEXT_ERR;
         } else {
             _splitpath2( err_file, pg2.buffer, &pg2.drive, &pg2.dir, &pg2.fname, &pg2.ext );
             if( pg2.fname[0] == '\0' || strcmp( pg2.fname, "*" ) == 0 ) {
                 pg2.fname = pg1.fname;
             }
             if( pg2.ext[0] == '\0' ) {
-                pg2.ext = ERR_EXT;
+                pg2.ext = FEXT_ERR;
             }
         }
         _makepath( errorFilename, pg2.drive, pg2.dir, pg2.fname, pg2.ext );
         ErrorFile = fopen( errorFilename, "wt" );
     }
-    OwlHandle = OWLInit( &funcs, OBJ_OWL_CPU );
-    if( _IsOption( OBJ_COFF ) ) {
+    OwlHandle = OWLInit( &funcs, TARGET_OWL_CPU );
+    if( _IsOption( TARGET_COFF ) ) {
         obj_format = OWL_FORMAT_COFF;
-    } else if( _IsOption( OBJ_ELF ) ) {
+    } else if( _IsOption( TARGET_ELF ) ) {
         obj_format = OWL_FORMAT_ELF;
     } else {
 #if defined( __NT__ )
@@ -229,7 +229,7 @@ static void doStackLabel( sym_handle sym, owl_sym_type type, owl_sym_linkage lin
 {
     label_list          new_label;
 
-    new_label = MemAlloc( sizeof( struct asm_label ) );
+    new_label = MemAllocSafe( sizeof( struct asm_label ) );
     new_label->section = CurrentSection;
     new_label->sym_name = SymName( sym );
     new_label->sym_type = type;
@@ -245,7 +245,7 @@ static void doStackNumericLabel( int_32 label_num, owl_sym_type type, owl_sym_li
 {
     label_list          new_label;
 
-    new_label = MemAlloc( sizeof( struct asm_label ) );
+    new_label = MemAllocSafe( sizeof( struct asm_label ) );
     new_label->section = CurrentSection;
     new_label->sym_name = NULL;
     new_label->sym_type = type;

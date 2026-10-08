@@ -67,18 +67,13 @@ const char *GetRCString( msg_id msgid )
  */
 char *AllocRCString( msg_id id )
 {
-    char        *ret;
     int         len;
 
     len = LoadString( curInst, id, tmpBuf, LDSTR_MAX_STR_LEN );
     if( len < 0 )
         len = 0;
-    tmpBuf[len++] = '\0';
-    ret = CUIMemAlloc( len );
-    if( ret != NULL ) {
-        memcpy( ret, tmpBuf, len );
-    }
-    return( ret );
+    tmpBuf[len] = '\0';
+    return( MemStrdupSafe( tmpBuf ) );
 
 } /* AllocRCString */
 
@@ -102,7 +97,7 @@ int CopyRCString( msg_id id, char *buf, int bufsize )
  */
 void FreeRCString( char *str )
 {
-    CUIMemFree( str );
+    MemFree( str );
 }
 
 /*

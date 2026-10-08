@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,26 +35,104 @@
 //  Any project that includes this pre-processor will probably substitute
 //  their own support for these routines.
 //
-#include "_preproc.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "ppmem.h"
+#include "trmem.h"
 
-void * PPENTRY PP_Malloc( size_t size )
+
+#ifdef TRMEM
+
+static _trmem_hdl   TrHdl = _TRMEM_HDL_NONE;
+static FILE         *TrFile;       /* file handle we'll write() to */
+
+static void memPrintLine( void *file, const char *buf, size_t len )
 {
-    void        *p;
+    /* unused parameters */ (void)file; (void)len;
 
-    p = malloc( size );
-    if( p == NULL ) {
-        PP_OutOfMemory();
+    fprintf( stderr, "***%s\n", buf );
+    if( TrFile != NULL ) {
+        fprintf( TrFile, "%s\n", buf );
     }
-    return( p );
 }
 
-void PPENTRY PP_Free( void *p )
+#endif  /* TRMEM */
+
+void PP_MemInit( void )
+/*********************/
 {
+#ifdef TRMEM
+    TrFile = fopen( "mem.trk", "w" );
+    TrHdl = _trmem_open( malloc, free, realloc, strdup,
+            NULL, memPrintLine, _TRMEM_DEF );
+    if( TrHdl == _TRMEM_HDL_NONE ) {
+        exit( EXIT_FAILURE );
+    }
+#endif
+}
+
+void PP_MemFini( void )
+/*********************/
+{
+#ifdef TRMEM
+    if( TrHdl != _TRMEM_HDL_NONE ) {
+        _trmem_prt_list_ex( TrHdl, 100 );
+        _trmem_close( TrHdl );
+        if( TrFile != NULL ) {
+            fclose( TrFile );
+            TrFile = NULL;
+        }
+        TrHdl = _TRMEM_HDL_NONE;
+    }
+#endif
+}
+
+static void *check_nomem( void *ptr )
+{
+    if( ptr == NULL ) {
+        printf( "Out of memory\n" );
+        exit( 1 );
+    }
+    return( ptr );
+}
+
+TRMEMAPI( MemAllocSafe )
+void * MemAllocSafe( size_t size )
+{
+#ifdef TRMEM
+    return( check_nomem( _trmem_alloc( size, _TRMEM_WHO( 1 ), TrHdl ) ) );
+#else
+    return( check_nomem( malloc( size ) ) );
+#endif
+}
+
+TRMEMAPI( MemStrdupSafe )
+char * MemStrdupSafe( const char *str )
+{
+#ifdef TRMEM
+    return( check_nomem( _trmem_strdup( str, _TRMEM_WHO( 2 ), TrHdl ) ) );
+#else
+    return( check_nomem( strdup( str ) ) );
+#endif
+}
+
+TRMEMAPI( MemReallocSafe )
+void *MemReallocSafe( void *old, size_t size )
+{
+#ifdef TRMEM
+    return( check_nomem( _trmem_realloc( old, size, _TRMEM_WHO( 3 ), TrHdl ) ) );
+#else
+    return( check_nomem( realloc( old, size ) ) );
+#endif
+}
+
+TRMEMAPI( MemFree )
+void MemFree( void *p )
+{
+#ifdef TRMEM
+    _trmem_free( p, _TRMEM_WHO( 4 ), TrHdl );
+#else
     free( p );
-}
-
-void PPENTRY PP_OutOfMemory()
-{
-    printf( "Out of memory\n" );
-    exit( 1 );
+#endif
 }

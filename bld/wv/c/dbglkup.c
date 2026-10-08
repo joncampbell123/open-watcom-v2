@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,7 +35,7 @@
 #include "dbgdata.h"
 #include "liteng.h"
 #include "dbgerr.h"
-#include "dbgmem.h"
+#include "memfuncs.h"
 #include "dbgio.h"
 #include "strutil.h"
 #include "dbgscan.h"
@@ -44,7 +44,7 @@
 #include "dbgprog.h"
 #include "remcore.h"
 #include "dipimp.h"
-#include "dipinter.h"
+#include "wvdipcli.h"
 #include "enterdb.h"
 #include "dbglkup.h"
 #include "dbgsetfg.h"
@@ -69,9 +69,9 @@ typedef struct lookup_list {
     struct lookup_list  *next;
     bool                respect_case;
     char                data[1];
-} lookup;
+} lookup_list;
 
-static  lookup      *DefLookup;
+static lookup_list      *DefLookup;
 
 static const char CaseTab[] = {
     #define pick(t,e)   t "\0"
@@ -79,13 +79,13 @@ static const char CaseTab[] = {
     #undef pick
 };
 
-static void FreeList( lookup *curr )
+static void FreeList( lookup_list *curr )
 {
-    lookup *next;
+    lookup_list *next;
 
     for( ; curr != NULL; curr = next ) {
         next = curr->next;
-        _Free( curr );
+        MemFree( curr );
     }
 }
 
@@ -94,16 +94,11 @@ static void FreeList( lookup *curr )
  * LookInit - initialize lookup
  */
 
-static void AddLookSpec( const char *start, unsigned len, bool respect, lookup *old )
+static void AddLookSpec( const char *start, unsigned len, bool respect )
 {
-    lookup  *next;
+    lookup_list     *next;
 
-    _Alloc( next, sizeof( struct lookup_list ) + len );
-    if( next == NULL ) {
-        FreeList( DefLookup );
-        DefLookup = old;
-        Error( ERR_NONE, LIT_ENG( ERR_NO_MEMORY ) );
-    }
+    next = MemAllocSafe( sizeof( *next ) + len );
     next->next = DefLookup;
     next->respect_case = respect;
     memcpy( next->data, start, len );
@@ -116,9 +111,9 @@ void InitLook( void )
 {
     DefLookup = NULL;
     // add these in reverse order since AddLookSpec adds to the front of the list
-    AddLookSpec( "*_", 2, false, NULL );
-    AddLookSpec( "_*", 2, false, NULL );
-    AddLookSpec( "*", 1, false, NULL );
+    AddLookSpec( "*_", 2, false );
+    AddLookSpec( "_*", 2, false );
+    AddLookSpec( "*", 1, false );
 }
 
 void FiniLook( void )
@@ -132,7 +127,7 @@ void FiniLook( void )
 
 void LookCaseSet( bool respect )
 {
-    lookup  *curr;
+    lookup_list  *curr;
 
     for( curr = DefLookup; curr != NULL; curr = curr->next ) {
         curr->respect_case = respect;
@@ -147,11 +142,12 @@ void LookSet( void )
         size_t      len;
         bool        respect;
     }       *curr, new[20];
-    lookup  *old, *next;
-    bool    respect;
-    bool    just_respect;
-    bool    need_item;
-    bool    add;
+    lookup_list     *old;
+    lookup_list     *next;
+    bool            respect;
+    bool            just_respect;
+    bool            need_item;
+    bool            add;
 
     respect = true;
     add = false;
@@ -210,17 +206,17 @@ void LookSet( void )
         old = DefLookup;
         DefLookup = NULL;
         while( --curr >= new ) {
-            AddLookSpec( curr->start, curr->len, curr->respect, old );
+            AddLookSpec( curr->start, curr->len, curr->respect );
         }
-        if( add ) {
-            if( old != NULL ) {
+        if( old != NULL ) {
+            if( add ) {
                 for( next = old; next->next != NULL; next = next->next )
                     ;
                 next->next = DefLookup;
                 DefLookup = old;
+            } else {
+                FreeList( old );
             }
-        } else {
-            FreeList( old );
         }
     }
     for( next = DefLookup; next != NULL; next = next->next ) {
@@ -234,9 +230,9 @@ void LookSet( void )
 
 void LookConf( void )
 {
-    lookup *curr;
-    char   *ptr;
-    bool   respect;
+    lookup_list     *curr;
+    char            *ptr;
+    bool            respect;
 
     respect = true;
     ptr = TxtBuff;
@@ -413,12 +409,12 @@ static sym_list         *SymListHead;
 sym_list *LookupSymList( symbol_source ss, void *d, bool source_only,
                         lookup_item *li )
 {
-    lookup      *curr;
-    bool        save_case;
-    const char  *save_name;
-    unsigned    save_len;
-    bool        check_codeaddr_mod;
-    mod_handle  search_mod;
+    lookup_list     *curr;
+    bool            save_case;
+    const char      *save_name;
+    unsigned        save_len;
+    bool            check_codeaddr_mod;
+    mod_handle      search_mod;
 
     check_codeaddr_mod = false;
     if( ss == SS_SCOPED ) {
@@ -437,7 +433,7 @@ sym_list *LookupSymList( symbol_source ss, void *d, bool source_only,
     if( DefLookup == NULL || source_only ) {
         li->source = li->name;
         if( check_codeaddr_mod ) {
-            if(DIPLookupSym( SS_MODULE, &CodeAddrMod, li, &SymListHead )!=SR_NONE) {
+            if( DIPLookupSym( SS_MODULE, &CodeAddrMod, li, &SymListHead ) != SR_NONE ) {
                 return( SymListHead );
             }
         }
@@ -481,7 +477,7 @@ void FreeSymHandle( sym_list *sl )
     for( owner = &SymListHead; (curr = *owner) != NULL; owner = &curr->next ) {
         if( curr == sl ) {
             *owner = curr->next;
-            _Free( curr );
+            MemFree( curr );
             break;
         }
     }
@@ -494,7 +490,7 @@ void PurgeSymHandles( void )
 
     for( curr = SymListHead; curr != NULL; curr = next ) {
         next = curr->next;
-        _Free( curr );
+        MemFree( curr );
     }
     SymListHead = NULL;
 }

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -82,26 +82,6 @@ static int compareRevI( const void *p1, const void *p2 )
     return( stricmp( *cp2, *cp1 ) );
 }
 
-static char *my_fgets( char *buffer, int size, FILE *fp )
-{
-    size_t  len;
-
-    if( fgets( buffer, size, fp ) == NULL ) {
-        return( NULL );
-    }
-    len = strlen( buffer );
-    while( len-- > 0 ) {
-        if( buffer[len] == '\n' ) {
-            buffer[len] = '\0';
-        } else if( buffer[len] == '\r' ) {
-            buffer[len] = '\0';
-        } else {
-            break;
-        }
-    }
-    return( buffer );
-}
-
 // main is allways int on windows
 int main( int argc, char **argv )
 {
@@ -161,8 +141,9 @@ int main( int argc, char **argv )
     }
     MemFree( argv );
 
-    while( my_fgets( buffer, sizeof( buffer ), infile ) != NULL ) {
-        lines[line_count] = (char *)MemAlloc( sizeof( char ) * strlen( buffer ) + 1 );
+    while( fgets( buffer, sizeof( buffer ), infile ) != NULL ) {
+        buffer[strcspn( buffer, "\r\n" )] = '\0';
+        lines[line_count] = MemAlloc( sizeof( char ) * strlen( buffer ) + 1 );
         strcpy( lines[line_count], buffer );
         line_count++;
     }

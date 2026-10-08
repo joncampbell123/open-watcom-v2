@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -39,28 +39,28 @@
 #include "wresrtns.h"
 
 
-bool ResWriteAccelEntry( AccelTableEntry *currentry, FILE *fp )
-/*************************************************************/
+bool ResWriteAccelEntry( AccelTableEntry *entry, FILE *fp )
+/*********************************************************/
 {
-    if( ResWriteUint8( currentry->Flags, fp ) )
+    if( ResWriteUint8( fp, entry->Flags ) )
         return( true );
-    if( ResWriteUint16( currentry->Ascii, fp ) )
+    if( ResWriteUint16( fp, entry->Ascii ) )
         return( true );
-    if( ResWriteUint16( currentry->Id, fp ) )
+    if( ResWriteUint16( fp, entry->Id ) )
         return( true );
     return( false );
 }
 
-bool ResWriteAccelEntry32( AccelTableEntry32 *currentry, FILE *fp )
-/*****************************************************************/
+bool ResWriteAccelEntry32( AccelTableEntry32 *entry, FILE *fp )
+/*************************************************************/
 {
-    if( ResWriteUint16( currentry->Flags, fp ) )
+    if( ResWriteUint16( fp, entry->Flags ) )
         return( true );
-    if( ResWriteUint16( currentry->Ascii, fp ) )
+    if( ResWriteUint16( fp, entry->Ascii ) )
         return( true );
-    if( ResWriteUint16( currentry->Id, fp ) )
+    if( ResWriteUint16( fp, entry->Id ) )
         return( true );
-    if( ResWriteUint16( currentry->Unknown, fp ) )
+    if( ResWriteUint16( fp, entry->Unknown ) )
         return( true );
     return( false );
 }

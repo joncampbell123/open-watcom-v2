@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2004-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2004-2026 The Open Watcom Contributors. All Rights Reserved.
 *
 *  ========================================================================
 *
@@ -268,14 +268,14 @@ void find_create_ix_e_entry( ix_h_blk *ixhwork, char *ref, unsigned len,
 
         /* Item not found and ixework points to insertion point */
 
-        ixewk = mem_alloc( sizeof( ix_e_blk ) );
+        ixewk = MemAllocSafe( sizeof( *ixewk ) );
         ixewk->next = NULL;
         ixewk->entry_typ = type;
         ixewk->prt_text = NULL;
         if( (seeidwork != NULL) && (seeidwork->prt_term_len > 0) ) {
-            ixewk->prt_text = mem_tokdup( seeidwork->prt_term, seeidwork->prt_term_len );
+            ixewk->prt_text = MemToStringSafe( seeidwork->prt_term, seeidwork->prt_term_len );
         }
-        ixewk->u.pageref.page_text = mem_tokdup( ref, len );
+        ixewk->u.pageref.page_text = MemToStringSafe( ref, len );
         ixewk->u.pageref.page_text_len = len;
 
         if( *base == NULL ) {
@@ -352,7 +352,7 @@ void eol_index_page( eol_ix * eol_index, unsigned page_nr )
 
             /* Item not found and ixework points to insertion point */
 
-            ixewk = mem_alloc( sizeof( ix_e_blk ) );
+            ixewk = MemAllocSafe( sizeof( *ixewk ) );
             ixewk->next = NULL;
             ixewk->entry_typ = eol_index->type;
             ixewk->prt_text = NULL;
@@ -405,11 +405,11 @@ ix_h_blk * find_create_ix_h_entry( ix_h_blk *ixhwork, ix_h_blk *ixhbase,
 
         if( printtxt != NULL ) {
             if( ixhwork->prt_term == NULL ) {
-                ixhwork->prt_term = mem_tokdup( printtxt, printtxtlen );
+                ixhwork->prt_term = MemToStringSafe( printtxt, printtxtlen );
                 ixhwork->prt_term_len = printtxtlen;
             } else if( ixhwork->prt_term_len < printtxtlen ) {
-                mem_free( ixhwork->prt_term );
-                ixhwork->prt_term = mem_tokdup( printtxt, printtxtlen );
+                MemFree( ixhwork->prt_term );
+                ixhwork->prt_term = MemToStringSafe( printtxt, printtxtlen );
                 ixhwork->prt_term_len = printtxtlen;
             } else if( printtxtlen == 0 ) {
                 ixhwork->prt_term[0] = '\0';
@@ -421,12 +421,12 @@ ix_h_blk * find_create_ix_h_entry( ix_h_blk *ixhwork, ix_h_blk *ixhbase,
 
         /* Item not found and ixhwork points to insertion point */
 
-        ixhwk = mem_alloc( sizeof( ix_h_blk ) );
+        ixhwk = MemAllocSafe( sizeof( *ixhwk ) );
         ixhwk->next  = NULL;
         ixhwk->lower = NULL;
         ixhwk->entry = NULL;
         ixhwk->ix_lvl = lvl;
-        ixhwk->ix_term = mem_tokdup( txt, txtlen );
+        ixhwk->ix_term = MemToStringSafe( txt, txtlen );
         ixhwk->ix_term_len = txtlen;
         if( printtxt != NULL ) {
             ixhwk->prt_term_len = printtxtlen;
@@ -477,9 +477,9 @@ static void free_ix_e_entries( ix_e_blk * e )
     while( ew != NULL ) {
         ewk = ew->next;
         if( ew->entry_typ >= PGREF_string ) {
-            mem_free( ew->u.pageref.page_text );
+            MemFree( ew->u.pageref.page_text );
         }
-        mem_free( ew );
+        MemFree( ew );
         ew = ewk;
     }
 }
@@ -496,7 +496,7 @@ static  void    free_entry_block( entry_list * e )
     free_ix_e_entries( e->normal_pgnum );
     free_ix_e_entries( e->normal_string );
     free_ix_e_entries( e->see_string );
-    mem_free( e );
+    MemFree( e );
 }
 
 
@@ -507,10 +507,10 @@ static  void    free_entry_block( entry_list * e )
 static  void    free_ix_h_entry( ix_h_blk * h )
 {
     if( h->prt_term != NULL ) {         // free different display txt
-        mem_free( h->prt_term );
+        MemFree( h->prt_term );
     }
-    mem_free( h->ix_term );             // free index term
-    mem_free( h );                      // and the entry itself
+    MemFree( h->ix_term );             // free index term
+    MemFree( h );                      // and the entry itself
 }
 
 
@@ -567,7 +567,7 @@ void    free_index_dict( ix_h_blk * * dict )
 void init_entry_list( ix_h_blk * term )
 
 {
-    term->entry = mem_alloc( sizeof( entry_list ) );
+    term->entry = MemAllocSafe( sizeof( *term->entry ) );
     term->entry->major_pgnum = NULL;
     term->entry->major_string = NULL;
     term->entry->normal_pgnum = NULL;

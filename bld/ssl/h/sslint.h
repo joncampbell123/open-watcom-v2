@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -29,43 +30,42 @@
 ****************************************************************************/
 
 
-extern void             Error( char *, ... );
-extern void             Dump( char *, ... );
-extern void             OutStartSect( char *, unsigned short );
+extern void             Error( const char *, ... );
+extern void             Dump( const char *, ... );
+extern void             OutStartSect( const char *, unsigned );
 extern void             OutByte( unsigned char );
-extern void             OutWord( unsigned short );
+extern void             OutWord( unsigned );
 extern void             OutEndSect( void );
-extern unsigned short   SrcLine( void );
-extern void             Decls(void);
-extern void             Rules(void);
-extern void             DumpSymTbl(void);
-extern void             GenCode(void);
-extern void             DumpGenCode(void);
-extern void             WantColon(void);
-extern void             Scan(void);
-extern symbol           *NewSym( class );
-extern symbol           *Lookup( class );
+extern unsigned         SrcLine( void );
+extern void             Decls( void );
+extern void             Rules( void );
+extern void             DumpSymTbl( void );
+extern void             FreeSymTbl( void );
+extern void             GenCode( void );
+extern void             DumpGenCode( void );
+extern void             FreeGenCode( void );
+extern void             WantColon( void );
+extern void             Scan( void );
+extern symbol           *NewSym( ssl_class );
+extern symbol           *Lookup( ssl_class );
 extern void             NewAlias( symbol * );
-extern unsigned short   GetNum(void);
-extern void             Error( char *, ... );
-extern void             WantColon(void);
-extern void             Scan(void);
-extern void             GenCode(void);
-extern void             GenLabel( instruction * );
-extern void             GenExportLabel( instruction * );
-extern void             GenInput( unsigned );
-extern void             GenOutput( unsigned );
-extern void             GenError( unsigned );
-extern void             GenInputAny(void);
-extern void             GenJump( instruction * );
-extern void             GenReturn(void);
-extern void             GenSetResult( unsigned );
-extern void             GenLblCall( instruction * );
-extern instruction      *GenInpChoice(void);
-extern instruction      *GenChoice(void);
-extern instruction      *GenNewLbl( void );
-extern void             GenSetParm( unsigned );
-extern void             GenSemCall( unsigned );
-extern void             GenTblLabel( instruction *, instruction *, unsigned );
-extern void             GenKill(void);
-
+extern int              GetNum( void );
+extern void             WantColon( void );
+extern void             Scan( void );
+extern instruction      *NewLabel( void );
+extern void             GenLabel( instruction *lbl );
+extern void             GenExportLabel( instruction *lbl );
+extern void             GenInput( int );
+extern void             GenOutput( int );
+extern void             GenError( int );
+extern void             GenInputAny( void );
+extern void             GenJump( instruction *lbl );
+extern void             GenReturn( void );
+extern void             GenSetParm( int );
+extern void             GenSetResult( int );
+extern void             GenLblCall( instruction *lbl );
+extern instruction      *GenInpChoice( void );
+extern instruction      *GenChoice( void );
+extern void             GenSemCall( int );
+extern void             GenTblLabel( instruction *ins, instruction *lbl, int );
+extern void             GenKill( void );

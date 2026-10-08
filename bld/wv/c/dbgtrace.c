@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -37,7 +37,7 @@
 #include "dbgrep.h"
 #include "strutil.h"
 #include "dbgscan.h"
-#include "madinter.h"
+#include "wvmadcli.h"
 #include "dbgutil.h"
 #include "dbgsrc.h"
 #include "dbgexec.h"
@@ -51,7 +51,7 @@
 #include "dbgmisc.h"
 #include "removl.h"
 #include "dipimp.h"
-#include "dipinter.h"
+#include "wvdipcli.h"
 #include "dbgreg.h"
 #include "addarith.h"
 #include "dbgevent.h"
@@ -87,8 +87,8 @@ typedef struct {
      boolbit            unwinding    : 1;   /* unwinding from a recursive breakpoint ? */
      dtid_t             etid;           /* thread id that we're tracing */
      address            curraddr;       /* current address being traced */
-     mad_disasm_control prev_control;   /* control information for prev ins */
-     mad_disasm_control curr_control;   /* control information for curr ins */
+     mad_disasm_control prev_control;   /* control information for prev item */
+     mad_disasm_control curr_control;   /* control information for curr item */
      mad_trace_how      how;            /* how to trace this instruction */
      unsigned           ddsize;         /* size of a mad_disasm_data */
      unsigned           tdsize;         /* size of a mad_trace_data */
@@ -132,8 +132,7 @@ void            ResizeTraceData( void )
 
     size = MADDisasmDataSize();
     if( size > TraceState.ddsize ) {
-        new = TraceState.dd;
-        _Realloc( new, size );
+        new = MemRealloc( TraceState.dd, size );
         if( new == NULL ) {
             ReportMADFailure( MS_NO_MEM );
         } else {
@@ -143,8 +142,7 @@ void            ResizeTraceData( void )
     }
     size = MADTraceSize();
     if( size > TraceState.tdsize ) {
-        new = TraceState.td;
-        _Realloc( new, size );
+        new = MemRealloc( TraceState.td, size );
         if( new == NULL ) {
             ReportMADFailure( MS_NO_MEM );
         } else {
@@ -571,8 +569,10 @@ void PerformTrace( void )
  * DoneTraceCmd
  */
 
-static bool DoneTraceCmd( inp_data_handle cmds, inp_rtn_action action )
+static bool DoneTraceCmd( inp_data_handle handle, inp_rtn_action action )
 {
+    char    *cmds = (char *)handle;
+
     switch( action ) {
     case INP_RTN_INIT:
         ReScan( cmds );
@@ -594,8 +594,9 @@ static bool DoneTraceCmd( inp_data_handle cmds, inp_rtn_action action )
 
 static void PushTraceCmd( void )
 {
-    PushInpStack( "\0", DoneTraceCmd, true );
-    TypeInpStack( INP_HOLD );
+    if( PushInpStack( (inp_data_handle)"\0", DoneTraceCmd, true ) ) {
+        TypeInpStack( INP_HOLD );
+    }
 }
 
 /*
@@ -683,10 +684,10 @@ void ProcTrace( void )
 
 void FiniTrace( void )
 {
-    _Free( TraceState.td );
+    MemFree( TraceState.td );
     TraceState.td = NULL;
     TraceState.tdsize = 0;
-    _Free( TraceState.dd );
+    MemFree( TraceState.dd );
     TraceState.dd = NULL;
     TraceState.ddsize = 0;
 }

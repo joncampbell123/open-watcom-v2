@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -37,7 +37,6 @@
 #include <errno.h>
 #include "wio.h"
 #include "wrmsg.h"
-#include "wrmemi.h"
 #include "pathgrp2.h"
 
 #include "clibext.h"
@@ -289,7 +288,7 @@ char * WRAPI WRGetTempFileName( const char *ext )
 
     len = strlen( fn_path ) + 1;
 
-    buf = (char *)MemAlloc( len );
+    buf = MemAlloc( len );
     if( buf != NULL ) {
         memcpy( buf, fn_path, len );
     }

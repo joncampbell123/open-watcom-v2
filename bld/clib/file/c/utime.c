@@ -32,6 +32,7 @@
 
 #include "variety.h"
 #include "widechar.h"
+#include "seterrno.h"
 #include <stdlib.h>
 #include <stddef.h>
 #include <sys/types.h>
@@ -45,8 +46,6 @@
     #include <windows.h>
 #endif
 #include "rtdata.h"
-#include "rterrno.h"
-#include "seterrno.h"
 #include "tinyio.h"
 #include "_doslfn.h"
 
@@ -159,13 +158,13 @@ static int _utime_sfn( const char *fname, _dos_tms *dostms )
     if( regs.x.cflag ) {
         switch( regs.w.ax ) {
         case 2:
-            _RWD_errno = ENOENT;
+            lib_set_errno( ENOENT );
             break;
         case 4:
-            _RWD_errno = EMFILE;
+            lib_set_errno( EMFILE );
             break;
         case 5:
-            _RWD_errno = EACCES;
+            lib_set_errno( EACCES );
             break;
         }
         return( -1 );
@@ -178,14 +177,14 @@ static int _utime_sfn( const char *fname, _dos_tms *dostms )
     regs.h.al = 1;           /* set date & time */
     intdos( &regs, &regs );
     if( regs.x.cflag ) {
-        _RWD_errno = EACCES;
+        lib_set_errno( EACCES );
         return( -1 );
     }
     regs.w.bx = handle;
     regs.h.ah = DOS_CLOSE;
     intdos( &regs, &regs );
     if( regs.x.cflag ) {
-        _RWD_errno = EACCES;
+        lib_set_errno( EACCES );
         return( -1 );
     }
     return( 0 );
@@ -232,7 +231,7 @@ _WCRTLINK int __F_NAME(utime,_wutime)( CHAR_TYPE const *fname, struct utimbuf co
     _dos_tms    dostms;
 
     if( _get_dos_tms( times, &dostms ) ) {
-        return( __set_EINVAL() );
+        return( lib_set_EINVAL() );
     }
   #ifdef __WATCOM_LFN__
     if( _RWD_uselfn ) {

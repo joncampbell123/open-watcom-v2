@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -136,8 +136,8 @@ void *InitRecStuff( void )
 /************************/
 {
 
-    Rec1 = MemAlloc( MAX_OBJECT_REC_SIZE );
-    OutputBuffer = MemAlloc( MAX_OBJECT_REC_SIZE );
+    Rec1 = MemAllocSafe( MAX_OBJECT_REC_SIZE );
+    OutputBuffer = MemAllocSafe( MAX_OBJECT_REC_SIZE );
     PageLen = 0;
     return( Rec1 );
 }
@@ -284,13 +284,15 @@ static void procsegdef( bool is386 )
         dataloc += 3;           /* adjust for frame_number and offset */
     }
     dataloc += 2;                       // skip the length;
-    if( is386 || Easy32 ) {         // if a 386 .obj file.......
+    if( is386
+      || Easy32 ) {         // if a 386 .obj file.......
         dataloc += 2;               // got more offset to skip.
     }
     segidx = GetIndex( &dataloc );
     classidx = GetIndex( &dataloc );
     GetIndex( &dataloc );                   // skip the ovl_name
-    if( MatchIndex( ClassList, classidx ) || MatchIndex( SegList, segidx ) ) {
+    if( MatchIndex( ClassList, classidx )
+      || MatchIndex( SegList, segidx ) ) {
         onebyte = COMENT;
         BuildRecord( &onebyte, 1 );
         if( SegIndex >= 128 ) {       // then indicies are 2 bytes.
@@ -325,7 +327,8 @@ static void ProcDataRec( bool is386 )
     MakeUnsafe = false;
     dataloc = Rec1->u.anyobj.rest;
     segidx = GetIndex( &dataloc );
-    if( is386 || Easy32 ) {
+    if( is386
+      || Easy32 ) {
         offset = *((unsigned_32 *)dataloc);
     } else {
         offset = *((unsigned_16 *)dataloc);
@@ -450,7 +453,8 @@ rec_status ReadRec( void )
         }
         if( Rec1->head.class == THEADR ) {
             return( OBJECT );
-        } else if( Rec1->head.class == MODEND || Rec1->head.class == MODE32 ) {
+        } else if( Rec1->head.class == MODEND
+          || Rec1->head.class == MODE32 ) {
             if( PageLen != 0 ) {            // skip padding in the library.
                 offset = ftell( InFile );
                 offset = PageLen - ( offset % PageLen );

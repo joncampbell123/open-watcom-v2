@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -43,6 +43,7 @@
 #include "rtconst.h"
 #include "fcodes.h"
 #include "global.h"
+#include "namecod.h"
 #include "recog.h"
 #include "utility.h"
 #include "compstmt.h"
@@ -66,7 +67,7 @@ void    CpAtEnd(void) {
     code = NextLabel();
     GBranch( skip );
     GCheckEOF( code );
-    if( RecKeyWord( "DO" ) ) {
+    if( RecKeyWordOpn( "DO" ) ) {
         AddCSNode( CS_ATEND );
         CSHead->bottom = skip;
         CITNode->opn.ds = DSOPN_PHI;       // not part of the block label
@@ -76,7 +77,7 @@ void    CpAtEnd(void) {
         FreeLabel( code );
     } else {
         AdvanceITPtr();
-        ReqComma();
+        ReqCommaOpr();
         if( (StmtSw & SS_COMMA_THEN_EQ) != 0 ) {
             StmtSw &= ~SS_COMMA_THEN_EQ;  // consider AT END, DATA == 0
             StmtSw |= SS_EQUALS_FOUND;

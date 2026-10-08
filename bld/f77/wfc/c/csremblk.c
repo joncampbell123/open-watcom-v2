@@ -62,7 +62,7 @@ static bool BlockName( unsigned_16 rb_defined )
 
     CSExtn();
     rb_name = false;
-    if( ReqName( NAME_REM_BLOCK ) ) {
+    if( ReqNameOpn( NAME_REM_BLOCK ) ) {
         sym_ptr = LkSym();
         if( (sym_ptr->u.ns.flags & ~SY_REFERENCED) == 0 ) {
             sym_ptr->u.ns.si.rb.entry = NextLabel();
@@ -101,7 +101,7 @@ void CpRemBlock( void )
         BIStartRBorEP( rb );
     }
     AdvanceITPtr();
-    ReqEOS();
+    ReqEOSOpr();
     StNumbers.in_remote = true;
     ClearRem();
 }
@@ -137,7 +137,7 @@ static void CkRemBlkRec( void )
     while( node->typ != CS_REMOTEBLOCK ) {
         node = node->link;
     }
-    if( CmpNode2Str( CITNode, &node->label ) ) {
+    if( CmpNode2Str( CITNode, node->label ) ) {
         Error( SP_RECURSE );
     }
 }
@@ -160,6 +160,6 @@ void CpExecute( void )
         GExecute();
     }
     AdvanceITPtr();
-    ReqEOS();
+    ReqEOSOpr();
 }
 

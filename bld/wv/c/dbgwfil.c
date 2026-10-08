@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -48,7 +48,7 @@
 #include "wndsys.h"
 #include "dbgmisc.h"
 #include "dipimp.h"
-#include "dipinter.h"
+#include "wvdipcli.h"
 #include "dbgreg.h"
 #include "addarith.h"
 #include "dbginsty.h"
@@ -813,9 +813,9 @@ static bool WNDCALLBACK FileWndEventProc( a_window wnd, gui_event gui_ev, void *
                 FileRemove( file->name, 0 );
             }
         }
-        WndFree( file->name );
+        MemFree( file->name );
         AsmFreeSrc( file->asw );
-        WndFree( file );
+        MemFree( file );
         DbgUpdate( UP_OPEN_CHANGE );
         return( true );
     }
@@ -840,7 +840,7 @@ wnd_info FileInfo = {
     NoNextRow,
     FileNotify,
     ChkUpdate,
-    PopUp( FileMenu )
+    GUI_MENU_ARRAY( FileMenu )
 };
 
 a_window    DoWndFileOpen( const char *name, void *viewhndl,
@@ -851,7 +851,7 @@ a_window    DoWndFileOpen( const char *name, void *viewhndl,
     a_window    wnd;
     unsigned    line;
 
-    file = WndMustAlloc( sizeof( file_window ) );
+    file = MemAllocSafe( sizeof( *file ) );
     file->viewhndl = viewhndl;
     if( cueh == NULL ) {
         file->mod = NO_MOD;
@@ -866,7 +866,7 @@ a_window    DoWndFileOpen( const char *name, void *viewhndl,
     file->erase = erase;
     file->toggled_break = false;
     file->eof = INT_MAX;
-    file->name = DupStr( name );
+    file->name = MemStrdupSafe( name );
     file->dotaddr = NilAddr;
     wnd = DbgWndCreate( LIT_ENG( Empty ), &FileInfo, wndclass, file, &SrcIcon );
     if( wnd == NULL )

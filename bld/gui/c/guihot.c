@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -44,7 +44,7 @@ hotspot_info    *GUIHotSpots = NULL;
 static void Cleanup( void )
 {
     GUIXCleanupHotSpots();
-    GUIMemFree( GUIHotSpots );
+    MemFree( GUIHotSpots );
     GUIHotSpots = NULL;
     GUINumHotSpots = 0;
 }
@@ -56,7 +56,7 @@ bool GUIAPI GUIInitHotSpots( int num_hot_spots, gui_resource *hot )
         GUIHotSpots = NULL;
         return( true );
     }
-    GUIHotSpots = (hotspot_info *)GUIMemAlloc( sizeof( hotspot_info ) * num_hot_spots );
+    GUIHotSpots = MemAlloc( sizeof( *GUIHotSpots ) * num_hot_spots );
     if( GUIHotSpots == NULL ) {
         GUINumHotSpots = 0;
         return( false );

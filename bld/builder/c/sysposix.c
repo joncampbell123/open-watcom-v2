@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -46,6 +46,11 @@ void SysInit( int argc, char *argv[] )
     /* unused parameters */ (void)argc; (void)argv;
 
     setenv( "BLD_HOST", "UNIX", 1 );
+#if defined( BLDX64 )
+    setenv( "BLD64BIT", "x64", 1 );
+#elif defined( BLDA64 )
+    setenv( "BLD64BIT", "a64", 1 );
+#endif
 }
 
 static int SysRunCommandPipe( const char *cmd, int *readpipe )
@@ -57,14 +62,15 @@ static int SysRunCommandPipe( const char *cmd, int *readpipe )
     const char  **argv;
     int         i;
 
-    cmdnam = MStrdup( cmd );
-    if( cmdnam == NULL )
-        return( -1 );
-    argv = MAlloc( strlen( cmd ) * sizeof( char * ) );
-    if( argv == NULL ) {
-        MFree( cmdnam );
-        return( -1 );
+    cmdnam = MemStrdupSafe( cmd );
+    /*
+     * skip trailing spaces
+     */
+    i = strlen( cmdnam );
+    while( i-- > 0 && cmdnam[i] == ' ' ) {
+        cmdnam[i] = '\0';
     }
+    argv = MemAllocSafe( strlen( cmdnam ) * sizeof( char * ) );
     i = 0;
     for( sp = cmdnam; sp != NULL; ) {
         while( *sp != '\0' && *sp == ' ' )
@@ -96,8 +102,8 @@ static int SysRunCommandPipe( const char *cmd, int *readpipe )
             }
         }
     }
-    MFree( cmdnam );
-    MFree( argv );
+    MemFree( cmdnam );
+    MemFree( argv );
     if( pid == -1 )
         return( -1 );
     return( 0 );

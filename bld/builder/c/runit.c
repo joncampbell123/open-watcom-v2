@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -177,17 +177,17 @@ static int ProcSet( const char *cmd )
     len = rep - cmd;
     strncpy( tmp_buf, cmd, len );
     tmp_buf[len] = '\0';
-    /* Our setenv() is extended vs. POSIX, check for blank value is not necessary */
-    /* Watcom implementation is non-conforming to POSIX, return value is incorrect in some cases */
+    /*
+     * Our setenv() is extended vs. POSIX, check for blank value is not necessary
+     * Watcom implementation is non-conforming to POSIX, return value is incorrect
+     * in some cases
+     */
     rep++;
     if( *rep == '\0' ) {
-#if defined( __WATCOMC__ ) && ( __WATCOMC__ < 1300 )
-        /* fix for OW 1.9 */
-        setenv( tmp_buf, NULL, 1 );
-#else
-        /* Delete the environment variable! */
+        /*
+         * Delete the environment variable!
+         */
         unsetenv( tmp_buf );
-#endif
         return( 0 );
     }
     return( setenv( tmp_buf, rep, 1 ) );
@@ -214,14 +214,16 @@ void ResetArchives( copy_entry list )
             _dos_setfileattr( list->src, attr & ~_A_ARCH );
         }
 #endif
-        MFree( list );
+        MemFree( list );
         list = next;
     }
 }
 
 static int IsDotOrDotDot( const char *fname )
 {
-    /* return 1 if fname is "." or "..", 0 otherwise */
+    /*
+     * return 1 if fname is "." or "..", 0 otherwise
+     */
     return( fname[0] == '.' && ( fname[1] == 0 || fname[1] == '.' && fname[2] == 0 ) );
 }
 
@@ -229,7 +231,7 @@ static copy_entry *add_copy_entry( copy_entry *list, char *src, char *dst )
 {
     copy_entry  entry;
 
-    entry = MAlloc( sizeof( *entry ) );
+    entry = MemAllocSafe( sizeof( *entry ) );
     entry->next = NULL;
     strcpy( entry->src, src );
     strcpy( entry->dst, dst );
@@ -253,17 +255,20 @@ static int BuildList( char *src, char *dst, bool test_abit, bool cond_copy, copy
 
     *list = NULL;
     dst_end = &dst[strlen( dst ) - 1];
-    while( IS_BLANK( dst_end[0] ) ) {
+    while( isspace( *(unsigned char *)dst_end ) )
         --dst_end;
-    }
     dst_end[1] = '\0';
     if( strpbrk( src, WILD_METAS ) == NULL ) {
-        /* no wild cards */
+        /*
+         * no wild cards
+         */
         _fullpath( entry_src, src, sizeof( entry_src ) );
         switch( *dst_end ) {
         case '\\':
         case '/':
-            /* need to append source file name */
+            /*
+             * need to append source file name
+             */
             _splitpath2( src, pg.buffer, &pg.drive, &pg.dir, &pg.fname, &pg.ext );
             _makepath( full, NULL, dst, pg.fname, pg.ext );
             _fullpath( entry_dst, full, sizeof( entry_dst ) );
@@ -272,7 +277,8 @@ static int BuildList( char *src, char *dst, bool test_abit, bool cond_copy, copy
             _fullpath( entry_dst, dst, sizeof( entry_dst ) );
             break;
         }
-        if( !test_abit || ENTRY_CHANGED1( entry_src, entry_dst ) ) {
+        if( !test_abit
+          || ENTRY_CHANGED1( entry_src, entry_dst ) ) {
             add_copy_entry( list, entry_src, entry_dst );
         }
         return( 0 );
@@ -287,8 +293,11 @@ static int BuildList( char *src, char *dst, bool test_abit, bool cond_copy, copy
         dirp = opendir( src );
     }
 #else
-    if( pg.fname[0] == '*' && pg.fname[1] == '\0' && pg.ext[0] == '\0' )
+    if( pg.fname[0] == '*'
+      && pg.fname[1] == '\0'
+      && pg.ext[0] == '\0' ) {
         strcat( src, ".*" );
+    }
     dirp = opendir( src );
 #endif
     rc = 1;
@@ -321,7 +330,8 @@ static int BuildList( char *src, char *dst, bool test_abit, bool cond_copy, copy
                 break;
             }
             _fullpath( entry_dst, full, sizeof( entry_dst ) );
-            if( !test_abit || ENTRY_CHANGED2( entry_src, dire, entry_dst ) ) {
+            if( !test_abit
+              || ENTRY_CHANGED2( entry_src, dire, entry_dst ) ) {
                 list = add_copy_entry( list, entry_src, entry_dst );
             }
         }
@@ -347,22 +357,30 @@ static int mkdir_nested( const char *path )
     end = pathname + strlen( pathname );
 
 #ifndef __UNIX__
-    /* special case for drive letters */
-    if( p[0] != '\0' && p[1] == ':' ) {
+    /*
+     * special case for drive letters
+     */
+    if( p[0] != '\0'
+      && p[1] == ':' ) {
         p += 2;
     }
 #endif
-    /* skip initial path separator if present */
-    if( (p[0] == '/') || (p[0] == '\\') )
+    /*
+     * skip initial path separator if present
+     */
+    if( (p[0] == '/')
+      || (p[0] == '\\') )
         ++p;
-
-    /* find the next path component */
+    /*
+     * find the next path component
+     */
     while( p < end ) {
         while( (p < end) && (*p != '/') && (*p != '\\') )
             ++p;
         *p = '\0';
-
-        /* check if pathname exists */
+        /*
+         * check if pathname exists
+         */
         if( stat( pathname, &sb ) == -1 ) {
             int rc;
 
@@ -379,7 +397,9 @@ static int mkdir_nested( const char *path )
             Log( false, "Can not create directory '%s': file with the same name already exists\n", pathname );
             return( -1 );
         }
-        /* put back the path separator - forward slash always works */
+        /*
+         * put back the path separator - forward slash always works
+         */
         *p++ = '/';
     }
     return( 0 );
@@ -397,7 +417,10 @@ static int ProcOneCopy( const char *src, char *dst, bool cond_copy, char *copy_b
     sp = fopen( src, "rb" );
     if( sp == NULL ) {
         if( cond_copy ) {
-            return( 0 );    /* Quietly ignore missing source */
+            /*
+             * Quietly ignore missing source
+             */
+            return( 0 );
         } else {
             Log( false, "Can not open '%s' for reading: %s\n", src, strerror( errno ) );
             return( 1 );
@@ -408,7 +431,8 @@ static int ProcOneCopy( const char *src, char *dst, bool cond_copy, char *copy_b
         len = strlen( dst );
         while( len-- > 0 ) {
             char c = dst[len];
-            if( c == '/' || c == '\\' ) {
+            if( c == '/'
+              || c == '\\' ) {
                 dst[len] = '\0';
                 mkdir_nested( dst );
                 dst[len] = c;
@@ -446,8 +470,9 @@ static int ProcOneCopy( const char *src, char *dst, bool cond_copy, char *copy_b
     }
     fclose( sp );
     fclose( dp );
-
-    /* make real copy, set the date back */
+    /*
+     * make real copy, set the date back
+     */
     stat( src, &srcbuf );
     dstbuf.actime = srcbuf.st_atime;
     dstbuf.modtime = srcbuf.st_mtime;
@@ -470,6 +495,7 @@ static int ProcCopy( const char *cmd, bool test_abit, bool cond_copy, bool ignor
     int         res;
     char        src[_MAX_PATH];
     char        dst[_MAX_PATH];
+    char        *copy_buff;
 
     cmd = GetPathOrFile( cmd, src );
     if( *src == '\0' ) {
@@ -478,11 +504,13 @@ static int ProcCopy( const char *cmd, bool test_abit, bool cond_copy, bool ignor
     }
     cmd = GetPathOrFile( cmd, dst );
     res = BuildList( src, dst, test_abit, cond_copy, &list );
-    if( res == 0 && list != NULL ) {
-        char    *copy_buff = MAlloc( COPY_BUFF_SIZE );
+    if( res == 0
+      && list != NULL ) {
+        copy_buff = MemAllocSafe( COPY_BUFF_SIZE );
         for( ; list != NULL; list = next ) {
             next = list->next;
-            if( res == 0 || ignore_errors ) {
+            if( res == 0
+              || ignore_errors ) {
                 int     rc;
 
                 rc = ProcOneCopy( list->src, list->dst, cond_copy, copy_buff );
@@ -496,9 +524,9 @@ static int ProcCopy( const char *cmd, bool test_abit, bool cond_copy, bool ignor
 #endif
                 }
             }
-            MFree( list );
+            MemFree( list );
         }
-        MFree( copy_buff );
+        MemFree( copy_buff );
     }
     return( res );
 }
@@ -554,7 +582,8 @@ static int ProcPMake( const char *cmd, bool ignore_errors )
 
     res = -1;
     if( PMakeBuild( &pmake, cmd ) != NULL ) {
-        if( !pmake.want_help && !pmake.signaled ) {
+        if( !pmake.want_help
+          && !pmake.signaled ) {
             pmake.ignore_errors = ignore_errors;
             strcpy( save, GetIncludeCWD() );
             res = DoPMake( &pmake );
@@ -581,7 +610,9 @@ static int remove_item( const char *name, bool dir )
         inf_msg = "File %s deleted\n";
         rc = remove( name );
     }
-    if( rm_fflag && rc != 0 && errno == EACCES ) {
+    if( rm_fflag
+      && rc != 0
+      && errno == EACCES ) {
         rc = chmod( name, PMODE_RW );
         if( rc == 0 ) {
             if( dir ) {
@@ -591,7 +622,9 @@ static int remove_item( const char *name, bool dir )
             }
         }
     }
-    if( rm_fflag && rc != 0 && errno == ENOENT ) {
+    if( rm_fflag
+      && rc != 0
+      && errno == ENOENT ) {
         rc = 0;
     }
     if( rc != 0 ) {
@@ -604,8 +637,10 @@ static int remove_item( const char *name, bool dir )
     return( 0 );
 }
 
-/* DoRM - perform RM on a specified file */
 static int DoRM( const char *f )
+/*******************************
+ * DoRM - perform RM on a specified file
+ */
 {
     iolist              *tmp;
     iolist              *dhead = NULL;
@@ -621,16 +656,22 @@ static int DoRM( const char *f )
     int                 rc;
     int                 retval = 0;
 
-    /* separate file name to path and file name parts */
+    /*
+     * separate file name to path and file name parts
+     */
     len = strlen( f );
     for( i = len; i > 0; --i ) {
         char ch = f[i - 1];
-        if( ch == '/' || ch == '\\' || ch == ':' ) {
+        if( ch == '/'
+          || ch == '\\'
+          || ch == ':' ) {
             break;
         }
     }
     j = i;
-    /* if no path then use current directory */
+    /*
+     * if no path then use current directory
+     */
     if( i == 0 ) {
         fpath[i++] = '.';
         fpath[i++] = '/';
@@ -660,16 +701,22 @@ static int DoRM( const char *f )
             continue;
         if( ENTRY_NOMATCH( fname, dire ) )
             continue;
-        /* set up file name, then try to delete it */
+        /*
+         * set up file name, then try to delete it
+         */
         len = strlen( dire->d_name );
         memcpy( fpathend, dire->d_name, len );
         fpathend[len] = '\0';
         if( ENTRY_SUBDIR( fpath, dire ) ) {
-            /* process a directory */
+            /*
+             * process a directory
+             */
             if( rm_rflag ) {
-                /* build directory list */
+                /*
+                 * build directory list
+                 */
                 len += i + 1;
-                tmp = MAlloc( offsetof( iolist, name ) + len );
+                tmp = MemAllocSafe( offsetof( iolist, name ) + len );
                 tmp->next = NULL;
                 if( dtail == NULL ) {
                     dhead = tmp;
@@ -682,7 +729,8 @@ static int DoRM( const char *f )
                 Log( false, "%s is a directory, use -r\n", fpath );
                 retval = EACCES;
             }
-        } else if( !rm_fflag && ENTRY_RDONLY( fpath, dire ) ) {
+        } else if( !rm_fflag
+          && ENTRY_RDONLY( fpath, dire ) ) {
             Log( false, "%s is read-only, use -f\n", fpath );
             retval = EACCES;
         } else {
@@ -693,30 +741,38 @@ static int DoRM( const char *f )
         }
     }
     closedir( dirp );
-    /* process any directories found */
+    /*
+     * process any directories found
+     */
     for( tmp = dhead; tmp != NULL; tmp = dhead ) {
         dhead = tmp->next;
         rc = RecursiveRM( tmp->name );
         if( rc != 0 ) {
             retval = rc;
         }
-        MFree( tmp );
+        MemFree( tmp );
     }
     return( retval );
 }
 
-/* RecursiveRM - do an RM recursively on all files */
 static int RecursiveRM( const char *dir )
+/****************************************
+ * RecursiveRM - do an RM recursively on all files
+ */
 {
     int         rc;
     int         rc2;
     char        fname[_MAX_PATH];
 
-    /* purge the files */
+    /*
+     * purge the files
+     */
     strcpy( fname, dir );
     strcat( fname, "/" MASK_ALL_ITEMS );
     rc = DoRM( fname );
-    /* purge the directory */
+    /*
+     * purge the directory
+     */
     rc2 = remove_item( dir, true );
     if( rc == 0 )
         rc = rc2;
@@ -728,17 +784,19 @@ static int ProcRm( const char *cmd )
     char    buffer[_MAX_PATH];
     int     retval = 0;
 
-    /* gather options */
+    /*
+     * gather options
+     */
     rm_rflag = false;
     rm_fflag = false;
     rm_sflag = true;
     for( ;; ) {
-        while( isspace( *cmd ) )
+        while( isspace( *(unsigned char *)cmd ) )
             ++cmd;
         if( *cmd != '-' )
             break;
         ++cmd;
-        while( isalpha( *cmd ) ) {
+        while( isalpha( *(unsigned char *)cmd ) ) {
             switch( *cmd++ ) {
             case 'f':
                 rm_fflag = true;
@@ -757,99 +815,142 @@ static int ProcRm( const char *cmd )
     }
 
     if( rm_rflag ) {
-        /* process -r option */
-        while( (cmd = GetPathOrFile( cmd, buffer )) != NULL ) {
-            if( strcmp( buffer, MASK_ALL_ITEMS ) == 0 ) {
-                int rc = RecursiveRM( "." );
-                if( rc != 0 ) {
-                    retval = rc;
-                }
-            } else if( strpbrk( buffer, WILD_METAS ) != NULL ) {
-                /* wild cards is not processed for directories */
-                continue;
-            } else {
-                struct stat buf;
-                if( stat( buffer, &buf ) == 0 ) {
-                    if( S_ISDIR( buf.st_mode ) ) {
-                        int rc = RecursiveRM( buffer );
-                        if( rc != 0 ) {
-                            retval = rc;
-                        }
-                    } else {
-                        int rc = DoRM( buffer );
-                        if( rc != 0 ) {
-                            retval = rc;
+        /*
+         * process -r option
+         */
+        while( cmd[0] != '\0' ) {
+            cmd = GetPathOrFile( cmd, buffer );
+            if( *buffer != '\0' ) {
+                if( strcmp( buffer, MASK_ALL_ITEMS ) == 0 ) {
+                    int rc = RecursiveRM( "." );
+                    if( rc != 0 ) {
+                        retval = rc;
+                    }
+                } else if( strpbrk( buffer, WILD_METAS ) != NULL ) {
+                    /*
+                     * wild cards is not processed for directories
+                     */
+                    continue;
+                } else {
+                    struct stat buf;
+                    if( stat( buffer, &buf ) == 0 ) {
+                        if( S_ISDIR( buf.st_mode ) ) {
+                            int rc = RecursiveRM( buffer );
+                            if( rc != 0 ) {
+                                retval = rc;
+                            }
+                        } else {
+                            int rc = DoRM( buffer );
+                            if( rc != 0 ) {
+                                retval = rc;
+                            }
                         }
                     }
                 }
             }
         }
     } else {
-        /* run through all specified files */
-        while( (cmd = GetPathOrFile( cmd, buffer )) != NULL ) {
-            int rc = DoRM( buffer );
-            if( rc != 0 ) {
-                retval = rc;
+        /*
+         * run through all specified files
+         */
+        while( cmd[0] != '\0' ) {
+            int rc;
+
+            cmd = GetPathOrFile( cmd, buffer );
+            if( *buffer != '\0' ) {
+                rc = DoRM( buffer );
+                if( rc != 0 ) {
+                    retval = rc;
+                }
             }
         }
     }
     return( retval );
 }
 
+#define BUILTIN_CMD_MAX	10
+static bool BuiltIn( const char **ptr, const char *cmd )
+{
+    size_t          len;
+    const char      *p;
+    bool            found;
+    char            cmd_buf[BUILTIN_CMD_MAX + 1];  /* must be enoght long to hold longst command */
+    int             c;
+
+    found = false;
+    p = *ptr;
+    len = 0;
+    while( len < BUILTIN_CMD_MAX && (c = p[len]) != '\0' )
+        cmd_buf[len++] = toupper( c );
+    cmd_buf[len] = '\0';
+    len = strlen( cmd );
+    if( strncmp( cmd_buf, cmd, len ) == 0 ) {
+        p += len;
+        if( *p == '\0' ) {
+            *ptr = p;
+            found = true;
+        } else if( isspace( *(unsigned char *)p ) ) {
+            while( isspace( *(unsigned char *)p ) )
+                p++;
+            *ptr = p;
+            found = true;
+        }
+    }
+    return( found );
+}
+#undef BUILTIN_CMD_MAX
+
 int RunIt( const char *cmd, bool ignore_errors, bool *res_nolog )
 {
     int     res;
-
-    #define BUILTIN( c, b )     (strnicmp( (c), b, sizeof( b ) - 1 ) == 0 && (c)[sizeof( b ) - 1] == ' ')
-    #define SKIP_CMD( c, b )    SkipBlanks( c + sizeof( b ) )
+    char    path[_MAX_PATH];
 
     *res_nolog = false;
-    if( BUILTIN( cmd, "CD" ) ) {
-        char    path[_MAX_PATH];
-
-        cmd = GetPathOrFile( SKIP_CMD( cmd, "CD" ), path );
+    if( BuiltIn( &cmd, "CD" ) ) {
+        cmd = GetPathOrFile( cmd, path );
         res = SysChdir( path );
         if( res == 0 ) {
             SetIncludeCWD();
         }
-    } else if( BUILTIN( cmd, "CDSAY" ) ) {
-        char    path[_MAX_PATH];
-
-        cmd = GetPathOrFile( SKIP_CMD( cmd, "CDSAY" ), path );
+    } else if( BuiltIn( &cmd, "CDSAY" ) ) {
+        cmd = GetPathOrFile( cmd, path );
         res = SysChdir( path );
         if( res == 0 ) {
             SetIncludeCWD();
             LogDir( GetIncludeCWD() );
         }
-    } else if( BUILTIN( cmd, "SET" ) ) {
-        res = ProcSet( SKIP_CMD( cmd, "SET" ) );
-    } else if( BUILTIN( cmd, "ECHO" ) ) {
-        Log( Quiet, "%s\n", SKIP_CMD( cmd, "ECHO" ) );
+    } else if( BuiltIn( &cmd, "SET" ) ) {
+        res = ProcSet( cmd );
+    } else if( BuiltIn( &cmd, "ECHO" ) ) {
+        Log( Quiet, "%s\n", cmd );
         res = 0;
-    } else if( BUILTIN( cmd, "ERROR" ) ) {
-        Log( Quiet, "%s\n", SKIP_CMD( cmd, "ERROR" ) );
+    } else if( BuiltIn( &cmd, "ERROR" ) ) {
+        Log( Quiet, "%s\n", cmd );
         res = 1;
-    } else if( BUILTIN( cmd, "COPY" ) ) {
-        res = ProcCopy( SKIP_CMD( cmd, "COPY" ), false, false, ignore_errors );
+    } else if( BuiltIn( &cmd, "COPY" ) ) {
+        res = ProcCopy( cmd, false, false, ignore_errors );
         *res_nolog = true;
-    } else if( BUILTIN( cmd, "ACOPY" ) ) {
-        res = ProcCopy( SKIP_CMD( cmd, "ACOPY" ), true, false, ignore_errors );
+    } else if( BuiltIn( &cmd, "ACOPY" ) ) {
+        res = ProcCopy( cmd, true, false, ignore_errors );
         *res_nolog = true;
-    } else if( BUILTIN( cmd, "CCOPY" ) ) {
-        res = ProcCopy( SKIP_CMD( cmd, "CCOPY" ), false, true, ignore_errors );
+    } else if( BuiltIn( &cmd, "CCOPY" ) ) {
+        res = ProcCopy( cmd, false, true, ignore_errors );
         *res_nolog = true;
-    } else if( BUILTIN( cmd, "ACCOPY" ) ) {
-        res = ProcCopy( SKIP_CMD( cmd, "ACCOPY" ), true, true, ignore_errors );
+    } else if( BuiltIn( &cmd, "ACCOPY" ) ) {
+        res = ProcCopy( cmd, true, true, ignore_errors );
         *res_nolog = true;
-    } else if( BUILTIN( cmd, "MKDIR" ) ) {
-        res = ProcMkdir( SKIP_CMD( cmd, "MKDIR" ) );
-    } else if( BUILTIN( cmd, "PMAKE" ) ) {
-        res = ProcPMake( SKIP_CMD( cmd, "PMAKE" ), ignore_errors );
+    } else if( BuiltIn( &cmd, "MKDIR" ) ) {
+        res = ProcMkdir( cmd );
+    } else if( BuiltIn( &cmd, "PMAKE" ) ) {
+        res = ProcPMake( cmd, ignore_errors );
         *res_nolog = ignore_errors;
-    } else if( BUILTIN( cmd, "RM" ) ) {
-        res = ProcRm( SKIP_CMD( cmd, "RM" ) );
+    } else if( BuiltIn( &cmd, "RM" ) ) {
+        res = ProcRm( cmd );
     } else if( cmd[0] == '!' ) {
-        res = SysRunCommand( SkipBlanks( cmd + 1 ) );
+        cmd++;
+        while( isspace( *(unsigned char *)cmd ) )
+            cmd++;
+        res = SysRunCommand( cmd );
     } else {
         res = SysRunCommand( cmd );
     }

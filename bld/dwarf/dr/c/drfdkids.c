@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -94,7 +94,8 @@ void DRENTRY DRKidsSearch( drmem_hdl clhandle, dr_search search, void *data, DRC
 
         /* NYI - DW_TAG_lexical_block only one? */
 
-        if( has_kids && tag != DW_TAG_lexical_block ) {
+        if( has_kids
+          && tag != DW_TAG_lexical_block ) {
             DR_SkipChildren( &abbrev, &tmp_entry );
         } else {
             DR_SkipAttribs( abbrev, &tmp_entry );
@@ -199,27 +200,30 @@ void DRENTRY DRDerivedSearch( drmem_hdl handle, void *data, DRCLSSRCH callback )
  */
 {
     BaseInfo            info;
-    dr_cu_handle        compunit;
-    const dw_tagnum     inh_lst[] = { DW_TAG_inheritance, 0 };
-    dr_search_context   ctxt;
+    dr_cui_handle       cui;
+    const dw_tagnum     inh_lst[] = {
+        DW_TAG_inheritance,
+        0
+    };
+    dr_search_context   context;
 
     info.callback = callback;
     info.data = data;
     info.parent = handle;
 
-    compunit = DR_FindCompileInfo( handle );
-    ctxt.compunit = compunit;
-    ctxt.start = compunit->start;
-    ctxt.end = compunit->start + DR_VMReadDWord( compunit->start );
-    ctxt.start += sizeof( compuhdr_prologue );
-    ctxt.classhdl    = DRMEM_HDL_NULL;
-    ctxt.functionhdl = DRMEM_HDL_NULL;
-    ctxt.stack.size  = 0;
-    ctxt.stack.free  = 0;
-    ctxt.stack.stack = NULL;
+    cui = DR_FindCompileInfo( handle );
+    context.cui = cui;
+    context.start = cui->start;
+    context.end = cui->start + DR_VMReadDWord( cui->start );
+    context.start += sizeof( comp_unit_prologue );
+    context.classhdl    = DRMEM_HDL_NULL;
+    context.functionhdl = DRMEM_HDL_NULL;
+    context.stack.size  = 0;
+    context.stack.free  = 0;
+    context.stack.stack = NULL;
 
-    DR_ScanCompileUnit( &ctxt, CheckEntry, inh_lst, DR_DEPTH_CLASSES, &info );
-    DR_FreeContextStack( &ctxt.stack );
+    DR_ScanCompileUnit( &context, CheckEntry, inh_lst, DR_DEPTH_CLASSES, &info );
+    DR_FreeContextStack( &context.stack );
 }
 
 static bool friendHook( dr_sym_type st, drmem_hdl handle, char *name,

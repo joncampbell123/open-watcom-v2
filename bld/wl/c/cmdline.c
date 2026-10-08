@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,7 +34,6 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include "linkstd.h"
-#include "exeos2.h"
 #include "cmdutils.h"
 #include "cmdall.h"
 #include "cmdos2.h"
@@ -44,7 +43,6 @@
 #include "cmdelf.h"
 #include "cmdphar.h"
 #include "cmddos.h"
-#include "cmdzdos.h"
 #include "cmdrdv.h"
 #include "cmdraw.h"
 #include "cmdline.h"
@@ -118,9 +116,6 @@ static const select_format PossibleFmt[] = {
 #ifdef _RDOS
     MK_RDOS,        "LIBRDOS",      SetRdosFmt,     FreeRdosFmt,
 #endif
-#ifdef _ZDOS
-    MK_ZDOS,        "LIBZDOS",      SetZdosFmt,     FreeZdosFmt,
-#endif
     0,              NULL,           NULL,           NULL
 };
 
@@ -151,7 +146,7 @@ static void ResetCmdFile( void )
     FmtData.base = NO_BASE_SPEC;
     FmtData.objalign = NO_BASE_SPEC;
     FmtData.type = MK_ALL;
-    FmtData.def_seg_flags = SEG_LEVEL_3;
+    SET_SEG_PMODE_DPL( FmtData.def_seg_flags, 3 );
     FmtData.Hshift = 12;    /* May want different value for some 32 bit segmented modes */
     FmtData.FillChar = 0;   /* Default fillchar for segment alignment */
     SetSegMask();
@@ -197,7 +192,7 @@ char *GetNextLink( void )
 
     cmd = NULL;
     if( PrevCommand != NULL )
-        _LnkFree( PrevCommand );
+        MemFree( PrevCommand );
     if( LinkCommands != NULL ) {
         PrevCommand = LinkCommands;
         LinkCommands = LinkCommands->next;
@@ -210,10 +205,10 @@ void Syntax( void )
 /*****************/
 {
     if( Token.this == NULL ) {
-        LnkMsg( LOC+LINE+FTL+MSG_DIRECTIVE_ERR_BEGINNING, NULL );
+        LnkMsg( FTL+LOC+LINE+MSG_DIRECTIVE_ERR_BEGINNING, NULL );
     } else {
         ((char *)Token.this)[Token.len] = '\0';
-        LnkMsg( LOC+LINE+FTL+MSG_DIRECTIVE_ERR, "s", Token.this );
+        LnkMsg( FTL+LOC+LINE+MSG_DIRECTIVE_ERR, "s", Token.this );
     }
 }
 
@@ -243,7 +238,7 @@ void FreePaths( void )
     FreeList( ObjPath );
     ObjPath = NULL;
     if( Name != NULL ) {
-        _LnkFree( Name );
+        MemFree( Name );
         Name = NULL;
     }
 }
@@ -332,7 +327,7 @@ void DoCmdFile( const char *fname )
 #elif defined( __BSD__ )
 #define LAST_CHANCE ( MK_OS2 | MK_ELF )
 #elif defined( __NT__ )
-#define LAST_CHANCE ( MK_OS2_LX | MK_OS2_NE | MK_WIN_NE | MK_PE | MK_DOS_EXE | MK_WIN_VXD )
+#define LAST_CHANCE ( MK_OS2_LX | MK_NE | MK_PE | MK_DOS_EXE | MK_WIN_VXD )
 #elif defined( __RDOS__ )
 #define LAST_CHANCE ( MK_RDOS | MK_PE | MK_DOS_EXE)
 #else
@@ -390,8 +385,8 @@ void DoCmdFile( const char *fname )
           && (LinkFlags & LF_ANY_DBI_FLAG) ) ) {
             SymFileName = FileName( Name, namelen, E_SYM, true );
         }
-        if( FmtData.implibname == NULL
-          && FmtData.make_implib ) {
+        if( FmtData.make_implib
+          && FmtData.implibname == NULL ) {
             if( FmtData.make_impfile ) {
                 extension = E_LBC;
             } else {
@@ -433,7 +428,7 @@ void SetFormat( void )
 #endif
     }
     fname = FileName( Name, strlen( Name ), FmtData.def_ext, CmdFlags & CF_UNNAMED );
-    _LnkFree( Name );
+    MemFree( Name );
     Root->outfile = NewOutFile( fname );
     Name = NULL;
 #ifdef _EXE
@@ -500,7 +495,7 @@ bool HintFormat( exe_format hint )
     }
     if( possible == 0 ) {
 #ifdef _OS2
-        if( (~(MK_OS2 | MK_WIN_NE | MK_PE | MK_WIN_VXD) & FmtData.type) == 0 ) {
+        if( (~(MK_NE | MK_OS2_FLAT | MK_PE | MK_WIN_VXD) & FmtData.type) == 0 ) {
             /* Windows, OS/2 V1.x, OS/2 V2.x, PE, VxD all
                 want the same structure */
             InitFmt( SetOS2Fmt );
@@ -561,27 +556,27 @@ void AddCommentLib( const char *comment, size_t len, lib_priority priority )
  * Add a library from a comment record.
  */
 {
-    file_list   *result;
+    file_list   *file;
     char        *ptr;
 
     if( CmdFlags & CF_NO_DEF_LIBS )
         return;
     ptr = FileName( comment, len, E_LIBRARY, false );
-    result = AddObjLib( ptr, priority );
-    CheckLibTrace( result );
+    file = AddObjLib( ptr, priority );
+    CheckLibTrace( file );
     DEBUG(( DBG_BASE, "library: %s", ptr ));
-    _LnkFree( ptr );
+    MemFree( ptr );
 }
 
 void AddLibPaths( const char *path_list, size_t len, bool add_to_front )
 /**********************************************************************/
 {
     path_entry      *newpath;
-    file_list const *libfiles;
+    const file_list *file;
     char            *p;
     const char      *end;
 
-    _ChkAlloc( newpath, sizeof( path_entry ) + len );
+    newpath = MemAllocSafe( sizeof( path_entry ) + len );
     end = path_list + len;
     p = newpath->name;
     while( path_list != end ) {
@@ -594,15 +589,15 @@ void AddLibPaths( const char *path_list, size_t len, bool add_to_front )
         newpath->next = UsrLibPath;
         UsrLibPath = newpath;
     } else {
-        LinkList( &UsrLibPath, newpath );
+        AppendList( (void **)&UsrLibPath, newpath );
     }
     if( UsrLibPath == newpath ) {
-        for( libfiles = ObjLibFiles; libfiles != NULL; libfiles = libfiles->next_file ) {
-            libfiles->infile->path_list = UsrLibPath;
+        for( file = ObjLibFiles; file != NULL; file = file->next ) {
+            file->infile->path_list = UsrLibPath;
         }
-        for( libfiles = Root->files; libfiles != NULL; libfiles = libfiles->next_file ) {
-            if( libfiles->infile->status & INSTAT_USE_LIBPATH ) {
-                libfiles->infile->path_list = UsrLibPath;
+        for( file = Root->files; file != NULL; file = file->next ) {
+            if( file->infile->status & INSTAT_USE_LIBPATH ) {
+                file->infile->path_list = UsrLibPath;
             }
         }
     }
@@ -626,9 +621,9 @@ void AddLibPathsToEndList( const char *path_list )
     if( path_list != NULL
       && *path_list != '\0' ) {
         len = strlen( path_list );
-        _ChkAlloc( newpath, sizeof( path_entry ) + len );
+        newpath = MemAllocSafe( sizeof( path_entry ) + len );
         strcpy( newpath->name, path_list );
-        LinkList( &UsrLibPath, newpath );
+        AppendList( (void **)&UsrLibPath, newpath );
     }
 }
 
@@ -645,11 +640,11 @@ void ExecSystem( const char *name )
         NewCommandSource( NULL, NULL, ENVIRONMENT ); // the "command line"
         Token.where = ENDOFCMD;     // nothing on this command line
         NewCommandSource( sys->name, sys->commands, SYSTEM ); // input file
-        _LnkFree( sys->name );
+        MemFree( sys->name );
         sys->name = NULL;
         while( !GetToken( SEP_END, TOK_INCLUDE_DOT ) ) {
             if( !DoParseDirectiveSubset() ) {
-                LnkMsg( LOC+LINE+WRN+MSG_ERROR_IN_SYSTEM_BLOCK, NULL );
+                LnkMsg( WRN+LOC+LINE+MSG_ERROR_IN_SYSTEM_BLOCK, NULL );
                 RestoreCmdLine();
                 break;
             }
@@ -672,13 +667,13 @@ static void CleanSystemList( bool burn )
         name = sys->name;
         if( burn
           || name == NULL
-          || memcmp( "286", name, 4 ) != 0
-          && memcmp( "386", name, 4 ) != 0 ) {
+          || strcmp( "286", name ) != 0
+          && strcmp( "386", name ) != 0 ) {
             *sysown = sys->next;
             if( name != NULL ) {
-                _LnkFree( name );
+                MemFree( name );
             }
-            _LnkFree( sys );
+            MemFree( sys );
         } else {
             sysown = &(sys->next);
         }

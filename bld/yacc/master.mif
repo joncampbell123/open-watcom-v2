@@ -2,6 +2,8 @@ proj_name = yacc
 
 yacc_autodepends = .AUTODEPEND
 
+yacc_trmem = 1
+
 !ifdef bootstrap
 exetarg_name = b$(proj_name)
 !endif
@@ -13,9 +15,17 @@ exetarg_name = b$(proj_name)
 #
 # cflags
 #
-.c: ../c
+.c: ../c;$(trmem_dir)
 
-inc_dirs = -I"$(yacc_dir)/h"
+inc_dirs = -I"$(yacc_dir)/h" -I"$(trmem_dir)"
+
+!ifeq trmem 1
+! ifdef __WATCOM_TOOLS__
+!  if $(__WATCOM_TOOLS__) < 1300
+extra_c_flags_f_alloc = -of+
+!  endif
+! endif
+!endif
 
 # explicit rules
 #################
@@ -40,6 +50,14 @@ exetarg_objs = &
     parse.obj       &
     sentence.obj    &
     used.obj        &
-    yacc.obj
-# genc.obj, genobj.obj, and recover.obj are unused
+    yacc.obj        &
+    alloc.obj $(trmem_objs)
+# test build only
+exetarg_prebuild_objs = &
+    genc.obj &
+    gensmall.obj &
+    genobj.obj &
+    writeobj.obj
+# not used anyway
+#   recover.obj
 !include exetarg.mif

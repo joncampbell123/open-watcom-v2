@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -135,14 +136,22 @@ static LPCLASSFACTORY createClassFactory( HANDLE inst )
 {
     class_factory       *pcf;
 
-    pcf = MemAlloc( sizeof( class_factory ) );
+    pcf = MemAllocSafe( sizeof( class_factory ) );
     pcf->usage_count = 1;
-    pcf->cf.lpVtbl = MemAlloc( sizeof( struct IClassFactoryVtbl ) );
+    pcf->cf.lpVtbl = MemAllocSafe( sizeof( struct IClassFactoryVtbl ) );
+#ifdef __WINDOWS__
     pcf->cf.lpVtbl->QueryInterface = (LPVOID)MakeProcInstance( (LPVOID)CFQueryInterface, inst );
     pcf->cf.lpVtbl->AddRef =         (LPVOID)MakeProcInstance( (LPVOID)CFAddRef, inst );
     pcf->cf.lpVtbl->Release =        (LPVOID)MakeProcInstance( (LPVOID)CFRelease, inst );
     pcf->cf.lpVtbl->CreateInstance = (LPVOID)MakeProcInstance( (LPVOID)CFCreateInstance, inst );
     pcf->cf.lpVtbl->LockServer =     (LPVOID)MakeProcInstance( (LPVOID)CFLockServer, inst );
+#else
+    pcf->cf.lpVtbl->QueryInterface = (LPVOID)CFQueryInterface;
+    pcf->cf.lpVtbl->AddRef =         (LPVOID)CFAddRef;
+    pcf->cf.lpVtbl->Release =        (LPVOID)CFRelease;
+    pcf->cf.lpVtbl->CreateInstance = (LPVOID)CFCreateInstance;
+    pcf->cf.lpVtbl->LockServer =     (LPVOID)CFLockServer;
+#endif
     return( (LPCLASSFACTORY) pcf );
 
 } /* createClassFactory */

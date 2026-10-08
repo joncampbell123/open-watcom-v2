@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,6 +35,7 @@
 #include "wwindow.hpp"
 #include "wstatdlg.hpp"
 #include "wpopmenu.hpp"
+#include "memfuncs.h"
 
 
 WEXPORT WControl::WControl( WWindow* parent, gui_control_class control_class,
@@ -101,19 +102,19 @@ void WEXPORT WControl::autosize() {
 }
 
 
-void WEXPORT WControl::getText( char* buff, size_t len ) {
-/********************************************************/
-
+void WEXPORT WControl::getText( char* buff, std::size_t len )
+/***********************************************************/
+{
     char *text = GUIGetText( parent()->handle(), controlId() );
     if( text == NULL ) {
         *buff = '\0';
     } else {
-        size_t text_len = strlen( text );
+        std::size_t text_len = std::strlen( text );
         if( text_len > len - 1 )
             text_len = len - 1;
-        memcpy( buff, text, text_len );
+        std::memcpy( buff, text, text_len );
         buff[text_len] = '\0';
-        GUIMemFree( text );
+        MemFree( text );
     }
 }
 
@@ -123,19 +124,19 @@ void WEXPORT WControl::getText( WString& str ) {
 
     char *text = GUIGetText( parent()->handle(), controlId() );
     WString t( text );
-    GUIMemFree( text );
+    MemFree( text );
     str = t;
 }
 
 
-size_t WEXPORT WControl::getTextLength() {
-/****************************************/
+std::size_t WEXPORT WControl::getTextLength() {
+/*********************************************/
 
     char *text = GUIGetText( parent()->handle(), controlId() );
     if( text == NULL )
         return( 0 );
-    size_t len = strlen( text );
-    GUIMemFree( text );
+    std::size_t len = std::strlen( text );
+    MemFree( text );
     return( len );
 }
 

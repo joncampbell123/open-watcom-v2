@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -38,6 +39,7 @@
 #include "global.h"
 #include "opn.h"
 #include "errcod.h"
+#include "namecod.h"
 #include "recog.h"
 #include "ferror.h"
 #include "insert.h"
@@ -56,10 +58,10 @@ void    CpInclude(void) {
     char        *lit;
 
     StmtExtension( SP_STRUCTURED_EXT );
-    if( RecLiteral() ) {
+    if( RecLiteralOpn() ) {
         lit = MkNodeStr( CITNode );
         AdvanceITPtr();
-        if( ReqEOS() ) {
+        if( ReqEOSOpr() ) {
             Include( lit );
             ComRead();
         }

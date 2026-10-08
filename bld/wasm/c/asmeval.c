@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -43,11 +43,11 @@
 static struct {
     token_idx           idx;
     bool                close_bracket;
-} TakeOut[MAX_TOKEN + 1];
+} TakeOut[MAX_TOKEN_COUNT + 1];
 
 static token_idx        TokCnt;
 
-static asm_tok          Store[MAX_TOKEN + 1];
+static asm_tok          Store[MAX_TOKEN_COUNT + 1];
 
 static int              op_sq_bracket_level;
 static bool             error_msg;
@@ -222,8 +222,10 @@ static int get_precedence( token_buffer *tokbuf, token_idx i )
 static bool get_operand( expr_list *new, token_buffer *tokbuf, token_idx *start, token_idx end, bool (*is_expr)(token_buffer *, token_idx) )
 /******************************************************************************************************************************************/
 {
-    char        *tmp;
-    token_idx   i = *start;
+    const char      *ptr;
+    token_idx       i = *start;
+    unsigned char   c;
+    unsigned_32     value;
 
     init_expr( new );
     switch( tokbuf->tokens[i].class ) {
@@ -243,14 +245,18 @@ static bool get_operand( expr_list *new, token_buffer *tokbuf, token_idx *start,
         new->value = tokbuf->tokens[i].u.value;
         break;
     case TC_STRING:
+    case TC_STRING_SQUOTE:
+    case TC_STRING_DQUOTE:
+    case TC_STRING_ANGLE:
+    case TC_STRING_BRACE:
         new->empty = false;
         new->type = EXPR_CONST;
         new->string = tokbuf->tokens[i].string_ptr;
-        new->value = 0;
-        for( tmp = new->string; *tmp != '\0'; tmp++ ) {
-            new->value <<= 8;
-            new->value |= (*tmp);
+        value = 0;
+        for( ptr = new->string; (c = *(unsigned char *)ptr) != '\0'; ptr++ ) {
+            value = ( value << 8 ) | c;
         }
+        new->value = value;
         break;
     case TC_REG:
         new->empty = false;
@@ -424,10 +430,13 @@ static bool is_optr( token_buffer *tokbuf, token_idx i )
     case TC_NUM:
     case TC_ID:
     case TC_RES_ID:
-    case TC_STRING:
     case TC_PATH:
     case TC_OP_BRACKET:
         return( false );
+    default:
+        if( IS_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
+            return( false );
+        }
     }
     return( true );
 }
@@ -1180,7 +1189,7 @@ static bool calculate( expr_list *token_1, expr_list *token_2, token_buffer *tok
         }
         switch( tokbuf->tokens[index].u.token ) {
         case T_SHL:
-            token_1->value = token_1->value << token_2->value;
+            token_1->value = (unsigned_32)token_1->value << token_2->value;
             break;
         case T_SHR:
             token_1->value = (unsigned_32)token_1->value >> token_2->value;
@@ -1723,28 +1732,26 @@ static bool is_expr1( token_buffer *tokbuf, token_idx i )
         return( true );
     case TC_COLON:
 #if defined( _STANDALONE_ )
-        if( i == 1
-          || ( tokbuf->tokens[i+1].class == TC_DIRECTIVE
-          && tokbuf->tokens[i+1].u.token == T_EQU2 ) ) {
-            /* It is the colon following the label or it is a := */
+        if( i == 1 ) {
+            /*
+             * It is the colon following the label
+             */
             break;
-        } else {
-            return( true );
         }
-#else
-        return( true );
 #endif
+        return( true );
     case TC_ID:
         if( i != 0 )
             /* It is not a label */
             return( true );
         break;
-    case TC_STRING:
-        return( true );
     case TC_DOT:
         return( true );
     case TC_PATH:
     default:
+        if( IS_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
+            return( true );
+        }
         break;
     }
     return( false );
@@ -1829,21 +1836,16 @@ static bool is_expr2( token_buffer *tokbuf, token_idx i )
     case TC_CL_SQ_BRACKET:
         return( true );
     case TC_COLON:
-#if defined( _STANDALONE_ )
-        if( ( tokbuf->tokens[i+1].class == TC_DIRECTIVE )
-            && ( tokbuf->tokens[i+1].u.token == T_EQU2 ) )
-            /* It is a := */
-            break;
-#endif
         return( true );
     case TC_ID:
-        return( true );
-    case TC_STRING:
         return( true );
     case TC_DOT:
         return( true );
     case TC_PATH:
     default:
+        if( IS_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
+            return( true );
+        }
         break;
     }
     return( false );
@@ -2142,7 +2144,7 @@ static void fix_final( token_buffer *tokbuf )
             tokbuf->tokens[TakeOut[i].idx].class = TC_OP_BRACKET;
             dup_count++;
         }
-        myassert( i < MAX_TOKEN );
+        myassert( i < MAX_TOKEN_COUNT );
     }
 
     for( start = 0; start < TokCnt; start++ ) {
@@ -2170,13 +2172,14 @@ static void fix_final( token_buffer *tokbuf )
 token_idx EvalExpr( token_buffer *tokbuf, token_idx start_tok, token_idx end_tok, bool flag_msg )
 /***********************************************************************************************/
 {
-    token_idx   i = start_tok;
+    token_idx   i;
     token_idx   start;          // position of first token of an expression
     token_idx   num;            // number of tokens in the expression
-    bool        final = false;
+    bool        final;
     expr_list   result;
     token_idx   count;
 
+    final = false;
     if( tokbuf->tokens[end_tok].class == TC_FINAL )
         final = true;
 
@@ -2187,6 +2190,7 @@ token_idx EvalExpr( token_buffer *tokbuf, token_idx start_tok, token_idx end_tok
         return( INVALID_IDX );
     }
 
+    i = start_tok;
     while( i < TokCnt && i <= end_tok ) {
         if( is_expr1( tokbuf, i ) ) {
             start = i++;
@@ -2235,10 +2239,8 @@ token_idx EvalExpr( token_buffer *tokbuf, token_idx start_tok, token_idx end_tok
 
     if( tokbuf->tokens[TokCnt].class == TC_NOOP
       || final ) {
-        tokbuf->tokens[TokCnt].class = TC_FINAL;
-        tokbuf->tokens[TokCnt].string_ptr = NULL;
+        SetFinalToken( tokbuf, TokCnt );
     }
-
     return( TokCnt );
 }
 
@@ -2333,9 +2335,10 @@ static bool is_expr_const( token_idx i )
         } else {
             return( true );
         }
-    case TC_STRING:
-        return( true );
     default:
+        if( IS_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
+            return( true );
+        }
         return( false );
     }
 }

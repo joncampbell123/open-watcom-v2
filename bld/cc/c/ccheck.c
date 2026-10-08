@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -208,7 +208,7 @@ static typecheck_err CheckCompatibleFunctionParms( TYPEPTR typ1, TYPEPTR typ2, b
     TYPEPTR         *plist2;
     TYPEPTR         p1;
     TYPEPTR         p2;
-    int             parmno;
+    int             parm_num;
     typecheck_err   rc;
 
     rc = TCE_OK;        /* indicate functions are compatible */
@@ -220,20 +220,20 @@ static typecheck_err CheckCompatibleFunctionParms( TYPEPTR typ1, TYPEPTR typ2, b
             plist2 = NULL;
         }
         if( plist2 == NULL ) {
-            for( parmno = 1; (p1 = *plist1++) != NULL; ++parmno ) {
+            for( parm_num = 1; (p1 = *plist1++) != NULL; ++parm_num ) {
                 if( p1->decl_type == TYP_DOT_DOT_DOT ) {
                     break;
                 }
                 if( !CheckParmPromotion( p1 ) ) {
                     if( topLevelCheck ) {
-                        CErr2( ERR_PARM_TYPE_MISMATCH, parmno );
+                        CErr2( ERR_PARM_TYPE_MISMATCH, parm_num );
                     }
                     rc = TCE_TYPE_MISMATCH;
                 }
             }
         } else {
             p1 = *plist1++; p2 = *plist2++;
-            for( parmno = 1; p1 != NULL && p2 != NULL; ++parmno ) {
+            for( parm_num = 1; p1 != NULL && p2 != NULL; ++parm_num ) {
                 if( p1->decl_type == TYP_DOT_DOT_DOT
                   || p2->decl_type == TYP_DOT_DOT_DOT ) {
                     break;
@@ -241,7 +241,7 @@ static typecheck_err CheckCompatibleFunctionParms( TYPEPTR typ1, TYPEPTR typ2, b
                 if( !CheckIdenticalType( p1, p2 ) ) {
                     if( topLevelCheck ) {
                         SetDiagType2( p1, p2 );
-                        CErr2( ERR_PARM_TYPE_MISMATCH, parmno );
+                        CErr2( ERR_PARM_TYPE_MISMATCH, parm_num );
                         SetDiagPop();
                     }
                     rc = TCE_TYPE_MISMATCH;
@@ -604,7 +604,7 @@ static TREEPTR reverse_parms_tree( TREEPTR parm )
 static void CompareParms( TYPEPTR *master, TREEPTR parms, bool reverse )
 {
     TYPEPTR     typ1;
-    int         parmno;
+    int         parm_num;
     TREEPTR     parm;
 
     if( reverse ) {
@@ -616,7 +616,7 @@ static void CompareParms( TYPEPTR *master, TREEPTR parms, bool reverse )
             typ1 = NULL;                    /* indicate no parms */
         }
     }
-    for( parmno = 1, parm = parms; ( typ1 != NULL ) && ( parm != NULL ); parm = parm->left, ++parmno ) {
+    for( parm_num = 1, parm = parms; ( typ1 != NULL ) && ( parm != NULL ); parm = parm->left, ++parm_num ) {
         SKIP_TYPEDEFS( typ1 );
         /*
          * TODO is crap needed or has it been done
@@ -629,7 +629,7 @@ static void CompareParms( TYPEPTR *master, TREEPTR parms, bool reverse )
         /*
          * check compatibility of parms
          */
-        CheckParmAssign( typ1, parm, parmno, false );
+        CheckParmAssign( typ1, parm, parm_num, false );
         typ1 = *master++;
         if( typ1 != NULL
           && typ1->decl_type == TYP_DOT_DOT_DOT ) {
@@ -722,7 +722,7 @@ bool CheckZeroConstant( TREEPTR tree )
 {
     uint64  val64 = LongValue64( tree );
 
-    return( (val64.u._32[I64LO32] | val64.u._32[I64HI32]) == 0 );
+    return( U64isZero( val64 ) );
 }
 
 bool CheckZero( TREEPTR tree )
@@ -732,7 +732,7 @@ bool CheckZero( TREEPTR tree )
     if( tree->op.opr == OPR_PUSHINT ) {
         uint64  val64 = LongValue64( tree );
 
-        rc = ( (val64.u._32[I64LO32] | val64.u._32[I64HI32]) == 0 );
+        rc = U64isZero( val64 );
     }
     return( rc );
 }
@@ -746,29 +746,27 @@ bool CheckAssignBits( uint64 *val, unsigned width, bool mask )
  */
 {
     uint64      max;
+    uint64      tmp;
     bool        overflow;
 
     overflow = false;
     /*
      * max = ( 1 << width ) - 1;
      */
-    max.u._32[I64LO32] = 1;
-    max.u._32[I64HI32] = 0;
-    U64ShiftL( &max, width, &max );
-    if( max.u._32[I64LO32] == 0 )
-        max.u._32[I64HI32]--;
-    max.u._32[I64LO32]--;
+    Set64Val1p( max );
+    U64ShiftLEq( &max, width );
+    U64Dec( max );
     /*
      * if( val > max )
      */
-    if( val->u._32[I64HI32] > max.u._32[I64HI32]
-      || val->u._32[I64HI32] == max.u._32[I64HI32]
-      && val->u._32[I64LO32] > max.u._32[I64LO32] ) {
+    if( U64Cmp( val, &max ) > 0 ) {
         /*
          * if( (val | ( max >> 1 )) != ~0U )
          */
-        if( (val->u._32[I64HI32] | ( max.u._32[I64HI32] >> 1 )) != ~0U
-          || (val->u._32[I64LO32] | ( max.u._32[I64LO32] >> 1 ) | ( max.u._32[I64HI32] << 31 )) != ~0U ) {
+        U64ShiftR( &tmp, &max, 1 );
+        U64OrEq( tmp, *val );
+        U64Inc( tmp );
+        if( U64isntZero( tmp ) ) {
             overflow = true;
         }
     }
@@ -776,8 +774,7 @@ bool CheckAssignBits( uint64 *val, unsigned width, bool mask )
         /*
          * if mask is true then val &= max;
          */
-        val->u._32[I64HI32] &= max.u._32[I64HI32];
-        val->u._32[I64LO32] &= max.u._32[I64LO32];
+        U64AndEq( *val, max );
     }
     return( overflow );
 }
@@ -800,11 +797,9 @@ bool CheckAssignRange( TYPEPTR typ1, TREEPTR opnd2 )
         }
         if( opnd2->u.expr_type->decl_type == TYP_LONG64
           || opnd2->u.expr_type->decl_type == TYP_ULONG64 ) {
-            val64.u._32[I64LO32] = opnd2->op.u2.ulong64_value.u._32[I64LO32];
-            val64.u._32[I64HI32] = opnd2->op.u2.ulong64_value.u._32[I64HI32];
+            val64 = opnd2->op.u2.ulong64_value;
         } else {
-            val64.u._32[I64LO32] = opnd2->op.u2.ulong_value;
-            val64.u._32[I64HI32] = ( opnd2->op.u2.long_value < 0 ) ? -1 : 0;
+            Set64ValI32( val64, opnd2->op.u2.long_value );
         }
         switch( typ1->decl_type ) {
         case TYP_FIELD:
@@ -855,7 +850,7 @@ static bool IsPointer( TYPEPTR typ )
     return( typ->decl_type == TYP_POINTER );
 }
 
-void CheckParmAssign( TYPEPTR typ1, TREEPTR opnd2, int parmno, bool asgn_check )
+void CheckParmAssign( TYPEPTR typ1, TREEPTR opnd2, int parm_num, bool asgn_check )
 {
     TYPEPTR        typ2;
 
@@ -871,8 +866,8 @@ void CheckParmAssign( TYPEPTR typ1, TREEPTR opnd2, int parmno, bool asgn_check )
     SetDiagType2( typ1, typ2 );
     switch( CompatibleType( typ1, typ2, true, CheckZero( opnd2 ) ) ) {
     case NO:
-        if( parmno ) {
-            CErr2( ERR_PARM_TYPE_MISMATCH, parmno );
+        if( parm_num ) {
+            CErr2( ERR_PARM_TYPE_MISMATCH, parm_num );
         } else {
             CErr1( ERR_TYPE_MISMATCH );
         }
@@ -880,10 +875,10 @@ void CheckParmAssign( TYPEPTR typ1, TREEPTR opnd2, int parmno, bool asgn_check )
     case PT:
         if( asgn_check ) {
             if( !IsPtrConvSafe( opnd2, typ1, typ2 ) ) {
-                CWarnP1( parmno, ERR_POINTER_TRUNCATION );
+                CWarnP1( parm_num, ERR_POINTER_TRUNCATION );
             }
-        } else if( parmno ) {
-            CErr2( ERR_PARM_TYPE_MISMATCH, parmno );
+        } else if( parm_num ) {
+            CErr2( ERR_PARM_TYPE_MISMATCH, parm_num );
         } else {
             CErr1( ERR_TYPE_MISMATCH );
         }
@@ -891,44 +886,44 @@ void CheckParmAssign( TYPEPTR typ1, TREEPTR opnd2, int parmno, bool asgn_check )
     case PX:
         if( asgn_check ) {
             if( IsPtrtoFunc( typ1 ) ) {
-                if( parmno ) {
-                    CErr2( ERR_PARM_POINTER_TYPE_MISMATCH, parmno );
+                if( parm_num ) {
+                    CErr2( ERR_PARM_POINTER_TYPE_MISMATCH, parm_num );
                 } else {
                     CWarn1( ERR_POINTER_TYPE_MISMATCH );
                 }
             }
-        } else if( parmno ) {
-            CErr2( ERR_PARM_TYPE_MISMATCH, parmno );
+        } else if( parm_num ) {
+            CErr2( ERR_PARM_TYPE_MISMATCH, parm_num );
         } else {
             CErr1( ERR_TYPE_MISMATCH );
         }
         break;
     case PQ:
         if( !CompFlags.no_check_qualifiers ) {
-            if( parmno ) {
-                CWarn2( ERR_PARM_QUALIFIER_MISMATCH, parmno );
+            if( parm_num ) {
+                CWarn2( ERR_PARM_QUALIFIER_MISMATCH, parm_num );
             } else {
                 CWarn1( ERR_QUALIFIER_MISMATCH );
             }
         }
         break;
     case PM:
-        if( parmno ) {
-            CErr2( ERR_PARM_POINTER_TYPE_MISMATCH, parmno );
+        if( parm_num ) {
+            CErr2( ERR_PARM_POINTER_TYPE_MISMATCH, parm_num );
         } else {
             CWarn1( ERR_POINTER_TYPE_MISMATCH );
         }
         break;
     case PS:
-        if( parmno ) {
-            CWarn2( ERR_PARM_SIGN_MISMATCH, parmno );
+        if( parm_num ) {
+            CWarn2( ERR_PARM_SIGN_MISMATCH, parm_num );
         } else {
             CWarn1( ERR_SIGN_MISMATCH );
         }
         break;
     case PW:
-        if( parmno ) {
-            CWarn2( ERR_PARM_INCONSISTENT_INDIRECTION_LEVEL, parmno );
+        if( parm_num ) {
+            CWarn2( ERR_PARM_INCONSISTENT_INDIRECTION_LEVEL, parm_num );
         } else {
             CWarn1( ERR_INCONSISTENT_INDIRECTION_LEVEL );
         }
@@ -938,13 +933,13 @@ void CheckParmAssign( TYPEPTR typ1, TREEPTR opnd2, int parmno, bool asgn_check )
             if( IsPointer( typ1 )
               && opnd2->op.opr == OPR_PUSHINT ) {
                 if( !CheckZeroConstant( opnd2 ) ) {
-                    CWarnP1( parmno, ERR_NONPORTABLE_PTR_CONV );
+                    CWarnP1( parm_num, ERR_NONPORTABLE_PTR_CONV );
                 }
             } else {
-                CWarnP1( parmno, ERR_PCTYPE_MISMATCH );
+                CWarnP1( parm_num, ERR_PCTYPE_MISMATCH );
             }
-        } else if( parmno ) {
-            CErr2( ERR_PARM_TYPE_MISMATCH, parmno );
+        } else if( parm_num ) {
+            CErr2( ERR_PARM_TYPE_MISMATCH, parm_num );
         } else {
             CErr1( ERR_TYPE_MISMATCH );
         }
@@ -954,14 +949,14 @@ void CheckParmAssign( TYPEPTR typ1, TREEPTR opnd2, int parmno, bool asgn_check )
             bitfield_width  fsize_1 = 0, fsize_2 = 0;
 
             if( TypeSizeEx( typ2, &fsize_2 ) > TypeSizeEx( typ1, &fsize_1 ) ) {
-                CWarnP1( parmno, ERR_LOSE_PRECISION );
+                CWarnP1( parm_num, ERR_LOSE_PRECISION );
             }
             if( fsize_2 > fsize_1 ) {
-                CWarnP1( parmno, ERR_LOSE_PRECISION );
+                CWarnP1( parm_num, ERR_LOSE_PRECISION );
             }
         } else {
-            if( parmno ) {
-                CErr2( ERR_PARM_TYPE_MISMATCH, parmno );
+            if( parm_num ) {
+                CErr2( ERR_PARM_TYPE_MISMATCH, parm_num );
             } else {
                 CErr1( ERR_TYPE_MISMATCH );
             }
@@ -970,7 +965,7 @@ void CheckParmAssign( TYPEPTR typ1, TREEPTR opnd2, int parmno, bool asgn_check )
     case OK:
         if( asgn_check ) {
             if( CheckAssignRange( typ1, opnd2 ) ) {
-                CWarnP1( parmno, ERR_CONSTANT_TOO_BIG );
+                CWarnP1( parm_num, ERR_CONSTANT_TOO_BIG );
             }
         }
         break;

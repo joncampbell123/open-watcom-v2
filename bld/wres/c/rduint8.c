@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,12 +36,14 @@
 #include "reserr.h"
 #include "wresrtns.h"
 
-bool ResReadUint8( uint_8 *newint, FILE *fp )
-/*******************************************/
+
+uint_8 ResReadUint8( bool *error, FILE *fp )
+/******************************************/
 {
     size_t      numread;
+    char        tmp[1];
 
-    if( (numread = WRESREAD( fp, newint, sizeof( uint_8 ) )) != sizeof( uint_8 ) )
-        return( WRES_ERROR( WRESIOERR( fp, numread ) ? WRS_READ_FAILED : WRS_READ_INCOMPLETE ) );
-    return( false );
+    if( (numread = WRESREAD( fp, tmp, sizeof( tmp ) )) != sizeof( tmp ) )
+        *error = WRES_ERROR( WRESIOERR( fp, numread ) ? WRS_READ_FAILED : WRS_READ_INCOMPLETE );
+    return( tmp[0] );
 }

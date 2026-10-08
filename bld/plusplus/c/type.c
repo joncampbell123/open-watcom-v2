@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -62,10 +62,9 @@
 #include "fmttype.h"
 #include "dwarfdbg.h"
 #include "rtti.h"
-#include "dumpapi.h"
+#include "dbg.h"
 #include "compinfo.h"
 #ifdef DEVBUILD
-    #include "dbg.h"
     #include "togglesd.h"
 #endif
 
@@ -92,9 +91,22 @@ TYPE TypeCache[TYPC_LAST];
 
 #if defined( DEVBUILD ) || defined( XTRA_RPT )
 char const * const TypeIdNames[] = {
-    #define pick(id,promo,promo_asm,type_text)  __STR( id ),
+    /*
+     * base types
+     */
+    #define pickb(id,promo,promo_asm,type_text) __STR( id ),
+    #define picke(id,promo,promo_asm,type_text)
     #include "_typdefs.h"
-    #undef pick
+    #undef picke
+    #undef pickb
+    /*
+     * extended types
+     */
+    #define pickb(id,promo,promo_asm,type_text)
+    #define picke(id,promo,promo_asm,type_text) __STR( id ),
+    #include "_typdefs.h"
+    #undef picke
+    #undef pickb
     "TYP_NONE",
 #if defined( XTRA_RPT )
     "Total"
@@ -2513,9 +2525,12 @@ DECL_SPEC *PTypeMSDeclSpec( DECL_SPEC *dspec, PTREE id )
         spec->ms_declspec = MSDS_THREAD;
     } else if( strcmp( NameStr( name ), "naked" ) == 0 ) {
         spec->ms_declspec = MSDS_NAKED;
-    } else if( strcmp( NameStr( name ), "aborts" ) == 0 ) {
+    } else if( strcmp( NameStr( name ), "aborts" ) == 0
+      || strcmp( NameStr( name ), "__aborts" ) == 0 ) {
         spec->ms_declspec = MSDS_ABORTS;
-    } else if( strcmp( NameStr( name ), "noreturn" ) == 0 ) {
+    } else if( strcmp( NameStr( name ), "noreturn" ) == 0
+      || strcmp( NameStr( name ), "__noreturn" ) == 0
+      || strcmp( NameStr( name ), "_Noreturn" ) == 0 ) {
         spec->ms_declspec = MSDS_NORETURN;
     } else if( strcmp( NameStr( name ), "farss" ) == 0 ) {
         spec->ms_declspec = MSDS_FARSS;
@@ -3208,7 +3223,7 @@ static void setStorageClass( SYMBOL sym, stg_class_t sc )
 
 static void reportRepeatedInfo( TOKEN token )
 {
-    CErr2p( INF_REPEATED_ITEM, Tokens[token] );
+    CErr2p( INF_REPEATED_ITEM, TokenString[token] );
 }
 
 static void dumpInfoFunctionMods( type_flag repeats )
@@ -7868,7 +7883,7 @@ static tb_status typesBind( type_bind_info *data, bool is_function )
 
         if( (*u_top)->op == PT_INT_CONSTANT ) {
             if( (*b_top)->op == PT_INT_CONSTANT ) {
-                if( !I64Cmp( &(*u_top)->u.int64_constant, &(*b_top)->u.int64_constant ) ) {
+                if( U64isEq( (*u_top)->u.int64_constant, (*b_top)->u.int64_constant ) ) {
                     PTreeFree( *b_top );
                     PTreeFree( *u_top );
                     continue;
@@ -8419,11 +8434,14 @@ static void initBasicTypes( void )
     int     i;
     type_id typ;
     static type_id basics_init_list[] = {
-        #define BASETYPES
-        #define pick(id,promo,promo_asm,type_text)  id,
+        /*
+         * base types only
+         */
+        #define pickb(id,promo,promo_asm,type_text) id,
+        #define picke(id,promo,promo_asm,type_text)
         #include "_typdefs.h"
-        #undef pick
-        #undef BASETYPES
+        #undef picke
+        #undef pickb
     };
 
     for( i = 0; i < ARRAY_SIZE( basics_init_list ); i++ ) {
@@ -8820,6 +8838,7 @@ static void pchWriteArgLists( type_pch_walk *data )
 {
     unsigned count;
     unsigned i;
+    unsigned j;
     unsigned except_spec_count;
     TYPE *head;
     TYPE curr;
@@ -8856,7 +8875,6 @@ static void pchWriteArgLists( type_pch_walk *data )
     } RingIterEnd( curr )
     head = &fnHashTable[0][0];
     for( i = 0; i < ARGS_HASH; ++i ) {
-        int j;
         for( j = 0; j < TYPE_HASH_MODULUS; ++j ) {
             RingIterBeg( *head, curr ) {
                 *p = curr->u.f.args;
@@ -8892,8 +8910,8 @@ static void pchWriteArgLists( type_pch_walk *data )
         }
     }
     PCHWriteUInt( count );
-    for( p = table; p < &table[count]; ++p ) {
-        args = *p;
+    for( i = 0; i < count; ++i ) {
+        args = table[i];
         save_except_spec = args->except_spec;
         except_spec_count = 0;
         if( save_except_spec != NULL ) {
@@ -8903,8 +8921,8 @@ static void pchWriteArgLists( type_pch_walk *data )
         }
         args->except_spec = PCHSetUInt( except_spec_count );
         PCHWrite( args, offsetof( arg_list, type_list ) );
-        for( i = 0; i < args->num_args; ++i ) {
-            TypePCHWrite( args->type_list[i] );
+        for( j = 0; j < args->num_args; ++j ) {
+            TypePCHWrite( args->type_list[j] );
         }
         if( save_except_spec != NULL ) {
             for( etype = save_except_spec; *etype != NULL; ++etype ) {

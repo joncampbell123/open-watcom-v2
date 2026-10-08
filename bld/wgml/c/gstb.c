@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2004-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2004-2026 The Open Watcom Contributors. All Rights Reserved.
 *
 *  ========================================================================
 *
@@ -172,9 +172,9 @@ void    scr_tb( void )
         p = pa;                             // reset to start of first tab
 
         while( *p != '\0' ) {               // tab stop start
-            if( user_tabs.current == user_tabs.length ) {
+            if( user_tabs.length == user_tabs.current ) {
                 user_tabs.length += TAB_COUNT;  // add space for new tab stops
-                user_tabs.tabs = mem_realloc( user_tabs.tabs, user_tabs.length *
+                user_tabs.tabs = MemReallocSafe( user_tabs.tabs, user_tabs.length *
                                             sizeof( tab_stop ) );
             }
             i = user_tabs.current;          // initialize (not done elsewhere)

@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -31,15 +32,14 @@
 
 
 #ifndef MEMUTIL_H
+#define MEMUTIL_H   1
+
 #include <stddef.h>
 #include "watcom.h"
+#include "memfuncs.h"
 
 extern void MemInit( void );
 extern void MemFini( void );
-extern void *MemAlloc( size_t size );
-extern void *MemRealloc( void *ptr, size_t size );
-extern void MemFree( void *ptr );
 
-#define MEMUTIL_H   1
 #endif
 

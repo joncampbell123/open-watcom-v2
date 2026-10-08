@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2004-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2004-2026 The Open Watcom Contributors. All Rights Reserved.
 *
 *  ========================================================================
 *
@@ -53,6 +53,7 @@
 #include "gvars.h"
 #include "findfile.h"
 #include "wnoret.h"
+#include "memfuncs.h"
 
 #ifdef  __cplusplus
 extern "C" {    /* Use "C" linkage when in C++ mode */
@@ -62,7 +63,7 @@ extern "C" {    /* Use "C" linkage when in C++ mode */
 //================= Function Prototypes ========================
 
 /* copfiles.c                           */
-extern char         cop_in_trans( char in_char, font_number font );
+extern int          cop_in_trans( int in_char, font_number font );
 extern void         cop_setup( void );
 extern void         cop_teardown( void );
 extern unsigned     cop_text_width( const char *text, unsigned count, font_number font );
@@ -89,6 +90,7 @@ extern void         set_oc_pos( void );
 
 
 /* gargutil.c                           */
+extern int          get_char_hexval( const char *str );
 extern condcode     getarg( void );
 extern condcode     getqst( void );
 extern bool         is_quote_char( char c );
@@ -104,7 +106,7 @@ extern bool         is_macro_char( char c );
 extern bool         is_space_tab_char( char c );
 extern bool         is_stop_char( char c );
 extern bool         is_symbol_char( char c );
-extern char         parse_char( const char *pa, unsigned len );
+extern int          parse_char( const char *pa, unsigned len );
 extern int          unquote_arg( tok_type *arg );
 extern char         *get_tagname( const char *p, char *tagname );
 extern char         *check_tagname( const char *p, char *tagname );
@@ -202,18 +204,15 @@ extern mac_entry    *find_macro( mac_dict dict, char const *name );
 
 
 /* gmemory.c                            */
-extern void         *mem_alloc( unsigned size );
-extern char         *mem_strdup( const char *str );
-extern char         *mem_tokdup( const char *str, unsigned size );
 extern void         mem_banner( void );
-extern void         mem_free( void *p );
-extern void         mem_init( void );
-extern void         mem_fini( void );
+extern void         MemInit( void );
+extern void         MemFini( void );
 extern unsigned long mem_get_peak_usage( void );
 extern void         mem_prt_curr_usage( void );
-extern void         *mem_realloc( void *p, unsigned size );
 extern int          mem_validate( void );
 extern void         mem_prt_list( void );
+
+extern char         *MemToStringSafe( const char *str, size_t size );
 
 /* gnestut.c                            */
 extern void         init_nest_cb( void );

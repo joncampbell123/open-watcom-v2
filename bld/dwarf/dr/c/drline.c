@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -41,15 +41,15 @@ typedef struct { /* stmt program read info */
     drmem_hdl   start;
     drmem_hdl   curr;
     drmem_hdl   finish;
+    unsigned_8  *op_lens; /* NULL if no new opcodes */
+    dr_fileidx  file_idx;
+    dr_fileidx  dir_idx;
     unsigned_16 seg;
     signed_8    line_base;
     unsigned_8  line_range;
     unsigned_8  min_ins_len;
     unsigned_8  def_is_stmt;
     unsigned_8  opcode_base;
-    unsigned_8  *op_lens; /* NULL if no new opcodes */
-    dr_fileidx  file_idx;
-    dr_fileidx  dir_idx;
 } prog_rdr;
 
 typedef struct line_info {
@@ -113,7 +113,8 @@ static bool WlkStateProg( line_info *info, DRCUEWLK cue, void *cue_data,
             value_lne = DR_VMReadByte( curr );
             curr++;
             --length;
-            if( DR_CurrNode->wat_producer_ver == VER_V1 || DR_CurrNode->wat_producer_ver == VER_V2 ) {
+            if( DR_CurrNode->wat_producer_ver == VER_V1
+              || DR_CurrNode->wat_producer_ver == VER_V2 ) {
                 if( value_lne == DW_LNE_WATCOM_set_segment_OLD ) {
                     value_lne = DW_LNE_WATCOM_set_segment;
                 }

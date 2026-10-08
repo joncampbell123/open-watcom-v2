@@ -31,9 +31,10 @@
 
 
 #include "variety.h"
+#include "seterrno.h"
 #include "saferlib.h"
 #include <string.h>
-#include "rterrno.h"
+
 
 void _WCNEAR __rtct_fail( const char *fn, const char *reason, void *reserved )
 /****************************************************************************/

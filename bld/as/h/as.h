@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2024      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2024-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -46,11 +46,12 @@
 #include "symbol.h"
 #include "obj.h"
 #include "exprtree.h"
-#include "inslist.h"
+#include "ainslist.h"
 #include "directiv.h"
 #include "ashash.h"
 #include "sections.h"
 #include "asnumlab.h"
 #include "asmsg.h"
+#include "memfuncs.h"
 
 #define ArraySize( x )  (sizeof( x ) / sizeof( *(x) ))

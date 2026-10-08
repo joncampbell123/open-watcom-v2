@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -156,9 +156,10 @@ bool IdenticalAutoDepTimes( time_t in_obj, time_t stamp, auto_dep_type autodep_t
 
     if( in_obj == stamp )
         return( true );
-#if defined( __WATCOMC__ ) && __WATCOMC__ < 1300
+#if defined( __WATCOMC__ ) && ( __WATCOMC__ < 1300 ) && defined( PREBOOT )
     /*
-     * OW1.x bootstrap compiler workaround
+     * OW 1.9 bootstrap compiler workaround
+     * all platforms are dos based two-second timestamp
      */
     if( in_obj < stamp ) {
         if( (( in_obj + 1 ) & ~1) == (stamp & ~1) ) {
@@ -170,9 +171,13 @@ bool IdenticalAutoDepTimes( time_t in_obj, time_t stamp, auto_dep_type autodep_t
         }
     }
 #else
+    /*
+     * OW 2.0 use one-second timestamp if available
+     * only DOS and OS/2 has two-second timestamp
+     */
   #if defined( __DOS__ ) || defined( __OS2__ )
     /*
-     * host is two-second file time based, the stamp is always two-second based time
+     * the host file stamp is always two-second based time
      * if in_obj is not a two-second based file time ( ELF, COFF or RES object files )
      * then we need to round in_obj to the nearest two-second based time
      */
@@ -221,12 +226,12 @@ void OSLoadDLL( char *cmd_name, char *dll_name, char *ent_name )
     /*
      * we want newer !loaddlls to take precedence
      */
-    n = MallocSafe( sizeof( *n ) );
-    n->cmd_name = StrDupSafe( cmd_name );
+    n = MemAllocSafe( sizeof( *n ) );
+    n->cmd_name = MemStrdupSafe( cmd_name );
     n->next = dllCommandList;
     dllCommandList = n;
-    IdeDrvInit( &n->inf, StrDupSafe( dll_name ),
-                (ent_name == NULL) ? NULL : StrDupSafe( ent_name ) );
+    IdeDrvInit( &n->inf, MemStrdupSafe( dll_name ),
+                (ent_name == NULL) ? NULL : MemStrdupSafe( ent_name ) );
 }
 
 DLL_CMD *OSFindDLL( char const *cmd_name )
@@ -290,14 +295,14 @@ STATIC void cleanDLLCmd( void )
 
     while( (n = dllCommandList) != NULL ) {
         dllCommandList = n->next;
-        FreeSafe( (char *)n->cmd_name );
+        MemFree( (char *)n->cmd_name );
         if( n->inf.dll_name != NULL ) {
-            FreeSafe( (char*) n->inf.dll_name );
+            MemFree( (char*) n->inf.dll_name );
         }
         if( n->inf.ent_name != NULL ) {
-            FreeSafe( (char *)n->inf.ent_name );
+            MemFree( (char *)n->inf.ent_name );
         }
-        FreeSafe( n );
+        MemFree( n );
     }
 #endif
 }
@@ -446,15 +451,11 @@ int SetEnvExt( ENV_TRACKER *env )
         return( rc );
     }
 #endif
-#if defined( _MSC_VER )
-    return( putenv( env->name ) );
-#else
-  #if !defined( __WATCOMC__ )
-    if( env->value == NULL )
-        return( unsetenv( env->name ) );
-  #endif
+    if( env->value == NULL ) {
+        unsetenv( env->name );
+        return( 0 );
+    }
     return( setenv( env->name, env->value, true ) );
-#endif
 }
 
 int SetEnvSafe( const char *name, const char *value )
@@ -472,18 +473,13 @@ int SetEnvSafe( const char *name, const char *value )
 
     len = strlen( name );
     len1 = ( value == NULL ) ? 0 : strlen( value );
-    env = MallocSafe( sizeof( ENV_TRACKER ) + len + len1 + 1 );
+    env = MemAllocSafe( sizeof( ENV_TRACKER ) + len + len1 + 1 );
     // upper case the name
     p = env->name;
     while( *name != NULLCHAR ) {
         *p++ = ctoupper( *name++ );
     }
-#ifdef _MSC_VER
-    *p++ = '=';
-    len++;  /* include '=' character to search */
-#else
     *p++ = NULLCHAR;
-#endif
     if( value == NULL ) {
         env->value = NULL;
         *p = NULLCHAR;
@@ -496,24 +492,20 @@ int SetEnvSafe( const char *name, const char *value )
         rc = 0;                     // we are deleting the envvar, ignore errors
     }
     for( walk = &envList; *walk != NULL; walk = &(*walk)->next ) {
-#ifdef _MSC_VER
-        if( strncmp( (*walk)->name, env->name, len ) == 0 ) {
-#else
         if( strcmp( (*walk)->name, env->name ) == 0 ) {
-#endif
             break;
         }
     }
     old = *walk;
     if( old != NULL ) {
         *walk = old->next;          // unlink old entry from chain
-        FreeSafe( old );            // ...
+        MemFree( old );            // ...
     }
     if( env->value != NULL ) {
         env->next = envList;        // we put new entry into chain
         envList = env;              // ...
     } else {
-        FreeSafe( env );            // we're deleting the entry
+        MemFree( env );            // we're deleting the entry
     }
     return( rc );
 }
@@ -527,7 +519,7 @@ void SetEnvFini( void )
 
     while( (cur = envList) != NULL ) {
         envList = cur->next;
-        FreeSafe( cur );
+        MemFree( cur );
     }
 }
 #endif

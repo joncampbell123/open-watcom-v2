@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -42,6 +42,7 @@
 #include "extnsw.h"
 #include "ctrlflgs.h"
 #include "global.h"
+#include "namecod.h"
 #include "recog.h"
 #include "ferror.h"
 #include "insert.h"
@@ -76,7 +77,8 @@ static void     FiniDo( void );
 static  void    ChkStatementSequence( void )
 {
     SetCtrlFlgs();
-    if( (StmtSw & SS_HOLLERITH) && ( StmtProc != PR_FMT ) ) {
+    if( (StmtSw & SS_HOLLERITH)
+      && ( StmtProc != PR_FMT ) ) {
         Extension( HO_CONST );
     }
     if( SgmtSw & SG_DEFINING_MAP ) {
@@ -98,20 +100,24 @@ static  void    ChkStatementSequence( void )
             StmtPtrErr( SP_STATEMENT_REQUIRED, StmtKeywords[PR_STRUCTURE] );
         }
     }
-    if( ( (SgmtSw & SG_PROLOG_DONE) == 0 ) &&
-        (ProgSw & PS_IN_SUBPROGRAM) &&
-        ( !CtrlFlgOn( CF_SPECIFICATION ) ) &&
-        ( StmtProc != PR_FMT ) && ( StmtProc != PR_INCLUDE ) ) {
+    if( ( (SgmtSw & SG_PROLOG_DONE) == 0 )
+      && (ProgSw & PS_IN_SUBPROGRAM)
+      && ( !CtrlFlgOn( CF_SPECIFICATION ) )
+      && ( StmtProc != PR_FMT )
+      && ( StmtProc != PR_INCLUDE ) ) {
         Prologue();
     }
-    if( ( (SgmtSw & SG_SYMTAB_RESOLVED) == 0 ) &&
-        ( !CtrlFlgOn( CF_SPECIFICATION | CF_SUBPROGRAM ) ) &&
-        ( StmtProc != PR_FMT ) && ( StmtProc != PR_INCLUDE ) ) {
+    if( ( (SgmtSw & SG_SYMTAB_RESOLVED) == 0 )
+      && ( !CtrlFlgOn( CF_SPECIFICATION | CF_SUBPROGRAM ) )
+      && ( StmtProc != PR_FMT )
+      && ( StmtProc != PR_INCLUDE ) ) {
         STResolve();
         SgmtSw |= SG_SYMTAB_RESOLVED;
     }
-    if( Remember.endstmt || ( (SgmtSw & SG_STMT_PROCESSED) == 0 ) ) {
-        if( !CtrlFlgOn( CF_SUBPROGRAM ) && ( StmtProc != PR_INCLUDE ) ) {
+    if( Remember.endstmt
+      || ( (SgmtSw & SG_STMT_PROCESSED) == 0 ) ) {
+        if( !CtrlFlgOn( CF_SUBPROGRAM )
+          && ( StmtProc != PR_INCLUDE ) ) {
             DefProg();
         }
     }
@@ -122,14 +128,15 @@ static  void    ChkStatementSequence( void )
 }
 
 
-static  void    ProcStmt( void ) {
+static  void    ProcStmt( void )
 //================================
-
+{
     if( AError )
         return;
-    if( CpError && (StmtProc == PR_NULL) )
+    if( CpError
+      && ( StmtProc == PR_KW_NONE ) )
         return;
-    ProcTable[ StmtProc ]();
+    ProcTable[StmtProc]();
 }
 
 static  void    InitStatement( void )
@@ -140,7 +147,7 @@ static  void    InitStatement( void )
     CpError = false;
     MakeITList();
     StmtSw &= ~SS_SCANNING;
-    StmtProc = 0;
+    StmtProc = PR_KW_NONE;
 }
 
 static void FiniStatement( void )
@@ -169,7 +176,8 @@ void    CompStatement( void )
         //          CHARACTER A, B(79)
         //          EQUIVALENCE (A,B(1))
         //          END
-        if( !scan_error && (StmtProc != PR_NULL) ) {
+        if( !scan_error
+          && ( StmtProc != PR_KW_NONE ) ) {
             ChkStatementSequence();
         }
     }
@@ -177,13 +185,15 @@ void    CompStatement( void )
         if( CurrFile->link == NULL ) {  // no line numbering information for
             GSetDbugLine();             // include files
         }
-        if( CtrlFlgOn( CF_NEED_SET_LINE ) && (Options & OPT_TRACE) ) {
+        if( CtrlFlgOn( CF_NEED_SET_LINE )
+          && (Options & OPT_TRACE) ) {
             GSetSrcLine();
         }
         CheckOrder();
-        if( (ProgSw & PS_BLOCK_DATA) && !CtrlFlgOn( CF_BLOCK_DATA ) ) {
+        if( (ProgSw & PS_BLOCK_DATA)
+          && !CtrlFlgOn( CF_BLOCK_DATA ) ) {
             // if statement wasn't decodeable, don't issue an error
-            if( StmtProc != PR_NULL ) {
+            if( StmtProc != PR_KW_NONE ) {
                 StmtErr( BD_IN_BLOCK_DATA );
             }
         } else if( CtrlFlgOn( CF_NOT_EXECUTABLE ) ) {
@@ -205,13 +215,15 @@ void    CompStatement( void )
         CheckDoEnd();
     }
     // The following must include a check for scanning errors since it is
-    // possible to get a scanning error and "StmtProc != PR_NULL" as in the
+    // possible to get a scanning error and "StmtProc != PR_KW_NONE" as in the
     // following example:       integer*2 fwinmain( hInstance
     // If the check for a scanning error is not performed, then SubProgId
     // will not be properly set when we compile the RETURN statement in the
     // following example:       integer*2 fwinmain( hInstance
     //                          return
-    if( !scan_error && (StmtProc != PR_NULL) && (StmtProc != PR_INCLUDE) ) {
+    if( !scan_error
+      && (StmtProc != PR_KW_NONE)
+      && (StmtProc != PR_INCLUDE) ) {
         SgmtSw |= SG_STMT_PROCESSED;
     }
     FiniStatement();
@@ -243,13 +255,13 @@ void Recurse( void )
     GetStmtType();
     SetCtrlFlgs();
     if( CtrlFlgOn( CF_NOT_SIMPLE_STMT ) ) { // controls recursion
-        StmtPtrErr( ST_NOT_ALLOWED, StmtKeywords[ proc ] );
+        StmtPtrErr( ST_NOT_ALLOWED, StmtKeywords[proc] );
     } else {
         ProcStmt();
         ClearRem();
         TDStmtFini();
         if( CtrlFlgOn( CF_NOT_SIMPLE_STMT | CF_NOT_EXECUTABLE ) ) {
-            StmtPtrErr( ST_NOT_ALLOWED, StmtKeywords[ proc ] );
+            StmtPtrErr( ST_NOT_ALLOWED, StmtKeywords[proc] );
         }
     }
     StmtProc = proc;
@@ -275,36 +287,44 @@ static void GetStmtType( void )
     OPR         opr;
 
     curr_opnd = CITNode->opnd;
-    if( CITNode->opn.ds != DSOPN_NAM ) {
+    if( !RecNameOpn() ) {
         Error( ST_WANT_NAME );
-        StmtProc = PR_NULL;
-    } else if( ( *curr_opnd == 'D' ) && ( *(curr_opnd + 1) == 'O' ) &&
-               (StmtSw & (SS_EQ_THEN_COMMA | SS_COMMA_THEN_EQ)) ) {
+        StmtProc = PR_KW_NONE;
+    } else if( ( curr_opnd[0] == 'D' )
+      && ( curr_opnd[1] == 'O' )
+      && (StmtSw & (SS_EQ_THEN_COMMA | SS_COMMA_THEN_EQ)) ) {
         StmtProc = PR_DO;
         RemKeyword( CITNode, 2 );
-    } else if( ( *curr_opnd == 'I' ) && ( *(curr_opnd+1) == 'F' ) &&
-               ( CITNode->link->opr == OPR_LBR ) && ( SPtr1 != NULL ) &&
-               ( ( SPtr1->opn.ds == DSOPN_NAM ) || ( SPtr1->opn.ds == DSOPN_INT ) ) ) {
+    } else if( ( curr_opnd[0] == 'I' )
+      && ( curr_opnd[1] == 'F' )
+      && RecNextOpr( OPR_LBR )
+      && ( SPtr1 != NULL )
+      && ( ( SPtr1->opn.ds == DSOPN_NAM )
+      || ( SPtr1->opn.ds == DSOPN_INT ) ) ) {
         if( SPtr1->opn.ds == DSOPN_INT ) {
             StmtProc = PR_ARIF;
         } else {
             StmtProc = PR_IF;
         }
         RemKeyword( CITNode, 2 );
-    } else if( ( (StmtSw & SS_COMMA_THEN_EQ) == 0 ) && (StmtSw & SS_EQUALS_FOUND) ) {
+    } else if( ( (StmtSw & SS_COMMA_THEN_EQ) == 0 )
+      && (StmtSw & SS_EQUALS_FOUND) ) {
         StmtProc = PR_ASNMNT;
-        if( RecName() && RecNextOpr( OPR_LBR ) ) {
+        if( RecNameOpn()
+          && RecNextOpr( OPR_LBR ) ) {
             if( SPtr1->opn.ds != DSOPN_PHI ) {
                 DefStmtType();
             } else {
                 opr = SPtr1->link->opr;
-                if( opr != OPR_LBR && opr != OPR_DPT && opr != OPR_FLD ) {
+                if( opr != OPR_LBR
+                  && opr != OPR_DPT
+                  && opr != OPR_FLD ) {
                     if( opr != OPR_EQU ) {
                         DefStmtType();
                     } else {
                         LkSym();
-                        if( !BitOn( SY_USAGE | SY_SUB_PARM ) &&
-                            !CharSubString() ) {
+                        if( !BitOn( SY_USAGE | SY_SUB_PARM )
+                          && !CharSubString() ) {
                             StmtProc = PR_STMTFUNC;
                         }
                     }
@@ -319,14 +339,14 @@ static void GetStmtType( void )
 
 static void SetCtrlFlgs( void )
 {
-    CtrlFlgs = CFTable[ StmtProc ];
+    CtrlFlgs = CFTable[StmtProc];
 }
 
 static void DefStmtType( void )
 {
     StmtProc = RecStmtKW();      // look up keyword, strip off if found
-    if( StmtProc != 0 ) {
-        RemKeyword( CITNode, strlen( StmtKeywords[ StmtProc ] ) );
+    if( StmtProc != PR_KW_NONE ) {
+        RemKeyword( CITNode, strlen( StmtKeywords[StmtProc] ) );
     }
 }
 
@@ -335,7 +355,7 @@ static void RemCheck( void )
 // Check for errors or warnings concerning the dependencies
 // of this statement on the last one. eg. READ before ATEND.
 
-    if( StmtProc == PR_ATEND) {
+    if( StmtProc == PR_ATEND ) {
         if( Remember.read ) {
             if( Remember.end_equals ) {
                 Error( SP_ATEND_AND_ENDEQUALS );
@@ -344,12 +364,15 @@ static void RemCheck( void )
             Error( SP_READ_NO_ATEND );
         }
     }
-    if( Remember.transfer && ( StmtNo == 0 ) &&
-        !CtrlFlgOn( CF_BAD_BRANCH_OBJECT | CF_IMPLICIT_LABEL ) &&
-        ( !Remember.stop_or_return || ( StmtProc != PR_END ) ) ) {
+    if( Remember.transfer
+      && ( StmtNo == 0 )
+      && !CtrlFlgOn( CF_BAD_BRANCH_OBJECT | CF_IMPLICIT_LABEL )
+      && ( !Remember.stop_or_return
+      || ( StmtProc != PR_END ) ) ) {
         Warning( ST_NO_EXEC );
     }
-    if( Remember.slct && ( StmtProc != PR_CASE ) ) {
+    if( Remember.slct
+      && ( StmtProc != PR_CASE ) ) {
         Error( SP_SELECT_THEN_CASE );
     }
 }
@@ -370,31 +393,40 @@ void ClearRem( void )
 static void CheckOrder( void )
 {
     AError = false;
-    if( (StmtProc == PR_IMP) && (SgmtSw & SG_NO_MORE_IMPLICIT) ) {
+    if( (StmtProc == PR_IMP)
+      && (SgmtSw & SG_NO_MORE_IMPLICIT) ) {
         Error( ST_IMPLICIT_LATE );
-    } else if( CtrlFlgOn( CF_SPECIFICATION ) && (SgmtSw & SG_NO_MORE_SPECS) ) {
+    } else if( CtrlFlgOn( CF_SPECIFICATION )
+      && (SgmtSw & SG_NO_MORE_SPECS) ) {
         // ENTRY and DATA statements are special specification statements
-        if( (StmtProc != PR_ENTRY) && (StmtProc != PR_DATA) ) {
+        if( (StmtProc != PR_ENTRY)
+          && (StmtProc != PR_DATA) ) {
             Error( ST_SPEC_LATE );
         }
-    } else if( CtrlFlgOn( CF_SPECIFICATION ) && (SgmtSw & SG_SEEN_DATA) ) {
-        if( ( StmtProc != PR_DATA ) && (ExtnSw & XS_DATA_STMT_ORDER) == 0 ) {
+    } else if( CtrlFlgOn( CF_SPECIFICATION )
+      && (SgmtSw & SG_SEEN_DATA) ) {
+        if( ( StmtProc != PR_DATA )
+          && (ExtnSw & XS_DATA_STMT_ORDER) == 0 ) {
             Extension( ST_DATA_TOO_EARLY );
             ExtnSw |= XS_DATA_STMT_ORDER;
         }
-    } else if( (StmtProc == PR_STMTFUNC) && (SgmtSw & SG_NO_MORE_SF) ) {
+    } else if( (StmtProc == PR_STMTFUNC)
+      && (SgmtSw & SG_NO_MORE_SF) ) {
         Error( ST_ASF_LATE );
         AError = false; // so we still process statement function
     }
-    if( !CtrlFlgOn( CF_SUBPROGRAM ) && (StmtProc != PR_FMT) &&
-        (StmtProc != PR_INCLUDE) && (StmtProc != PR_ENTRY) &&
-        (StmtProc != PR_PARM) && (StmtProc != PR_DATA) &&
-        (StmtProc != PR_IMP) ) {
+    if( !CtrlFlgOn( CF_SUBPROGRAM )
+      && (StmtProc != PR_FMT)
+      && (StmtProc != PR_INCLUDE)
+      && (StmtProc != PR_ENTRY)
+      && (StmtProc != PR_PARM)
+      && (StmtProc != PR_DATA)
+      && (StmtProc != PR_IMP) ) {
         SgmtSw |= SG_NO_MORE_IMPLICIT;
         if( !CtrlFlgOn( CF_SPECIFICATION ) ) {
             SgmtSw |= SG_NO_MORE_SPECS;
             if( SgmtSw & SG_DEFINING_STRUCTURE ) {
-                Error( SP_UNFINISHED, StmtKeywords[ PR_STRUCTURE ] );
+                Error( SP_UNFINISHED, StmtKeywords[PR_STRUCTURE] );
                 SgmtSw &= ~SG_DEFINING_STRUCTURE;
                 AError = false; // so we still process the statement
             }
@@ -428,13 +460,13 @@ static void CheckDoEnd( void )
 {
     csnode      *cs_node;
 
-    for(;;) {
+    for( ;; ) {
         if( CSHead->typ == CS_DO ) {
-            if( CSHead->cs_info.do_parms->do_term != StmtNo ) {
+            if( CSHead->cs_info.do_parms->term_stmt_no != StmtNo ) {
                 break;
             }
         } else if( CSHead->typ == CS_DO_WHILE ) {
-            if( CSHead->cs_info.do_term != StmtNo ) {
+            if( CSHead->cs_info.term_stmt_no != StmtNo ) {
                 break;
             }
         } else {
@@ -444,11 +476,11 @@ static void CheckDoEnd( void )
     }
     for( cs_node = CSHead; cs_node != NULL; cs_node = cs_node->link ) {
         if( cs_node->typ == CS_DO ) {
-            if( cs_node->cs_info.do_parms->do_term == StmtNo ) {
+            if( cs_node->cs_info.do_parms->term_stmt_no == StmtNo ) {
                 Error( DO_NESTING_BAD );
             }
         } else if( cs_node->typ == CS_DO_WHILE ) {
-            if( cs_node->cs_info.do_term == StmtNo ) {
+            if( cs_node->cs_info.term_stmt_no == StmtNo ) {
                 Error( DO_NESTING_BAD );
             }
         }
@@ -458,7 +490,8 @@ static void CheckDoEnd( void )
 
 static void FiniDo( void )
 {
-    if( ( StmtProc != 0 ) && CtrlFlgOn( CF_BAD_DO_ENDING ) ) {
+    if( ( StmtProc != PR_KW_NONE )
+      && CtrlFlgOn( CF_BAD_DO_ENDING ) ) {
         StmtErr( DO_ENDING_BAD );
     }
     if( CSHead->typ == CS_DO ) {
@@ -494,7 +527,7 @@ void RemKeyword( itnode *itptr, size_t remove_len )
         itptr->opnd_size -= remove_len;
         curr_char = itptr->opnd;
         curr_size = itptr->opnd_size;
-        for(;;) {
+        for( ;; ) {
             if( curr_char == itptr->opnd + curr_size )
                 break;
             if( isdigit( *curr_char ) == 0 )

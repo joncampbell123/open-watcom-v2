@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -38,7 +38,6 @@
 /****************************************************************************/
 /* macro definitions                                                        */
 /****************************************************************************/
-#define DEF_MEMFLAGS (MEMFLAG_MOVEABLE | MEMFLAG_PURE)
 
 /****************************************************************************/
 /* external function prototypes                                             */
@@ -164,7 +163,7 @@ bool WRAPI WRCreateCursorResHeader( RESCURSORHEADER **rch, size_t *rchsize, char
     if( ok ) {
         *rchsize = sizeof( RESCURSORHEADER );
         *rchsize += sizeof( RESCURSORDIRENTRY ) * (ih->idCount - 1);
-        *rch = (RESCURSORHEADER *)MemAlloc( *rchsize );
+        *rch = MemAlloc( *rchsize );
         ok = (*rch != NULL);
     }
 
@@ -210,7 +209,7 @@ bool WRAPI WRCreateIconResHeader( RESICONHEADER **rih, size_t *rihsize, char *da
     if( ok ) {
         *rihsize = sizeof( RESICONHEADER );
         *rihsize += sizeof( RESICONDIRENTRY ) * (ih->idCount - 1);
-        *rih = (RESICONHEADER *)MemAlloc( *rihsize );
+        *rih = MemAlloc( *rihsize );
         ok = (*rih != NULL);
     }
 
@@ -299,7 +298,7 @@ bool WRAPI WRGetAndAddCursorImage( char *data, WResDir dir, CURSORDIRENTRY *cd, 
     }
 
     if( ok ) {
-        ok = !WResAddResource( tname, rname, DEF_MEMFLAGS, 0, size, dir, &lang, &dup );
+        ok = !WResAddResource( tname, rname, DEFAULT_FLAGS_MP, 0, size, dir, &lang, &dup );
     }
 
     if( ok ) {
@@ -357,8 +356,7 @@ bool WRAPI WRGetAndAddIconImage( char *data, WResDir dir, ICONDIRENTRY *id, uint
     }
 
     if( ok ) {
-        ok = !WResAddResource( tname, rname, DEF_MEMFLAGS, 0,
-                               id->dwBytesInRes, dir, &lang, &dup );
+        ok = !WResAddResource( tname, rname, DEFAULT_FLAGS_MP, 0, id->dwBytesInRes, dir, &lang, &dup );
     }
 
     if( ok ) {

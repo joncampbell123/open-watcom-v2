@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -54,22 +54,32 @@
 #if defined(__UNIX__)
  #define C_PATH         "../c/"
  #define H_PATH         "../h/"
- #define OBJ_EXT        "o"
+ #define FEXT_OBJ       "o"
 #else
  #define C_PATH         "..\\c\\"
  #define H_PATH         "..\\h\\"
- #define OBJ_EXT        "obj"
+ #define FEXT_OBJ       "obj"
 #endif
-#define DEF_EXT         "def"
-#define ERR_EXT         "err"
-#define MBR_EXT         "mbr"
-#define C_EXT           "c"
-#define CPP_EXT         "i"
-#define DEP_EXT         "d"
+#define FEXT_DEF        "def"
+#define FEXT_ERR        "err"
+#define FEXT_MBR        "mbr"
+#define FEXT_C          "c"
+#define FEXT_CPP        "i"
+#define FEXT_DEP        "d"
+
+#ifdef __UNIX__
+#define NULLDEV         "/dev/null"
+#else
+#define NULLDEV         "NUL"
+#endif
+
+#define STDIN_NAME      "stdin"
+#define NULLDEV_NAME    "nulldev"
 
 bool    PrintWhiteSpace;     // also refered from cmac2.c
 
 static  bool    IsStdIn;
+static  bool    IsNullDev;
 static  char    *FNameBuf = NULL;
 
 void FrontEndInit( bool reuse )
@@ -100,6 +110,7 @@ static void initGlobals( void )
 {
     InitStats();
     IsStdIn = false;
+    IsNullDev = false;
     FNames = NULL;
     RDirNames = NULL;
     IAliasNames = NULL;
@@ -242,7 +253,7 @@ static void DumpDepFile( void )
     if( DepFile != NULL ) {
         curr = NextDependency( NULL );
         if( curr != NULL ) {
-            fprintf( DepFile, "%s :", ForceSlash( createFileName( DependTarget, OBJ_EXT, false ), DependForceSlash ) );
+            fprintf( DepFile, "%s :", ForceSlash( createFileName( DependTarget, FEXT_OBJ, false ), DependForceSlash ) );
             fprintf( DepFile, " %s", ForceSlash( GetSourceDepName(), DependForceSlash ) );
             for( curr = NextDependency( curr ); curr != NULL; curr = NextDependency( curr ) ) {
                 fprintf( DepFile, " %s", ForceSlash( curr->name, DependForceSlash ) );
@@ -331,8 +342,6 @@ static bool openForcePreInclude( void )
 }
 
 
-#define STDIN_NAME      "stdin"
-
 static void MakePgmName( void )
 /******************************
  * open the primary source file, and return pointer to root file name
@@ -348,19 +357,27 @@ static void MakePgmName( void )
      */
     if( WholeFName[0] == '.' && WholeFName[1] == '\0' ) {
         IsStdIn = true;
+        IsNullDev = false;
         CMemFree( WholeFName );
         WholeFName = CMemAlloc( sizeof( STDIN_NAME ) );
         strcpy( WholeFName, STDIN_NAME );
+        pg.fname = WholeFName;
+    } else if( FNAMECMPSTR( WholeFName, NULLDEV ) == 0 ) {
+        IsNullDev = true;
+        IsStdIn = false;
+        CMemFree( WholeFName );
+        WholeFName = CMemAlloc( sizeof( NULLDEV_NAME ) );
+        strcpy( WholeFName, NULLDEV_NAME );
         pg.fname = WholeFName;
     } else {
         _splitpath2( WholeFName, pg.buffer, &pg.drive, &pg.dir, &pg.fname, &pg.ext );
         if( pg.ext[0] == '\0' ) { // no extension
             len = strlen( WholeFName );
-            WholeFName = CMemRealloc( WholeFName, len + 1 + ( sizeof( C_EXT ) - 1 ) + 1 );
-            strcat( WholeFName + len, "." C_EXT );
+            WholeFName = CMemRealloc( WholeFName, len + 1 + ( sizeof( FEXT_C ) - 1 ) + 1 );
+            strcat( WholeFName + len, "." FEXT_C );
         }
     }
-    SrcFName = CMemStrDup( pg.fname );
+    SrcFName = CMemStrdup( pg.fname );
 }
 
 static void CantOpenFile( const char *name )
@@ -493,24 +510,24 @@ char *GetSourceDepName( void )
 
 char *ObjFileName( void )
 {
-    return( createFileName( ObjectFileName, OBJ_EXT, false ) );
+    return( createFileName( ObjectFileName, FEXT_OBJ, false ) );
 }
 
 char *CppFileName( void )
 {
-    return( createFileName( ObjectFileName, CPP_EXT, false ) );
+    return( createFileName( ObjectFileName, FEXT_CPP, false ) );
 }
 
 char *DepFileName( void )
 {
-    return( createFileName( DependFileName, DEP_EXT, false ) );
+    return( createFileName( DependFileName, FEXT_DEP, false ) );
 }
 
 char *ErrFileName( void )
 {
     if( ErrorFileName == NULL )
         return( NULL );
-    return( createFileName( ErrorFileName, ERR_EXT, false ) );
+    return( createFileName( ErrorFileName, FEXT_ERR, false ) );
 }
 
 void CppPrtChar( int c )
@@ -527,7 +544,7 @@ void OpenDefFile( void )
 
     if( DefFName == NULL ) {
         _splitpath2( SrcFName, pg.buffer, NULL, NULL, &pg.fname, NULL );
-        _makepath( name, NULL, NULL, pg.fname, DEF_EXT );
+        _makepath( name, NULL, NULL, pg.fname, FEXT_DEF );
         DefFile = fopen( name, "w" );
     } else {
         DefFile = fopen( DefFName, "w" );
@@ -544,10 +561,10 @@ FILE *OpenBrowseFile( void )
     FILE        *mbr_file;
 
     if( CompFlags.cpp_output_to_file ) {
-        strcpy( name, createFileName( ObjectFileName, MBR_EXT, true ) );
+        strcpy( name, createFileName( ObjectFileName, FEXT_MBR, true ) );
     } else {
         _splitpath2( SrcFName, pg.buffer, NULL, NULL, &pg.fname, NULL );
-        _makepath( name, NULL, NULL, pg.fname, MBR_EXT );
+        _makepath( name, NULL, NULL, pg.fname, FEXT_MBR );
     }
     mbr_file = fopen( name, "wb" );
     if( mbr_file == NULL ) {
@@ -741,7 +758,7 @@ char *FNameFullPath( FNAMEPTR flist )
     if( flist->fullpath == NULL ) {
         fullpath = SrcFullPath( flist->name, fullbuff, sizeof( fullbuff ) );
         if( fullpath != NULL ) {
-            fullpath = CMemStrDup( fullpath );
+            fullpath = CMemStrdup( fullpath );
             flist->fullpath = fullpath;
         } else {
             fullpath = flist->name;
@@ -918,19 +935,32 @@ static void ParseInit( void )
     SegInit();
     force = FEGetEnv( "FORCE" );
     if( force != NULL ) {
-        ForceInclude = CMemStrDup( force );
+        ForceInclude = CMemStrdup( force );
     }
-    ForcePreInclude = CMemStrDup( "_preincl.h" );
+    ForcePreInclude = CMemStrdup( "_preincl.h" );
 }
 
 static bool OpenPgmFile( void )
 {
     if( IsStdIn ) {
-        if( OpenFCB( stdin, "stdin", FT_SRC ) ) {
+        if( OpenFCB( stdin, STDIN_NAME, FT_SRC ) ) {
             if( CompFlags.cpp_mode ) {
                 if( CppFile == NULL )
                     OpenCppFile();
-                CppEmitPoundLine( 1, "stdin", true );
+                CppEmitPoundLine( 1, STDIN_NAME, true );
+                CppFirstChar = true;
+            }
+            MainSrcFile = SrcFiles;
+            return( true );
+        }
+        return( false );
+    }
+    if( IsNullDev ) {
+        if( OpenFCB( NULL, NULLDEV_NAME, FT_SRC ) ) {
+            if( CompFlags.cpp_mode ) {
+                if( CppFile == NULL )
+                    OpenCppFile();
+                CppEmitPoundLine( 1, NULLDEV_NAME, true );
                 CppFirstChar = true;
             }
             MainSrcFile = SrcFiles;
@@ -1020,66 +1050,71 @@ static void DoCCompile( char **cmdline )
     }
     ParseInit();
     if( ParseCmdLine( cmdline ) ) {
-        if( WholeFName == NULL ) {
+        if( CompFlags.cpp_dump_macros ) {
+            if( CppFile == NULL )
+                OpenCppFile();
+            DumpAllMacros();
+            MacroFini();
+        } else if( WholeFName == NULL ) {
             CErr1( ERR_FILENAME_REQUIRED );
             return;
-        }
-        MakePgmName();
-        DelErrFile();               /* delete old error file */
-        CPragmaInit();              /* memory model is known now */
+        } else {
+            MakePgmName();
+            DelErrFile();               /* delete old error file */
+            CPragmaInit();              /* memory model is known now */
 #if _CPU == 370
-        ParseAuxFile();
+            ParseAuxFile();
 #endif
-        if( CompFlags.cpp_mode ) {
-            PrintWhiteSpace = true;
-            if( ForcePreInclude != NULL ) {
-                if( CppFile == NULL )
-                    OpenCppFile();
-                CompFlags.cpp_output = false;
-                if( openForcePreInclude() ) {
-                    CurToken = T_NULL;
-                    while( CurToken != T_EOF ) {
-                        CurToken = GetNextToken();
+            if( CompFlags.cpp_mode ) {
+                PrintWhiteSpace = true;
+                if( ForcePreInclude != NULL ) {
+                    if( CppFile == NULL )
+                        OpenCppFile();
+                    CompFlags.cpp_output = false;
+                    if( openForcePreInclude() ) {
+                        CurToken = T_NULL;
+                        while( CurToken != T_EOF ) {
+                            CurToken = GetNextToken();
+                        }
                     }
+                    CompFlags.cpp_output = true;
                 }
-                CompFlags.cpp_output = true;
-            }
-            OpenPgmFile();
-            CPP_Parse();
-            if( !CompFlags.quiet_mode ) {
-                PrintStats();
-            }
-            if( CompFlags.warnings_cause_bad_exit ) {
-                ErrCount += WngCount;
-            }
-        } else {
-            OpenPgmFile();
-            MacroAddComp(); // Add any compile time only macros
-            Parse();
-            if( !CompFlags.quiet_mode ) {
-                PrintStats();
-            }
-            if( CompFlags.warnings_cause_bad_exit ) {
-                ErrCount += WngCount;
-            }
-            if( ( ErrCount == 0 ) && ( !CompFlags.check_syntax ) ) {
-                if( CompFlags.emit_browser_info ) {
-                    DwarfBrowseEmit();
+                OpenPgmFile();
+                CPP_Parse();
+                if( !CompFlags.quiet_mode ) {
+                    PrintStats();
                 }
-                FreeMacroSegments();
-                DoCompile();
+                if( CompFlags.warnings_cause_bad_exit ) {
+                    ErrCount += WngCount;
+                }
             } else {
-                FreeMacroSegments();
+                OpenPgmFile();
+                MacroAddComp(); // Add any compile time only macros
+                Parse();
+                if( !CompFlags.quiet_mode ) {
+                    PrintStats();
+                }
+                if( CompFlags.warnings_cause_bad_exit ) {
+                    ErrCount += WngCount;
+                }
+                if( ( ErrCount == 0 ) && ( !CompFlags.check_syntax ) ) {
+                    if( CompFlags.emit_browser_info ) {
+                        DwarfBrowseEmit();
+                    }
+                    FreeMacroSegments();
+                    DoCompile();
+                } else {
+                    FreeMacroSegments();
+                }
             }
+            if( ErrCount == 0 ) {
+                DumpDepFile();
+            } else {
+                DelDepFile();
+            }
+            SymFini();
+            CPragmaFini();
         }
-        if( ErrCount == 0 ) {
-            DumpDepFile();
-        } else {
-            DelDepFile();
-        }
-
-        SymFini();
-        CPragmaFini();
     } else {
         ErrCount = 1;
     }
@@ -1340,13 +1375,13 @@ void CppPrtToken( TOKEN token )
             break;
         case T_WHITE_SPACE:
             if( PrintWhiteSpace || CompFlags.in_pragma ) {
-                CppPuts( Tokens[token] );
+                CppPuts( TokenString[token] );
             } else {
                 PrintWhiteSpace = true; //Toggle
             }
             break;
         default:
-            CppPuts( Tokens[token] );
+            CppPuts( TokenString[token] );
         }
     }
 }

@@ -32,6 +32,7 @@
 
 
 #include "variety.h"
+#include "seterrno.h"
 #include <stddef.h>
 #if defined(__OS2__)
     #define INCL_DOSMEMMGR
@@ -41,13 +42,12 @@
 #elif defined( __DOS__ ) || defined( __WINDOWS__ )
     #include "tinyio.h"
 #endif
-#include "rterrno.h"
 #include "iomode.h"
 #include "rtcheck.h"
-#include "seterrno.h"
 #include "defwin.h"
 #include "qread.h"
 #include "thread.h"
+
 
 #ifdef __WINDOWS_386__
 

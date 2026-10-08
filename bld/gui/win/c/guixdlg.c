@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -83,9 +83,9 @@ void GUIAPI GUISetJapanese( void )
         FontPointSize = 10;
   #endif
         if( Font != NULL ) {
-            GUIMemFree( Font );
+            MemFree( Font );
         }
-        Font = GUIStrDup( newfont );
+        Font = MemStrdup( newfont );
     }
 #endif
 }
@@ -112,7 +112,7 @@ void GUIInitControl( control_item *item, gui_window *wnd, gui_ctl_id *focus_id )
     case GUI_CHECK_BOX:
     case GUI_RADIO_BUTTON:
         if( item->checked ) {
-            GUISendMessage( ctrl, BM_SETCHECK, (WPI_PARAM1)true, (WPI_PARAM2)0 );
+            GUISendMessage( ctrl, BM_SETCHECK, (WPI_PARAM1)true, 0 );
         }
         break;
     case GUI_EDIT_COMBOBOX:
@@ -185,13 +185,13 @@ bool GUIProcessControlNotification( gui_ctl_id id, int wNotify, gui_window *wnd 
                     GUICheckRadioButton( wnd, id );
                 } else {
                     cntl = _wpi_getdlgitem( wnd->hwnd, id );
-                    check = (unsigned)GUISendMessage( cntl, BM_GETCHECK, (WPI_PARAM1)0, (WPI_PARAM2)0 );
+                    check = (unsigned)GUISendMessage( cntl, BM_GETCHECK, 0, 0 );
                     if( check & BST_CHECKED ) {
                         check &= ~BST_CHECKED;
                     } else {
                         check |= BST_CHECKED;
                     }
-                    GUISendMessage( cntl, BM_SETCHECK, (WPI_PARAM1)check, (WPI_PARAM2)0 );
+                    GUISendMessage( cntl, BM_SETCHECK, (WPI_PARAM1)check, 0 );
                 }
             }
             /* fall through */
@@ -714,7 +714,7 @@ bool GUIXCreateDialog( gui_create_info *dlg_info, gui_window *wnd,
 
 void GUIAPI GUICloseDialog( gui_window * wnd )
 {
-    GUISendMessage( wnd->hwnd, WM_CLOSE, (WPI_PARAM1)0, (WPI_PARAM2)0 );
+    GUISendMessage( wnd->hwnd, WM_CLOSE, 0, 0 );
 }
 
 /****************************************************************************/
@@ -771,7 +771,7 @@ WPI_DLGRESULT CALLBACK GUIInitDialogFuncDlgProc( HWND hwnd, WPI_MSG message, WPI
 void GUIFiniDialog( void )
 {
     if( Font != NULL ) {
-        GUIMemFree( Font );
+        MemFree( Font );
         Font = NULL;
     }
 }
@@ -786,9 +786,9 @@ void GUIInitDialog( void )
 
     font_set = false;
 #ifdef __OS2_PM__
-    Font = GUIStrDup( LIT_GUI( OS2_Dialog_Font ) );
+    Font = MemStrdup( LIT_GUI( OS2_Dialog_Font ) );
 #else
-    Font = GUIStrDup( LIT_GUI( Windows_Dialog_Font ) );
+    Font = MemStrdup( LIT_GUI( Windows_Dialog_Font ) );
 #endif
     if( Font ) {
         cp = strrchr( Font, '.' );
@@ -803,9 +803,9 @@ void GUIInitDialog( void )
     if( !font_set ) {
         FontPointSize = 0;
         if( Font != NULL ) {
-            GUIMemFree( Font );
+            MemFree( Font );
         }
-        Font = GUIStrDup( "" );
+        Font = MemStrdup( "" );
     }
 
     // create a dialog of known dialog units and use the resulting

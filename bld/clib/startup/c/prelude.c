@@ -25,7 +25,7 @@
 *
 *  ========================================================================
 *
-* Description:  Prelude code for NetWare executables.
+* Description:  Prelude code for NetWare executables and shared libraries.
 *
 ****************************************************************************/
 
@@ -54,6 +54,7 @@
 #include "trdlstac.h"
 #include "wprelude.h"
 #include "getds.h"
+#include "xmain.h"
 
 
 #define MAX_CMDLINE     500
@@ -74,8 +75,6 @@ extern unsigned short __DS( void );
     extern void     *GetNLMHandle( void );
 #endif
 
-extern int                  main( int argc, char **argv );
-
 extern void                 __Must_Have_Three_One_Or_Greater( void );
 extern int                  _TerminateNLM( void *, void *, int );
 extern int                  _SetupArgv( int (*)( int, char ** ) );
@@ -87,7 +86,7 @@ extern long                 _StartNLM( void *, void *, unsigned char *,
 extern int                  _edata;
 extern int                  _end;
 
-#if !defined(_THIN_LIB)
+#if !defined( _THIN_LIB )
 int                         __ReturnCode = 5; /* TERM_BY_UNLOAD */
 int                         _argc;
 char                        **_argv;
@@ -95,43 +94,41 @@ char                        **_argv;
 
 long AllocRTag;
 
-static void                 InitStackLow( void );
-
-#if !defined(_THIN_LIB)
+#if !defined( _THIN_LIB )
 static void                 *NCSp;
 static char                 CommandLine[ MAX_CMDLINE ];
 #endif
 static unsigned short       _saved_DS;
 static int                  InitFiniLevel = 0;
 
-static void __NullSema4Rtn(semaphore_object *p) { p = p; }
+static void _INTERNAL __NullSema4Rtn( semaphore_object *p ) { (void)p; }
 
-#if !defined (_THIN_LIB)
-static void __NullAccessRtn( int hdl ) { hdl = hdl; }
+#if !defined( _THIN_LIB )
+static void _INTERNAL __NullAccessRtn( int hdl ) { hdl = hdl; }
 #endif
 
-static void __NullRtn( void ) {}
+static void _INTERNAL __NullRtn( void ) {}
 
-#if !defined(_THIN_LIB)
-void    (*_AccessFileH)( int ) = &__NullAccessRtn;
-void    (*_ReleaseFileH)( int ) = &__NullAccessRtn;
-void    (*_AccessIOB)( void ) = &__NullRtn;
-void    (*_ReleaseIOB)( void ) = &__NullRtn;
+#if !defined( _THIN_LIB )
+void    _INTERNAL (*_AccessFileH)( int ) = __NullAccessRtn;
+void    _INTERNAL (*_ReleaseFileH)( int ) = __NullAccessRtn;
+void    _INTERNAL (*_AccessIOB)( void ) = __NullRtn;
+void    _INTERNAL (*_ReleaseIOB)( void ) = __NullRtn;
 #endif
-void    (*_AccessTDList)( void ) = &__NullRtn;
-void    (*_ReleaseTDList)( void ) = &__NullRtn;
+void    _INTERNAL (*_AccessTDList)( void ) = __NullRtn;
+void    _INTERNAL (*_ReleaseTDList)( void ) = __NullRtn;
 
-static void __FiniMultipleThread(void)
+static void _WCNEAR __FiniMultipleThread( void )
 {
-    #if !defined(_THIN_LIB)
-    _AccessFileH   = &__NullAccessRtn;
-    _ReleaseFileH  = &__NullAccessRtn;
-    _AccessIOB     = &__NullRtn;
-    _ReleaseIOB    = &__NullRtn;
-    #endif
-    __AccessSema4  = &__NullSema4Rtn;
-    __ReleaseSema4 = &__NullSema4Rtn;
-    __CloseSema4   = &__NullSema4Rtn;
+#if !defined( _THIN_LIB )
+    _AccessFileH   = __NullAccessRtn;
+    _ReleaseFileH  = __NullAccessRtn;
+    _AccessIOB     = __NullRtn;
+    _ReleaseIOB    = __NullRtn;
+#endif
+    __AccessSema4  = __NullSema4Rtn;
+    __ReleaseSema4 = __NullSema4Rtn;
+    __CloseSema4   = __NullSema4Rtn;
 } /* FiniMultipleThread() */
 
 
@@ -184,7 +181,7 @@ void _NW_free( void *chunk )
 }
 
 #if !defined (_THIN_LIB)
-static int pre_main( int argc, char **argv )
+static int _WCNEAR pre_main( int argc, char **argv )
 {
     _argc = argc;
     _argv = argv;
@@ -197,7 +194,7 @@ static int pre_main( int argc, char **argv )
 }
 #endif
 
-static void MyExitRtn( void )
+static void _WCNEAR MyExitRtn( void )
 {
     __FiniMultipleThread();
     __FiniRtns( 0, InitFiniLevel );
@@ -207,7 +204,7 @@ static void MyExitRtn( void )
 #endif
 }
 
-#if defined (_THIN_LIB)
+#if defined( _THIN_LIB )
 
 int __init_environment(void *  reserved)
 {
@@ -244,10 +241,65 @@ int     __deinit_environment(void * reserved)
     return 0;
 }
 
-#endif
+#if defined( _THIN_LIB_DLL )
+
+/*
+ * DLL prelude for shared library NLMs (netware_clib_lite_dll).
+ * Bypasses _StartNLM (no console screen) and does not call main().
+ * A keep-alive thread blocks on a semaphore so the NLM stays resident.
+ */
+
+static long     _stop_sema;
+
+static void __keepalive_thread( void *arg )
+{
+    (void)arg;
+    WaitOnLocalSemaphore( _stop_sema );
+}
+
+long _Prelude( void *NLMHandle, void *initializationErrorScreenID,
+                      unsigned char *cmdLineP,
+                      unsigned char *loadDirectoryPath,
+                      long uninitializedDataLength, long NLMfileHandle,
+                      long __cdecl ( *readRoutineP )(), long customDataOffset,
+                      long customDataSize )
+{
+    (void)initializationErrorScreenID; (void)cmdLineP;
+    (void)loadDirectoryPath; (void)uninitializedDataLength;
+    (void)NLMfileHandle; (void)readRoutineP;
+    (void)customDataOffset; (void)customDataSize;
+
+    memset( (void *)&_edata, 0, (size_t)&_end - (size_t)&_edata );
+    if( __init_environment( NULL ) != 0 ) {
+        return( -1 );
+    }
+    _stop_sema = OpenLocalSemaphore( 0 );
+    BeginThread( __keepalive_thread, NULL, 16384, NULL );
+    return( 0 );
+}
+
+void _Stop( void )
+{
+    if( _stop_sema != 0 ) {
+        SignalLocalSemaphore( _stop_sema );
+        CloseLocalSemaphore( _stop_sema );
+    }
+    __deinit_environment( NULL );
+}
+
+#endif /* _THIN_LIB_DLL */
+
+#endif /* _THIN_LIB */
 
 
 #if !defined(_THIN_LIB)
+
+static void _WCNEAR InitStackLow( void )
+{
+    #undef _STACKLOW
+    _STACKLOW = (unsigned)&_end;
+}
+
 int _cstart_( void )
 {
     int         retcode;
@@ -271,12 +323,6 @@ int _cstart_( void )
     ExitThread( 0, retcode );
     // never return
     return( 0 );
-}
-
-static void InitStackLow( void )
-{
-    #undef _STACKLOW
-    _STACKLOW = (unsigned)&_end;
 }
 
 long _Prelude( void *NLMHandle, void *initializationErrorScreenID,
@@ -322,7 +368,7 @@ void __VersionEnforcement( void )
 }
 #endif
 
-_WCNORETURN void _WCNEAR __exit( int rc )
+_WCNORETURN void _INTERNAL __exit( int rc )
 {
     __FiniRtns( 0, InitFiniLevel );
     /*

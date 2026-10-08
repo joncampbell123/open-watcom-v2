@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -63,7 +63,8 @@ void ObjPass2( void )
     if( FmtData.type & MK_OVERLAYS ) {
         OvlPass2();
     }
-    if( (FmtData.type & MK_OVERLAYS) && FmtData.u.dos.distribute ) {
+    if( (FmtData.type & MK_OVERLAYS)
+      && FmtData.u.dos.distribute ) {
         DistribProcMods();
     } else {
 #endif
@@ -92,7 +93,7 @@ void PModList( mod_entry *head )
 {
     mod_entry           *obj;
 
-    for( obj = head; obj != NULL; obj = obj->n.next_mod ) {
+    for( obj = head; obj != NULL; obj = obj->u.next ) {
         PModule( obj );
     }
 }
@@ -100,7 +101,7 @@ void PModList( mod_entry *head )
 void PModule( mod_entry *obj )
 /***********************************/
 {
-    if( (obj->modinfo & MOD_NEED_PASS_2) == 0 )
+    if( (obj->flags_mod & MOD_NEED_PASS_2) == 0 )
         return;
     DEBUG(( DBG_BASE, "2 : processing module %s", obj->name ));
     CurrMod = obj;
@@ -116,7 +117,8 @@ bool LoadObj( segdata *seg )
     seg_leader *leader;
 
     leader = seg->u.leader;
-    if( ( leader == NULL ) || DBISkip( leader ) )
+    if( ( leader == NULL )
+      || DBISkip( leader ) )
         return( false );
     CurrRec.seg = seg;
     if( leader->group == NULL ) {
@@ -125,7 +127,7 @@ bool LoadObj( segdata *seg )
         LnkMsg( WRN+MSG_INTERNAL, "s", "null leader group found" );
 #endif
     } else {
-        CurrRec.addr = leader->group->grp_addr;
+        CurrRec.addr = leader->group->addr;
         CurrRec.addr.off += SEG_GROUP_DELTA( leader );
     }
     CurrRec.addr.off += seg->a.delta;

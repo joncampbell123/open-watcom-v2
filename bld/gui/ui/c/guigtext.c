@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -39,54 +39,56 @@
 #include "guixutil.h"
 #include "guiutil.h"
 
+
+static char *makeEditCopy( an_edit_control *edit )
+{
+    char        *copy;
+
+    if( edit->buffer == NULL || edit->length == 0 )
+        return( NULL );
+    copy = MemAlloc( edit->length + 1 );
+    if( copy != NULL ) {
+        strncpy( copy, edit->buffer, edit->length );
+        copy[edit->length] = '\0';
+    }
+    return( copy );
+}
+
 static char *GetText( gui_window *wnd, gui_ctl_id id, int choice, bool get_curr )
 {
     VFIELD              *field;
-    an_edit_control     *edit_control;
     a_list              *list;
-    a_combo_box         *combo_box;
     char                *text;
-    bool                ok;
 
     field = GUIGetField( wnd, id );
     if( field != NULL ) {
         switch( field->typ ) {
         case FLD_CHECK:
-            text = GUIStrDupOK( field->u.check->str, &ok );
-            if( ok ) {
-                return( text );
-            }
-            break;
-
+            text = field->u.check->str;
+            if( text != NULL )
+                text = MemStrdup( text );
+            return( text );
         case FLD_RADIO:
-            text = GUIStrDupOK( field->u.radio->str, &ok );
-            if( ok ) {
-                return( text );
-            }
-            break;
-
+            text = field->u.radio->str;
+            if( text != NULL )
+                text = MemStrdup( text );
+            return( text );
         case FLD_HOT:
-            text = GUIStrDupOK( field->u.hs->str, &ok );
-            if( ok ) {
-                return( text );
-            }
-            break;
-
+            text = field->u.hs->str;
+            if( text != NULL )
+                text = MemStrdup( text );
+            return( text );
         case FLD_TEXT:
-            text = GUIStrDupOK( field->u.str, &ok );
-            if( ok ) {
-                return( text );
-            }
-            break;
+            text = field->u.str;
+            if( text != NULL )
+                text = MemStrdup( text );
+            return( text );
         case FLD_EDIT:
         case FLD_INVISIBLE_EDIT:
-            edit_control = field->u.edit;
-            return( GUIMakeEditCopy( edit_control->buffer, edit_control->length ) );
+            return( makeEditCopy( field->u.edit ) );
         case FLD_COMBOBOX:
             if( get_curr ) {
-                combo_box = field->u.combo;
-                edit_control = &combo_box->edit;
-                return( GUIMakeEditCopy( edit_control->buffer, edit_control->length ) );
+                return( makeEditCopy( &field->u.combo->edit ) );
             }
             /* fall through */
         case FLD_PULLDOWN:

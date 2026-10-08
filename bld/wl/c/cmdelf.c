@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -97,7 +97,8 @@ bool ProcELFAlignment( void )
     if( !HaveEquals( TOK_NORMAL ) )
         return( false );
     ret = getatol( &value );
-    if( ret != ST_IS_ORDINAL || value == 0 ) {
+    if( ret != ST_IS_ORDINAL
+      || value == 0 ) {
         return( false );
     }
     for( ;; ) {
@@ -138,7 +139,7 @@ static bool GetELFImport( void )
         return( true );
     }
     SET_SYM_TYPE( sym, SYM_IMPORTED );
-    sym->info |= SYM_DCE_REF;
+    sym->info |= SYM_1_DCE_REF;
     SetELFImportSymbol( sym );
     return( true );
 }
@@ -170,7 +171,7 @@ static bool GetELFExport( void )
         return( true );
     }
     SET_SYM_TYPE( sym, SYM_EXPORTED );
-    sym->info |= SYM_DCE_REF;
+    sym->info |= SYM_1_DCE_REF;
     SetELFExportSymbol( sym );
     return( true );
 }
@@ -234,8 +235,9 @@ static void ParseABIVersion( const char *message )
         return;
     FmtData.u.elf.abiversion = 0;
     retval = getatoi( &version );
-    if( retval != ST_IS_ORDINAL || version > 255 ) {
-        LnkMsg( LOC+LINE+WRN+MSG_VALUE_INCORRECT, "s", message );
+    if( retval != ST_IS_ORDINAL
+      || version > 255 ) {
+        LnkMsg( WRN+LOC+LINE+MSG_VALUE_INCORRECT, "s", message );
     } else {
         FmtData.u.elf.abiversion = version;
     }

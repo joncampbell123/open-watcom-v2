@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -64,8 +64,8 @@
  * any memory allocated for the words.  Returns -1 on error.
  */
 
-static int parse_words( const CHAR_TYPE *command, CHAR_TYPE **words )
-/*******************************************************************/
+static int _WCNEAR parse_words( const CHAR_TYPE *command, CHAR_TYPE **words )
+/***************************************************************************/
 {
     int                 numWords = 0;
     const CHAR_TYPE     *p = command;
@@ -119,8 +119,8 @@ static int parse_words( const CHAR_TYPE *command, CHAR_TYPE **words )
 
 /* Returns non-zero on success */
 
-static int spawn_it( FILE *fp, const CHAR_TYPE *command )
-/*******************************************************/
+static int _WCNEAR spawn_it( FILE *fp, const CHAR_TYPE *command )
+/***************************************************************/
 {
     int                 pid;
     int                 numWords;
@@ -144,10 +144,10 @@ static int spawn_it( FILE *fp, const CHAR_TYPE *command )
 #if defined( __OS2__ )
     words[0] = STRING( "cmd.exe" );
 #else
-    if( WIN32_IS_WIN95 ) {
-        words[0] = STRING( "command.com" ); /* 95 */
-    } else {
+    if( WIN32_IS_NT ) {
         words[0] = STRING( "cmd.exe" );     /* NT */
+    } else {
+        words[0] = STRING( "command.com" ); /* 9x */
     }
 #endif
     words[1] = STRING( "/c" );
@@ -169,9 +169,9 @@ static int spawn_it( FILE *fp, const CHAR_TYPE *command )
 
 /* Returns non-zero on success */
 
-static int connect_pipe( FILE *fp, const CHAR_TYPE *command, int *handles,
-                         bool readOrWrite, bool textOrBinary )
-/************************************************************************/
+static int _WCNEAR connect_pipe( FILE *fp, const CHAR_TYPE *command,
+                    int *handles, bool readOrWrite, bool textOrBinary )
+/*********************************************************************/
 {
 #if defined( __NT__ )
     HANDLE              osfh;

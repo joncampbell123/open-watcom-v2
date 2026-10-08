@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -65,28 +65,28 @@ void    CpCommon(void) {
     com_eq      *com_ext;
 
     sym = NULL;
-    if( RecNOpn() ) {
+    if( RecNoOpn() ) {
         AdvanceITPtr();
-        if( !RecDiv() ) {
-            if( !RecCat() ) {
+        if( !RecDivOpr() ) {
+            if( !RecCatOpr() ) {
                 Error( SX_NO_SLASH );
             }
         }
     }
     for( ;; ) {
-        if( RecDiv() ) {
-            if( ReqName( NAME_COMMON ) ) {
+        if( RecDivOpr() ) {
+            if( ReqNameOpn( NAME_COMMON ) ) {
                 com = LkCommon();
             } else {
                 com = LkBCommon();
             }
             AdvanceITPtr();
-            ReqDiv();
+            ReqDivOpr();
         } else {
             com = LkBCommon();
         }
         for( ;; ) {
-            if( ReqName( NAME_VAR_OR_ARR ) ) {
+            if( ReqNameOpn( NAME_VAR_OR_ARR ) ) {
                 sym = LkSym();
                 flags = sym->u.ns.flags;
                 CpError = false;
@@ -106,7 +106,7 @@ void    CpCommon(void) {
             }
             AdvanceITPtr();
             if( !CpError ) {
-                if( RecOpenParen() ) {
+                if( RecOpenParenOpr() ) {
                     ArrayDecl( sym );
                     if( _Allocatable( sym ) ) {
                         IllName( sym );
@@ -140,16 +140,16 @@ void    CpCommon(void) {
                     }
                 }
             }
-            if( RecComma() && RecNOpn() ) {
+            if( RecCommaOpr() && RecNoOpn() ) {
                 AdvanceITPtr();
             }
-            if( !RecComma() ) {
+            if( !RecCommaOpr() ) {
                 break;
             }
         }
-        if( !RecDiv() && !RecCat() ) {
+        if( !RecDivOpr() && !RecCatOpr() ) {
             break;
         }
     }
-    ReqEOS();
+    ReqEOSOpr();
 }

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -39,32 +39,35 @@
 #include <stdio.h>
 #include <string.h>
 #include "asmalloc.h"
-#include "fatal.h"
-#include "wresmem.h"
-
-#ifdef TRMEM
+#include "asmerr.h"
+#include "memfuncs.h"
 #include "trmem.h"
 
-static _trmem_hdl   memHandle;
-static FILE         *memFile;       /* file handle we'll write() to */
+
+#ifdef TRMEM
+
+static _trmem_hdl   TrHdl = _TRMEM_HDL_NONE;
+static FILE         *TrFile;       /* file handle we'll write() to */
 
 static void memPrintLine( void *file, const char *buf, size_t len )
 {
     /* unused parameters */ (void)file; (void)len;
 
     fprintf( stderr, "***%s\n", buf );
-    if( memFile != NULL ) {
-        fprintf( memFile, "%s\n", buf );
+    if( TrFile != NULL ) {
+        fprintf( TrFile, "%s\n", buf );
     }
 }
-#endif
+
+#endif  /* TRMEM */
 
 void MemInit( void )
 {
 #ifdef TRMEM
-    memFile = fopen( "mem.trk", "w" );
-    memHandle = _trmem_open( malloc, free, realloc, NULL, NULL, memPrintLine, _TRMEM_ALL );
-    if( memHandle == NULL ) {
+    TrFile = fopen( "mem.trk", "w" );
+    TrHdl = _trmem_open( malloc, free, _TRMEM_NO_REALLOC, strdup,
+                            NULL, memPrintLine, _TRMEM_DEF );
+    if( TrHdl == _TRMEM_HDL_NONE ) {
         exit( EXIT_FAILURE );
     }
 #endif
@@ -73,76 +76,63 @@ void MemInit( void )
 void MemFini( void )
 {
 #ifdef TRMEM
-    if( memHandle != NULL ) {
-        _trmem_prt_list( memHandle );
-        _trmem_close( memHandle );
-        if( memFile != NULL ) {
-            fclose( memFile );
-            memFile = NULL;
+    if( TrHdl != _TRMEM_HDL_NONE ) {
+        _trmem_prt_list( TrHdl );
+        _trmem_close( TrHdl );
+        if( TrFile != NULL ) {
+            fclose( TrFile );
+            TrFile = NULL;
         }
-        memHandle = NULL;
+        TrHdl = _TRMEM_HDL_NONE;
     }
 #endif
 }
 
-void *AsmAlloc( size_t size )
+static void *check_nomem( void *ptr )
 {
-    void        *ptr;
-
-#ifdef TRMEM
-    ptr = _trmem_alloc( size, _trmem_guess_who(), memHandle );
-#else
-    ptr = malloc( size );
-#endif
     if( ptr == NULL ) {
-        Fatal( MSG_OUT_OF_MEMORY );
+        Fatal( OUT_OF_MEMORY );
     }
     return( ptr );
 }
 
-char *AsmStrDup( const char *str )
-{
-    size_t      size;
-    char        *ptr;
-
-    if( str == NULL )
-        return( NULL );
-    size = strlen( str ) + 1;
-#ifdef TRMEM
-    ptr = _trmem_alloc( size, _trmem_guess_who(), memHandle );
-#else
-    ptr = malloc( size );
-#endif
-    if( ptr == NULL ) {
-        Fatal( MSG_OUT_OF_MEMORY );
-    }
-    return( strcpy( ptr, str ) );
-}
-
-void AsmFree( void *ptr )
-{
-    if( ptr != NULL ) {
-#ifdef TRMEM
-        _trmem_free( ptr, _trmem_guess_who(), memHandle );
-#else
-        free( ptr );
-#endif
-    }
-}
-
-void *wres_alloc( size_t size )
+TRMEMAPI( MemAlloc )
+void *MemAlloc( size_t size )
 {
 #ifdef TRMEM
-    return( _trmem_alloc( size, _trmem_guess_who(), memHandle ) );
+    return( _trmem_alloc( size, _TRMEM_WHO( 1 ), TrHdl ) );
 #else
     return( malloc( size ) );
 #endif
 }
 
-void wres_free( void *ptr )
+TRMEMAPI( MemAllocSafe )
+void *MemAllocSafe( size_t size )
 {
 #ifdef TRMEM
-    _trmem_free( ptr, _trmem_guess_who(), memHandle );
+    return( check_nomem( _trmem_alloc( size, _TRMEM_WHO( 1 ), TrHdl ) ) );
+#else
+    return( check_nomem( malloc( size ) ) );
+#endif
+}
+
+TRMEMAPI( MemStrdupSafe )
+char *MemStrdupSafe( const char *str )
+{
+    if( str == NULL )
+        return( NULL );
+#ifdef TRMEM
+    return( check_nomem( _trmem_strdup( str, _TRMEM_WHO( 2 ), TrHdl ) ) );
+#else
+    return( check_nomem( strdup( str ) ) );
+#endif
+}
+
+TRMEMAPI( MemFree )
+void MemFree( void *ptr )
+{
+#ifdef TRMEM
+    _trmem_free( ptr, _TRMEM_WHO( 3 ), TrHdl );
 #else
     free( ptr );
 #endif

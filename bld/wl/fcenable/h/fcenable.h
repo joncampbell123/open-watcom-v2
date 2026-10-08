@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,6 +35,7 @@
 #include <stdio.h>
 #include "bool.h"
 #include "watcom.h"
+#include "memfuncs.h"
 
 #define MAX_OBJECT_REC_SIZE 4096
 
@@ -82,7 +84,7 @@ extern name_list    *SegList;
 extern exclude_list *ExcludeList;
 
 // fcenable.c
-extern void         LinkList( void **, void * );
+extern void         AppendList( void **list, void *item );
 extern void         FreeList( void * );
 extern void         Warning( const char * );
 extern void         Error( const char * );
@@ -94,8 +96,6 @@ extern int          QSeek( FILE *, long, int );
 // mem.c
 extern void         MemInit( void );
 extern void         MemFini( void );
-extern void         *MemAlloc( size_t );
-extern void         MemFree( void * );
 
 // records.c
 extern void         *InitRecStuff( void );

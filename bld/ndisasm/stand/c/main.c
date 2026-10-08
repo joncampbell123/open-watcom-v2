@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -47,7 +47,6 @@
 #include "hashtabl.h"
 #include "pdata.h"
 #include "groups.h"
-#include "memfuncs.h"
 #include "demangle.h"
 
 #include "clibint.h"
@@ -310,10 +309,7 @@ static void printMasmHeader( section_ptr section )
             bool    is_segment;
 
             if( Options & NODEMANGLE_NAMES ) {
-                len = strlen( name );
-                comname = MemAlloc( len + 1 );
-                memcpy( comname, name, len );
-                comname[len] = '\0';
+                comname = MemStrdup( name );
             } else {
                 len = __demangle_l( name, 0, NULL, 0 );
                 comname = MemAlloc( len + 1 );

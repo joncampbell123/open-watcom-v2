@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2023-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2023-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -81,7 +81,7 @@ void ResetToc( void )
 void CleanToc( void )
 /**************************/
 {
-    ZapHTable( Toc, LFree );
+    ZapHTable( Toc, MemFree );
 }
 
 static unsigned TocEntryHashFunc( void *_e, unsigned size )
@@ -102,22 +102,24 @@ static int TocEntryCmp( const void *_e1, const void *_e2 )
 void InitToc( void )
 /***********************/
 {
-    Toc = CreateHTable( 1024, TocEntryHashFunc, TocEntryCmp, ChkLAlloc, LFree );
+    Toc = CreateHTable( 1024, TocEntryHashFunc, TocEntryCmp, MemAllocSafe, MemFree );
     TocSize = 0;
-    if( (LinkState & LS_HAVE_PPC_CODE) && (FmtData.type & MK_PE) ) {
+    if( (LinkState & LS_HAVE_PPC_CODE)
+      && (FmtData.type & MK_PE) ) {
         TocName = TocSymName;
         TocShift = 0x8000;
     } else {
         TocName = GotSymName;
         TocShift = BOGUS;
-            // It is an error to use TocShift until PrepareToc is called
+        // It is an error to use TocShift until PrepareToc is called
     }
 }
 
 void CheckIfTocSym( symbol *sym )
 /**************************************/
 {
-    if( TocName != NULL && TocSym == NULL ) {
+    if( TocName != NULL
+      && TocSym == NULL ) {
         if( strcmp( sym->name.u.ptr, TocName ) == 0 ) {
             TocSym = sym;
         }
@@ -139,7 +141,7 @@ static void AddToToc( TocEntryId *e )
     searchEntry.e = *e;
 
     if( FindHTableElem( Toc, &searchEntry ) == NULL ) {
-        entry = ChkLAlloc( sizeof( *entry ) );
+        entry = MemAllocSafe( sizeof( *entry ) );
         entry->e = *e;
         entry->pos = TocSize;
         TocSize += sizeof( offset );
@@ -178,7 +180,8 @@ static void ConvertTocEntryId( TocEntryId *e )
         symbol *sym = e->u.sym;
         segdata *seg = sym->p.seg;
 
-        if( IS_SYM_IMPORTED( sym ) || seg == NULL ) {
+        if( IS_SYM_IMPORTED( sym )
+          || seg == NULL ) {
             // do not convert; keep symbol around
         } else {
             e->sdata = seg;
@@ -217,7 +220,8 @@ void PrepareToc( void )
     WalkHTable( Toc, ConvertTocEntry );
     RehashHTable( Toc );
 #if 0
-    if( (LinkState & LS_HAVE_PPC_CODE) && (FmtData.type & (MK_OS2 | MK_WIN_NE)) ) {
+    if( (LinkState & LS_HAVE_PPC_CODE)
+      && (FmtData.type & (MK_NE | MK_OS2_FLAT)) ) {
         // Development temporarly on hold
         offset middle = ( TocSize / 2 ) & ~0x3;
         WalkHTableCookie( Toc, AdjustGotEntry, &middle );
@@ -226,7 +230,7 @@ void PrepareToc( void )
     }
 #endif
     if( TocSym != NULL )  {
-        TocSym->info |= SYM_DCE_REF | SYM_DEFINED;
+        TocSym->info |= SYM_1_DCE_REF | SYM_DEFINED;
         SetAddPubSym( TocSym, SYM_REGULAR, FakeModule, 0, 0 );
         if( LinkFlags & LF_STRIP_CODE ) {
             CleanStripInfo( TocSym );
@@ -237,8 +241,9 @@ void PrepareToc( void )
 void SetTocAddr( offset off, group_entry *group )
 /******************************************************/
 {
-    if( Toc != NULL && TocSym != NULL ) {
-        SET_SYM_ADDR( TocSym, off + TocShift, group->grp_addr.seg );
+    if( Toc != NULL
+      && TocSym != NULL ) {
+        SET_SYM_ADDR( TocSym, off + TocShift, group->addr.seg );
     }
 }
 
@@ -319,7 +324,8 @@ void WriteToc( virt_mem buf )
         return;
     WalkHTableCookie( Toc, WriteOutTokElem, &buf );
 #if 0
-    if( (LinkState & LS_HAVE_PPC_CODE) && (FmtData.type & (MK_OS2 | MK_WIN_NE)) ) {
+    if( (LinkState & LS_HAVE_PPC_CODE)
+      && (FmtData.type & (MK_NE | MK_OS2_FLAT)) ) {
         // Development temporarly on hold
         offset res[GOT_RESERVED_SIZE / sizeof( offset )] = { 0 };
         enum { zero = GOT_RESERVED_NEG_SIZE / sizeof( offset ) };

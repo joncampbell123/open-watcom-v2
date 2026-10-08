@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -44,14 +44,16 @@ typedef struct WRSaveIntoData {
     char                        *data;
     WResLangType                lang;
     uint_32                     size;
-    uint_16                     MemFlags;
+    ResMemFlags                 res_flags;
     struct WRSaveIntoData       *next;
 } WRSaveIntoData;
+
+typedef void wr_nomem_cb( void );
 
 /****************************************************************************/
 /* function prototypes                                                      */
 /****************************************************************************/
-WRDLLENTRY extern void             WRAPI WRInit( void );
+WRDLLENTRY extern void             WRAPI WRInit( bool trace, wr_nomem_cb * );
 WRDLLENTRY extern void             WRAPI WRFini( void );
 WRDLLENTRY extern WRInfo *         WRAPI WRLoadResource( const char *, WRFileType );
 WRDLLENTRY extern bool             WRAPI WRUpdateTmp( WRInfo *info );

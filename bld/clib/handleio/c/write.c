@@ -31,6 +31,7 @@
 
 
 #include "variety.h"
+#include "seterrno.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
@@ -47,22 +48,14 @@
 #elif defined( __DOS__ )
     #include "tinyio.h"
 #endif
-#include "rterrno.h"
 #include "iomode.h"
 #include "fileacc.h"
 #include "rtcheck.h"
-#include "seterrno.h"
 #include "defwin.h"
 #include "lseek.h"
 #include "thread.h"
 #include "stkoverf.h"
 
-
-#if defined(__NT__)
-#ifndef INVALID_SET_FILE_POINTER
-#define INVALID_SET_FILE_POINTER 0xFFFFFFFF
-#endif
-#endif
 
 /*
     The _lwrite function writes data to the specified file.
@@ -143,7 +136,7 @@ static int _WCNEAR zero_pad( int handle )
         unsigned long long  len;
 
         memset( zeroBuf, 0, PAD_SIZE );
-        len = end_ptr._64 - cur_ptr._64;
+        len = cur_ptr._64 - end_ptr._64;
         write_amt = PAD_SIZE;
         while( len > 0 ) {
             if( len < PAD_SIZE ) {
@@ -252,7 +245,7 @@ static int _WCNEAR os_write( int handle, const void *buffer, unsigned len, unsig
 #endif
     if( *amt != len ) {
         rc = ENOSPC;
-        _RWD_errno = rc;
+        lib_set_errno( rc );
     }
     return( rc );
 }
@@ -288,12 +281,12 @@ static int _WCNEAR os_write( int handle, const void *buffer, unsigned len, unsig
         // How can we write to the handle if we never opened it? JBS
         return( _lwrite( handle, buffer, len ) );
 #else
-        _RWD_errno = EBADF;
+        lib_set_errno( EBADF );
         return( -1 );
 #endif
     }
     if( (iomode_flags & _WRITE) == 0 ) {
-        _RWD_errno = EACCES;     /* changed from EBADF to EACCES 23-feb-89 */
+        lib_set_errno( EACCES );     /* changed from EBADF to EACCES 23-feb-89 */
         return( -1 );
     }
 
@@ -398,7 +391,8 @@ static int _WCNEAR os_write( int handle, const void *buffer, unsigned len, unsig
                     j = 0;
                 }
             }
-            if( j ) {
+            if( rc == 0
+              && j ) {
                 rc = os_write( handle, buf, j, &i );
                 if( rc == ENOSPC ) {
                     len_written += i;

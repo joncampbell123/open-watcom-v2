@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -549,14 +549,14 @@ static void gotoIns( MemWndInfo *info, uint_32 ins_cnt )
     AsmInfo     *asm_info;
 
     if( info->asm_info == NULL ) {
-        size = sizeof( AsmInfo );
+        size = sizeof( *asm_info );
         backup_cnt = MAX_BACKUPS;
         if( info->limit > 0xffff ) {
             size += backup_cnt * sizeof( uint_32 );
         } else {
             size += backup_cnt * sizeof( WORD );
         }
-        asm_info = CUIMemAlloc( size );
+        asm_info = MemAlloc( size );
         if( asm_info != NULL ) {
             info->asm_info = asm_info;
             asm_info->big = (info->limit > 0xffff);
@@ -665,7 +665,7 @@ void RedrawAsCode( HDC dc, MemWndInfo *info )
 /*
  * RegDisasmRtns - register us to use the interface to the disasembler
  */
-void RegDisasmRtns()
+void RegDisasmRtns( void )
 {
     if( !DisasmRegistered ) {
         DisasmInfo.GetDataByte = MemWndGetDataByte;

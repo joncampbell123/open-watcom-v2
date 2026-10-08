@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2020 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -40,8 +40,8 @@
 #include "opr.h"
 #include "opn.h"
 #include "iodefs.h"
-#include "units.h"
 #include "global.h"
+#include "namecod.h"
 #include "recog.h"
 #include "ferror.h"
 #include "utility.h"
@@ -116,12 +116,12 @@ void    CpPrint( void ) {
 
     InitIO();
     Form();
-    if( !RecEOS() ) {
-        ReqComma();
-        if( RecNOpn() ) {
+    if( !RecEOSOpr() ) {
+        ReqCommaOpr();
+        if( RecNoOpn() ) {
             cit = CITNode;
             AdvanceITPtr();
-            if( RecEOS() ) {
+            if( RecEOSOpr() ) {
                 CITNode = cit;
                 Error( SX_SURP_OPR );
             }
@@ -129,7 +129,7 @@ void    CpPrint( void ) {
         }
     }
     IOList();
-    ReqEOS();
+    ReqEOSOpr();
     FiniIO();
 }
 
@@ -142,7 +142,7 @@ static  bool    Scan4ListOprs( void ) {
 
     level = 0;
     cit = CITNode;
-    for(;;) {
+    for( ;; ) {
         if( cit == SPtr1 )
             return( false );
         if( cit->opr == OPR_LBR ) {
@@ -181,9 +181,9 @@ static  bool            ReadKWList( void ) {
         return( true ); // we have ( ciolist ) (a(i) i==1,10)
     if( opr != OPR_TRM )
         return( false );
-    if( RecNOpn() )
+    if( RecNoOpn() )
         return( false );
-    if( CITNode->opn.ds == DSOPN_LIT )
+    if( RecLiteralOpn() )
         return( false );
     if( CITNode->opn.ds > DSOPN_LIT )
         return( true );
@@ -204,21 +204,21 @@ void    CpRead( void ) {
     InitIO();
     cit = CITNode;
     AdvanceITPtr();
-    if( RecOpenParen() && ReadKWList() ) {
+    if( RecOpenParenOpr() && ReadKWList() ) {
         KeywordList();
-        ReqCloseParen();
+        ReqCloseParenOpr();
     } else {
         CITNode = cit;
         Form();
-        if( !RecEOS() ) {
-            ReqComma();
+        if( !RecEOSOpr() ) {
+            ReqCommaOpr();
         }
     }
     if( !Remember.end_equals ) {
         GNullEofStmt();
     }
     IOList();
-    ReqEOS();
+    ReqEOSOpr();
     FiniIO();
 }
 
@@ -238,15 +238,15 @@ void    CpWrite( void ) {
 // Compile WRITE statement.
 
     InitIO();
-    if( RecTrmOpr() && RecNOpn() ) {
+    if( RecTrmOpr() && RecNoOpn() ) {
         AdvanceITPtr();
     }
-    if( ReqOpenParen() ) {
+    if( ReqOpenParenOpr() ) {
         KeywordList();
-        ReqCloseParen();
+        ReqCloseParenOpr();
         IOList();
     }
-    ReqEOS();
+    ReqEOSOpr();
     FiniIO();
 }
 
@@ -258,7 +258,7 @@ static  void    UnitOrList( void ) {
 // in brackets.
 
     InitIO();
-    if( RecNextOpr( OPR_LBR ) && RecNOpn() ) {
+    if( RecNextOpr( OPR_LBR ) && RecNoOpn() ) {
         AdvanceITPtr();
         DoKWList();
     } else {
@@ -266,7 +266,7 @@ static  void    UnitOrList( void ) {
         Unit();
         AdvanceITPtr();
     }
-    ReqEOS();
+    ReqEOSOpr();
     GStartIO();
     FiniIO();
 }
@@ -278,13 +278,13 @@ static  void    JustList( void ) {
 // The io statement must have a keyword list in brackets.
 
     InitIO();
-    if( RecTrmOpr() && RecNOpn() ) {
+    if( RecTrmOpr() && RecNoOpn() ) {
         AdvanceITPtr();
     }
-    if( ReqOpenParen() ) {
+    if( ReqOpenParenOpr() ) {
         DoKWList();
     }
-    ReqEOS();
+    ReqEOSOpr();
     GStartIO();
     FiniIO();
 }
@@ -296,8 +296,8 @@ static  void    DoKWList( void ) {
 // Call KeywordList() and check for closing parenthesis.
 
     KeywordList();
-    if( ReqCloseParen() ) {
-        if( !RecNOpn() ) {
+    if( ReqCloseParenOpr() ) {
+        if( !RecNoOpn() ) {
             Error( SX_EOS_EXPECTED );
         }
         AdvanceITPtr();

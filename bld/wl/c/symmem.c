@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -41,19 +41,21 @@
 #include "symmem.h"
 
 
-#define SYM_BLOCK_SIZE      _16K
+#define ALLOC_ALIGN         sizeof( void  * )
+
 #define SYM_BLOCK_MIN       32
+#define SYM_BLOCK_HDR_SIZE  __ROUND_UP_SIZE( sizeof( sym_block ), ALLOC_ALIGN )
+#define SYM_BLOCK_SIZE(x)   (SYM_BLOCK_HDR_SIZE + (x))
+#define SYM_BLOCK_DATA(b,x) ((char *)(b) + SYM_BLOCK_HDR_SIZE + (x))
 
 typedef struct sym_block {
     struct sym_block    *next;       /* NOTE: this *must* be the first field */
     size_t              size;
-    char                block[1];
+//    char                block[];
 } sym_block;
 
-#define ALLOC_SIZE  (sizeof( sym_block ) - 1)
-
-typedef struct {
-    sym_block *     list;
+typedef struct block_data {
+    sym_block       *list;
     size_t          currbrk;
 } block_data;
 
@@ -73,21 +75,21 @@ void ResetPass1Blocks( void )
     Pass1Blocks.list = NULL;
 }
 
-static bool ShrinkBlock( block_data *block )
-/******************************************/
+static bool ShrinkBlock( block_data *block_set )
+/**********************************************/
 {
 #ifdef __WATCOMC__
-    sym_block   *new;
+    sym_block   *block;
 
-    if( block->list == NULL )
+    if( block_set->list == NULL )
         return( false );
-    if( block->currbrk >= block->list->size )
+    if( block_set->currbrk >= block_set->list->size )
         return( false );
-    _LnkRealloc( new, block->list, block->currbrk + ALLOC_SIZE );
-    new->size = block->currbrk;
+    block = MemReallocSafe( block_set->list, SYM_BLOCK_SIZE( block_set->currbrk ) );
+    block->size = block_set->currbrk;
     /* assuming that a shrinkage will not move the block */
   #ifdef DEVBUILD
-    if( new != block->list ) {
+    if( block != block_set->list ) {
         LnkMsg( FTL+MSG_INTERNAL, "s", "realloc moved shrinked block!" );
     }
   #endif
@@ -95,7 +97,7 @@ static bool ShrinkBlock( block_data *block )
 #else
     /* There is no guarantee realloc() won't move memory - just don't do it */
 
-    /* unused parameters */ (void)block;
+    /* unused parameters */ (void)block_set;
 
     return( false );
 #endif
@@ -114,46 +116,47 @@ bool PermShrink( void )
     return( ret );
 }
 
-static void GetNewBlock( block_data *block, size_t size )
-/*******************************************************/
+static void GetNewBlock( block_data *block_set, size_t size )
+/***********************************************************/
 {
     size_t              try;
-    sym_block           *new;
+    sym_block           *block;
 
-    ShrinkBlock( block );
-    try = SYM_BLOCK_SIZE;
+    ShrinkBlock( block_set );
+    try = _16K;     /* default block size */
     if( try < size )
         try = size;
     for( ;; ) {
-        _LnkAlloc( new, try + ALLOC_SIZE );
-        if( new != NULL )
+        block = MemAlloc( SYM_BLOCK_SIZE( try ) );
+        if( block != NULL )
             break;
         try /= 2;
-        if( try < size || try < SYM_BLOCK_MIN ) {
+        if( try < size
+          || try < SYM_BLOCK_MIN ) {
             LnkMsg( FTL + MSG_NO_DYN_MEM, NULL );
         }
     }
-    new->next = block->list;
-    block->list = new;
-    new->size = try;
-    block->currbrk = 0;
+    block->size = try;
+    block->next = block_set->list;
+    block_set->list = block;
+    block_set->currbrk = 0;
 }
 
-static void *AllocBlock( size_t size, block_data *block )
-/*******************************************************/
+static void *AllocBlock( size_t size, block_data *block_set )
+/***********************************************************/
 {
     void            *ptr;
     size_t          newbrk;
 
-    size = __ROUND_UP_SIZE( size, sizeof( int ) );
-    newbrk = block->currbrk + size;
-    if( block->list == NULL ) {
-        GetNewBlock( block, size );
-    } else if( newbrk > block->list->size ) {
-        GetNewBlock( block, size );
+    size = __ROUND_UP_SIZE( size, ALLOC_ALIGN );
+    newbrk = block_set->currbrk + size;
+    if( block_set->list == NULL ) {
+        GetNewBlock( block_set, size );
+    } else if( newbrk > block_set->list->size ) {
+        GetNewBlock( block_set, size );
     }
-    ptr = block->list->block + block->currbrk;
-    block->currbrk += size;
+    ptr = SYM_BLOCK_DATA( block_set->list, block_set->currbrk );
+    block_set->currbrk += size;
     return( ptr );
 }
 
@@ -174,8 +177,8 @@ void BasicInitSym( symbol *sym )
 /*************************************/
 {
     sym->hash = NULL;
-    sym->link = NULL;
-    sym->publink = NULL;
+    sym->next = NULL;
+    sym->next_by_publist = NULL;
     SET_ADDR_UNDEFINED( sym->addr );
     sym->mod = NULL;
     sym->p.seg = NULL;
@@ -194,7 +197,7 @@ symbol * AddSym( void )
     sym = CarveAlloc( CarveSymbol );
     BasicInitSym( sym );
     if( LastSym != NULL )
-        LastSym->link = sym;
+        LastSym->next = sym;
     LastSym = sym;
     if( HeadSym == NULL )
         HeadSym = sym;

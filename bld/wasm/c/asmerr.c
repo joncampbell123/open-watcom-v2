@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,7 +34,6 @@
 #include <stdarg.h>
 #include "directiv.h"
 #include "asminput.h"
-#include "fatal.h"
 #include "standalo.h"
 
 
@@ -49,7 +48,6 @@
 
 static bool             Errfile_Written = false;
 
-static void             AsmSuicide( void );
 static void             PutMsg( FILE *fp, char *prefix, unsigned msgnum, va_list args );
 static void             PrtMsg1( char *prefix, unsigned msgnum, va_list args1, va_list args2 );
 
@@ -78,8 +76,7 @@ int InternalError( const char *file, unsigned line )
     MsgGet( MSG_INTERNAL_ERROR, msgbuf );
     fprintf( stderr, msgbuf, file, line );
     fflush( stderr );
-    exit( EXIT_FAILURE );
-    return( 0 );
+    longjmp( errjmp, 2 );
 }
 #endif
 
@@ -122,7 +119,7 @@ void AsmErr( unsigned msgnum, ... )
 #endif
     va_start( args1, msgnum );
     va_start( args2, msgnum );
-    if( ErrLimit == -1  ||  ErrCount < ErrLimit ) {
+    if( ErrLimit == -1 || ErrCount < ErrLimit ) {
         PrtMsg1( "Error!", msgnum, args1, args2 );
         va_end( args1 );
         va_end( args2 );
@@ -132,7 +129,7 @@ void AsmErr( unsigned msgnum, ... )
         PrtMsg1( "", ERR_TOO_MANY_ERRORS, args1, args2 );
         va_end( args1 );
         va_end( args2 );
-        AsmSuicide();
+        longjmp( errjmp, 1 );
     }
 }
 
@@ -160,21 +157,41 @@ void AsmWarn( int level, unsigned msgnum, ... )
     }
 }
 
+void Fatal( unsigned msg, ... )
+/*****************************/
+{
+    va_list     arg;
+
+    MsgPrintf( MSG_ERROR );
+    MsgPrintf( msg );
+    switch( msg ) {
+    case CANNOT_OPEN_FILE:
+    case CANNOT_CLOSE_FILE:
+    case OBJECT_FILE_ERROR:
+        va_start( arg, msg );
+        printf( "%s", va_arg( arg, char * ) );
+        va_end( arg );
+        break;
+    }
+    printf("\n");
+    longjmp( errjmp, 3 );
+}
+
 static void PrtMsg1( char *prefix, unsigned msgnum, va_list args1, va_list args2 )
 /**********************************************p*********************************/
 // print standard WASM messages
 {
     PrintBanner();
-    if( AsmFiles.file[ERR] == NULL ) {
+    if( AsmFiles.fp[ERR] == NULL ) {
         if( AsmFiles.fname[ERR] != NULL ) {
-            AsmFiles.file[ERR] = fopen( CreateFileName( AsmFiles.fname[ERR], ERR_EXT, false ), "w" );
+            AsmFiles.fp[ERR] = fopen( CreateFileName( AsmFiles.fname[ERR], FEXT_ERR, false ), "w" );
         }
     }
     PutMsg( stderr, prefix, msgnum, args1 );
     fflush( stderr );
-    if( AsmFiles.file[ERR] != NULL ) {
+    if( AsmFiles.fp[ERR] != NULL ) {
         Errfile_Written = true;
-        PutMsg( AsmFiles.file[ERR], prefix, msgnum, args2 );
+        PutMsg( AsmFiles.fp[ERR], prefix, msgnum, args2 );
     }
 }
 
@@ -182,7 +199,7 @@ void DelErrFile( void )
 /*********************/
 {
     // fixme if( CompFlags.errout_redirected ) return;
-    remove( CreateFileName( AsmFiles.fname[ERR], ERR_EXT, false ) );
+    remove( CreateFileName( AsmFiles.fname[ERR], FEXT_ERR, false ) );
 }
 
 void LstMsg( const char *format, ... )
@@ -190,9 +207,9 @@ void LstMsg( const char *format, ... )
 {
     va_list     args;
 
-    if( AsmFiles.file[LST] != NULL ) {
+    if( AsmFiles.fp[LST] != NULL ) {
         va_start( args, format );
-        vfprintf( AsmFiles.file[LST], format, args );
+        vfprintf( AsmFiles.fp[LST], format, args );
         va_end( args );
     }
 }
@@ -201,7 +218,7 @@ void OpenLstFile( void )
 /**********************/
 {
     if( AsmFiles.fname[LST] != NULL && Options.write_listing ) {
-        AsmFiles.file[LST] = fopen( CreateFileName( AsmFiles.fname[LST], LST_EXT, false ), "w" );
+        AsmFiles.fp[LST] = fopen( CreateFileName( AsmFiles.fname[LST], FEXT_LST, false ), "w" );
     }
 }
 
@@ -224,13 +241,6 @@ static void PutMsg( FILE *fp, char *prefix, unsigned msgnum, va_list args )
         vfprintf( fp, msgbuf, args );
         fprintf( fp, "\n" );
     }
-}
-
-static void AsmSuicide( void )
-/****************************/
-{
-    AsmShutDown();
-    exit( EXIT_ERROR );
 }
 
 void PrintStats( void )

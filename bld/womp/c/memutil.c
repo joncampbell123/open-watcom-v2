@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2019 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -37,41 +37,40 @@
 #include "womp.h"
 #include "genutil.h"
 #include "memutil.h"
-
-#ifdef  TRACK
-//#include <malloc.h>
-#include <io.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 #include "trmem.h"
+#ifdef  TRMEM
+//    #include <malloc.h>
+    #include <io.h>
+    #include <sys/types.h>
+    #include <sys/stat.h>
+    #include <fcntl.h>
+#endif
 
-STATIC _trmem_hdl   memHandle;
-STATIC FILE         *memFile = NULL;
+
+#ifdef  TRMEM
+
+STATIC _trmem_hdl   TrHdl = _TRMEM_HDL_NONE;
+STATIC FILE         *TrFile = NULL;
 
 STATIC void memPrintLine( void *fh, const char *buf, unsigned size )
 {
     /* unused parameters */ (void)fh; (void)size;
 
     fprintf( stderr, "***%s\n", buf );
-    if( memFile != NULL ) {
-        fprintf( memFile, "%s\n", buf );
+    if( TrFile != NULL ) {
+        fprintf( TrFile, "%s\n", buf );
     }
 }
-#endif  /* TRACK */
+
+#endif  /* TRMEM */
 
 void MemInit( void ) {
 
-#ifdef TRACK
-    memFile = fopen( "mem.trk", "wt" );
-    memHandle = _trmem_open( malloc, free, realloc, _TRMEM_NO_REALLOC,
-        memFile, memPrintLine,
-        _TRMEM_ALLOC_SIZE_0 |
-        _TRMEM_FREE_NULL |
-        _TRMEM_OUT_OF_MEMORY |
-        _TRMEM_CLOSE_CHECK_FREE
-    );
-    if( memHandle == NULL ) {
+#ifdef TRMEM
+    TrFile = fopen( "mem.trk", "wt" );
+    TrHdl = _trmem_open( malloc, free, realloc, _TRMEM_NO_STRDUP,
+        TrFile, memPrintLine, _TRMEM_DEF );
+    if( TrHdl == _TRMEM_HDL_NONE ) {
         exit( EXIT_FAILURE );
     }
 #endif
@@ -79,53 +78,54 @@ void MemInit( void ) {
 
 void MemFini( void ) {
 
-#ifdef TRACK
-    if( memHandle != NULL ) {
-        _trmem_prt_list( memHandle );
-        _trmem_close( memHandle );
-        if( memFile != NULL ) {
-            fclose( memFile );
-            memFile = NULL;
+#ifdef TRMEM
+    if( TrHdl != _TRMEM_HDL_NONE ) {
+        _trmem_prt_list( TrHdl );
+        _trmem_close( TrHdl );
+        if( TrFile != NULL ) {
+            fclose( TrFile );
+            TrFile = NULL;
         }
-        memHandle = NULL;
+        TrHdl = _TRMEM_HDL_NONE;
     }
 #endif
 }
 
-void *MemAlloc( size_t size ) {
-/***************************/
-    void *ptr;
-
-#ifdef TRACK
-    ptr = _trmem_alloc( size, _trmem_guess_who(), memHandle );
-#else
-    ptr = malloc( size );
-#endif
+static void *check_nomem( void *ptr )
+{
     if( ptr == NULL ) {
         Fatal( MSG_OUT_OF_MEMORY );
     }
     return( ptr );
 }
 
-void *MemRealloc( void *ptr, size_t size ) {
-/****************************************/
-    void *new;
-
-#ifdef TRACK
-    new = _trmem_realloc( ptr, size, _trmem_guess_who(), memHandle );
+TRMEMAPI( MemAlloc )
+void *MemAlloc( size_t size )
+/***************************/
+{
+#ifdef TRMEM
+    return( check_nomem( _trmem_alloc( size, _TRMEM_WHO( 1 ), TrHdl ) ) );
 #else
-    new = realloc( ptr, size );
+    return( check_nomem( malloc( size ) ) );
 #endif
-    if( new == NULL && size != 0 ) {
-        Fatal( MSG_OUT_OF_MEMORY );
-    }
-    return( new );
 }
 
+TRMEMAPI( MemRealloc )
+void *MemRealloc( void *ptr, size_t size )
+/****************************************/
+{
+#ifdef TRMEM
+    return( check_nomem( _trmem_realloc( ptr, size, _TRMEM_WHO( 2 ), TrHdl ) ) );
+#else
+    return( check_nomem( realloc( ptr, size ) ) );
+#endif
+}
+
+TRMEMAPI( MemFree )
 void MemFree( void *ptr ) {
 /***********************/
-#ifdef TRACK
-    _trmem_free( ptr, _trmem_guess_who(), memHandle );
+#ifdef TRMEM
+    _trmem_free( ptr, _TRMEM_WHO( 3 ), TrHdl );
 #else
     free( ptr );
 #endif

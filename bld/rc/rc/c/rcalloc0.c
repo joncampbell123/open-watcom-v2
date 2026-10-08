@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,9 +36,45 @@
 #include <string.h>
 #include "rcalloc0.h"
 #include "rcerrors.h"
+#include "rcmem.h"
 #ifdef RCMEM_DEBUG
 #include "errprt.h"
 #endif
+
+
+#ifdef RCMEM_DEBUG
+
+#define RCMEM_STARTBYTE      0x94
+#define RCMEM_ENDBYTE        0xA1
+#define RCMEM_GARBAGEBYTE    0xE2
+
+typedef struct DebugMemInfo {
+    size_t          size;
+    unsigned char   startbyte;
+} DebugMemInfo;
+
+#endif
+
+typedef struct FreeListInfo {
+#ifdef RCMEM_DEBUG
+    DebugMemInfo    dbg;
+#endif
+    union {
+        struct FreeListInfo *next;
+        unsigned char       data[1];
+    } u;
+} FreeListInfo;
+
+typedef struct HeapList {
+    struct HeapList     *next;
+} HeapList;
+
+typedef struct HeapHandle {
+    HeapList        *list;
+    size_t          heapsize;
+    size_t          blocksize;
+    FreeListInfo    *freeList;
+} HeapHandle;
 
 static void RCMemLayer0InitFreeList( FreeListInfo *freelist, size_t heapsize, size_t blocks_per_heap )
 /****************************************************************************************************/
@@ -67,13 +104,14 @@ static HeapList *RCMemLayer0AddToHeap( size_t heapsize, size_t blocks_per_heap )
 #else
     allocsize = heapsize * blocks_per_heap + sizeof( HeapList );
 #endif
-    data = malloc( allocsize );
+    data = SysMemAlloc( allocsize );
+    if( data == NULL ) {
+        RcFatalError( ERR_OUT_OF_MEMORY );
+        /* never return */
+    }
 #ifdef RCMEM_DEBUG
     memset( data, RCMEM_GARBAGEBYTE, allocsize );
 #endif
-    if( data == NULL ) {
-        RcFatalError( ERR_OUT_OF_MEMORY );
-    }
     data->next = NULL;
     freelist = (FreeListInfo *)( (char *)data + sizeof( HeapList ) );
     RCMemLayer0InitFreeList( freelist, heapsize, blocks_per_heap );
@@ -86,9 +124,10 @@ HeapHandle *RCMemLayer0NewHeap( size_t heapsize, size_t blocks_per_heap )
 {
     HeapHandle         *heap;
 
-    heap = malloc( sizeof( HeapHandle ) );
+    heap = SysMemAlloc( sizeof( HeapHandle ) );
     if( heap == NULL ) {
         RcFatalError( ERR_OUT_OF_MEMORY );
+        /* never return */
     }
     heap->list = NULL;
     heap->freeList = NULL;
@@ -97,6 +136,19 @@ HeapHandle *RCMemLayer0NewHeap( size_t heapsize, size_t blocks_per_heap )
 
     return( heap );
 }
+
+#ifdef RCMEM_DEBUG
+void RCMemLayer0Size( void *mem, size_t size )
+/********************************************/
+{
+    FreeListInfo       *freemem;
+
+    freemem = (char *)mem - offsetof( FreeListInfo, u.data );
+    freemem->dbg.size = size;
+    freemem->dbg.startbyte = RCMEM_STARTBYTE;
+    freemem->u.data[size] = RCMEM_ENDBYTE;
+}
+#endif
 
 #ifdef RCMEM_DEBUG
 void *RCMemLayer0Malloc( HeapHandle *heap, size_t size )
@@ -116,10 +168,9 @@ void *RCMemLayer0Malloc( HeapHandle *heap )
     }
     freemem = heap->freeList;
     heap->freeList = freemem->u.next;
+
 #ifdef RCMEM_DEBUG
-    freemem->dbg.size = size;
-    freemem->dbg.startbyte = RCMEM_STARTBYTE;
-    freemem->u.data[size] = RCMEM_ENDBYTE;
+    RCMemLayer0Size( freemem->u.data, size );
 #endif
     return( freemem->u.data );
 }
@@ -176,7 +227,7 @@ void RCMemLayer0ShutDown( HeapHandle *heap )
 #ifdef RCMEM_DEBUG
         RCMemLayer0CheckUnfreed( heap, (char *)curnode + sizeof( HeapList ) );
 #endif
-        free( curnode );
+        SysMemFree( curnode );
     }
-    free( heap );
+    SysMemFree( heap );
 }

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,7 +34,9 @@
 #include <dlgs.h>
 #include <cderr.h>
 #include <assert.h>
-#include "wclbproc.h"
+#ifdef __WINDOWS__
+    #include "wclbproc.h"
+#endif
 
 
 /* Local Windows CALLBACK function prototypes */
@@ -75,7 +77,7 @@ WINEXPORT UINT_PTR CALLBACK OpenOFNHookProc( HWND hwnd, UINT msg, WPARAM wparam,
         case IDOK:
             len = SendDlgItemMessage( hwnd, edt1, WM_GETTEXTLENGTH, 0, 0 );
             if( len >= of->nMaxFile ) {
-                FileNameList = MemAlloc( len + 1 );
+                FileNameList = MemAllocSafe( len + 1 );
                 len = SendDlgItemMessage( hwnd, edt1, WM_GETTEXT, len + 1, (LPARAM)(LPSTR)FileNameList );
             }
         }
@@ -122,7 +124,11 @@ vi_rc SelectFileOpen( const char *dir, char **result, const char *mask, bool wan
     } else {
 #endif
         of.Flags = OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_ALLOWMULTISELECT | OFN_ENABLEHOOK;
+#ifdef __WINDOWS__
         of.lpfnHook = MakeProcInstance_OFNHOOK( OpenOFNHookProc, InstanceHandle );
+#else
+        of.lpfnHook = OpenOFNHookProc;
+#endif
 #if defined( __NT__ ) && !defined( _WIN64 )
     }
 #endif
@@ -130,7 +136,9 @@ vi_rc SelectFileOpen( const char *dir, char **result, const char *mask, bool wan
 #if defined( __NT__ ) && !defined( _WIN64 )
     if( !is_chicago ) {
 #endif
+#ifdef __WINDOWS__
         FreeProcInstance_OFNHOOK( of.lpfnHook );
+#endif
 #if defined( __NT__ ) && !defined( _WIN64 )
     }
 #endif
@@ -139,7 +147,7 @@ vi_rc SelectFileOpen( const char *dir, char **result, const char *mask, bool wan
 #if defined( __NT__ ) && !defined( _WIN64 )
         if( !is_chicago ) {
 #endif
-            _MemFreeArray( (char *)of.lpstrFile );
+            MemFree( (char *)of.lpstrFile );
             *result = FileNameList;
 #if defined( __NT__ ) && !defined( _WIN64 )
         }
@@ -190,7 +198,11 @@ vi_rc SelectFileSave( char *result )
     } else {
 #endif
         of.Flags = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT | OFN_HIDEREADONLY | OFN_NOREADONLYRETURN | OFN_ENABLEHOOK;
+#ifdef __WINDOWS__
         of.lpfnHook = MakeProcInstance_OFNHOOK( OpenOFNHookProc, InstanceHandle );
+#else
+        of.lpfnHook = OpenOFNHookProc;
+#endif
 #if defined( __NT__ ) && !defined( _WIN64 )
     }
 #endif
@@ -198,7 +210,9 @@ vi_rc SelectFileSave( char *result )
 #if defined( __NT__ ) && !defined( _WIN64 )
     if( !is_chicago ) {
 #endif
+#ifdef __WINDOWS__
         FreeProcInstance_OFNHOOK( of.lpfnHook );
+#endif
 #if defined( __NT__ ) && !defined( _WIN64 )
     }
 #endif
@@ -220,15 +234,15 @@ char *GetInitialFileName( void )
     char        *ptr;
     vi_rc       rc;
 
-    path = _MemAllocArray( char, FILENAME_MAX );
+    path = _MemAllocArraySafe( char, FILENAME_MAX );
     path[0] = '\0';
     rc = SelectFileOpen( "", &path, NULL, false );
     if( rc == ERR_NO_ERR && path[0] != '\0' ) {
-        ptr = DupString( path );
+        ptr = MemStrdupSafe( path );
     } else {
         ptr = NULL;
     }
-    _MemFreeArray( path );
+    MemFree( path );
     return( ptr );
 
 } /* GetInitialFileName */

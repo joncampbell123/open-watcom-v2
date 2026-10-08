@@ -32,6 +32,7 @@
 
 
 #include "variety.h"
+#include "seterrno.h"
 #include <stdlib.h>
 #if defined(__NT__)
     #include <windows.h>
@@ -40,9 +41,9 @@
     #include <wos2.h>
 #endif
 #include "rtdata.h"
-#include "rterrno.h"
-#include "seterrno.h"
+#include "doserrno.h"
 #include "thread.h"
+
 
 #if defined(__NT__) || defined(__OS2__)
 /*
@@ -356,16 +357,16 @@ static signed char xlat[] = {
 int _WCNEAR __set_errno_dos( unsigned int err )
 {
 #if defined(__NT__) || defined(__OS2__)
-    _RWD_doserrno = err;
+    lib_set_doserrno( err );
     // if we  can't map the Error code, use default EIO entry
     if( err > E_MAXERR )
         err = E_MAXERR;
-    _RWD_errno = xlat[err];
+    lib_set_errno( xlat[err] );
 #else
     register unsigned char index;
 
     index = err & 0xff;
-    _RWD_doserrno = index;
+    lib_set_doserrno( index );
     if( err < 0x100 ) {
         if( _RWD_osmajor >= 3 ) {
             if( index == DOS_EXIST ) {
@@ -378,9 +379,9 @@ int _WCNEAR __set_errno_dos( unsigned int err )
         }
         if( index > E_MAXERR )
             index = E_MAXERR;
-        _RWD_errno = xlat[index];
+        lib_set_errno( xlat[index] );
     } else {
-        _RWD_errno = (err >> 8) & 0xff;
+        lib_set_errno( (err >> 8) & 0xff );
     }
 #endif
     return( -1 );
@@ -394,12 +395,12 @@ int _WCNEAR __set_errno_dos_reterr( unsigned int err )
 
 
 #ifdef __NT__
-int __set_errno_nt( void )
+int _WCNEAR __set_errno_nt( void )
 {
     return( __set_errno_dos( GetLastError() ) );
 }
 
-int __set_errno_nt_reterr( void )
+int _WCNEAR __set_errno_nt_reterr( void )
 {
     return( __set_errno_dos_reterr( GetLastError() ) );
 }

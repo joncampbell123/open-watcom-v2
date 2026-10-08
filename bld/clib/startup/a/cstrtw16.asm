@@ -2,7 +2,7 @@
 ;*
 ;*                            Open Watcom Project
 ;*
-;* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+;* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 ;*    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 ;*
 ;*  ========================================================================
@@ -55,6 +55,7 @@ pStackTop       equ     000AH
 pStackMin       equ     000CH
 pStackBot       equ     000EH
 
+.286
         name    wstart
 
         assume  nothing
@@ -64,11 +65,6 @@ pStackBot       equ     000EH
         extrn   GETMODULEFILENAME   : far
         extrn   INITAPP             : far
         extrn   WAITEVENT           : far
-
-ifdef WINDOWS10
-else
-        extrn   __AHSHIFT           : word
-endif
 
         extrn   _edata              : byte          ; end of DATA (start of BSS)
         extrn   _end                : byte          ; end of BSS (start of STACK)
@@ -160,24 +156,16 @@ _psp       dw 0                 ; segment addr of program segment prefix
 _osmajor   db 0                 ; major DOS version number
 _osminor   db 0                 ; minor DOS version number
 ;
-; Windows GetVersion is supported for Windows 2.x and above
-; that we read it in startup code for these versions
+; GetVersion API function is supported for all 16-bit Windows versions that
+;   it is used to get run-time version of 16-bit Windows
+; GetWinFlags API function is supported from Windows 3.x therefore _HShift
+;   and _osmode are derive by Windows API independent way
 ;
-; Windows 1.x version is hardcoded in startup code as 1.0
-;
-ifdef WINDOWS10
-_winmajor  db 1                 ; major Windows version number
-_winminor  db 0                 ; minor Windows version number
-_winver    dw 100h              ; Windows version number
-_osmode    db 0                 ; 0 => real mode, 1 => protected mode
-_HShift    db 12                ; Huge Shift value 12 => real mode, 3 => protected mode
-else
 _winmajor  db 0                 ; major Windows version number
 _winminor  db 0                 ; minor Windows version number
 _winver    dw 0                 ; Windows version number
 _osmode    db 0                 ; 0 => real mode, 1 => protected mode
-_HShift    db 0                 ; Huge Shift value 12 => real mode, ? => protected mode
-endif
+_HShift    db 12                ; Huge Shift value 12 => real mode, 3 => protected mode
 _cbyte     dw 0                 ; used by getch, getche
 __child    dw 0                 ; non-zero => a spawned process is running
 __no87     db 0                 ; always try to use the 8087
@@ -186,7 +174,7 @@ __restore_ovl_stack dw 0,0      ; restore overlay stack pointer
 __FPE_handler dd 0              ; FPE handler
 _LpCmdLine dw 0,0               ; lpCmdLine (for _argc, _argv processing)
 _LpPgmName dw 0,0               ; lpPgmName (for _argc, _argv processing)
-filename        db MAX_FILE_NAME dup(0)
+filename   db MAX_FILE_NAME dup(0)
 
 _DATA   ends
 
@@ -294,21 +282,23 @@ endif
         int     21h                     ; ...
         mov     _osmajor,al             ; ...
         mov     _osminor,ah             ; ...
-ifdef WINDOWS10
-else
         call    GETVERSION              ; get Windows version number
         mov     _winmajor,al            ; ...
         mov     _winminor,ah            ; ...
         xchg    al,ah                   ; ...
         mov     _winver,ax              ; ...
-        mov     ax,offset __AHSHIFT     ; get huge shift value
+        push    sp                      ; test CPU 8086/8088 => real mode
+        pop     ax                      ; ...
+        cmp     ax,sp                   ; ...
+        jne short mode_end              ; if CPU is 8086/8088 real mode only
+        smsw    ax                      ; test protected mode on 80286 and above
+        test    ax, 1                   ; test bit 0 (PE - Protection Enable)
+        jz short mode_end               ; if bit is 0 (Zero Flag=1) => real mode
+        mov     al,1                    ; set protected mode flag
+        mov     _osmode,al              ; ...
+        mov     al,3                    ; set protected mode huge shift
         mov     _HShift,al              ; ...
-        cmp     al,12                   ; real mode?
-        je      notprot                 ; yes, so leave osmode alone
-        mov     al,1
-        mov     _osmode,al              ; protected mode!
-notprot:
-endif
+mode_end:
         ; hinst is already on the stack
         push    ds
         mov     di, offset filename

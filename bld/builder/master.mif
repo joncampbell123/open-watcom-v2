@@ -8,7 +8,6 @@ builder_trmem = 1
 !include defrule.mif
 !include deftarg.mif
 !include exerule.mif
-!include trmem.mif
 
 full_commands = sweep.exe wsplice.exe comstrip.exe genverrc.exe crlf.exe diff.exe builder.exe wgrep.exe cdsay.exe
 all_commands_dos = diff.exe
@@ -20,7 +19,7 @@ all_commands    += builder.exe
 !endif
 #all_commands    += wgrep.exe
 
-inc_dirs = -I"../h" -I"$(pmake_dir)"
+inc_dirs = -I"../h" -I"$(pmake_dir)" -I"$(trmem_dir)"
 
 .c : ../c;$(pmake_dir);$(watcom_dir)/c;$(trmem_dir)
 
@@ -40,12 +39,18 @@ diff_objs    = diff.obj $(bld_cl_extra_objs_gen)
 cdsay_objs   = cdsay.obj
 wgrep_objs   = wgrep.obj $(bld_cl_extra_objs_gen)
 
-extra_cpp_flags = -DSTANDALONE_RX
+extra_cpp_flags_x64 = -DBLDX64
+extra_cpp_flags_a64 = -DBLDA64
 
 extra_cpp_flags_f_genverrc = -D_VERSION=$(bld_ver)
-extra_cpp_flags_f_utils = $(trmem_cpp_flags)
 
-extra_c_flags_f_utils = $(trmem_cover_cflags)
+!ifeq trmem 1
+! ifdef __WATCOM_TOOLS__
+!  if $(__WATCOM_TOOLS__) < 1300
+extra_c_flags_f_utils = -of+
+!  endif
+! endif
+!endif
 
 all : $(all_commands) .SYMBOLIC
 full : $(full_commands) .SYMBOLIC

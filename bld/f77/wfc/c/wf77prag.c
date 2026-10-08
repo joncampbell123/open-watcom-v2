@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -112,7 +112,7 @@ void SubPragmaFini( void )
             ( (arr->u.ns.flags & SY_SUB_PARM) || _Allocatable( arr ) ) ) {
             arr->u.ns.si.va.u.dim_ext->dim_flags |= DIM_EXTENDED;
         }
-        FMemFree( ArrayInfo );
+        MemFree( ArrayInfo );
         ArrayInfo = next;
     }
 #endif
@@ -147,7 +147,7 @@ static void AddArrayInfo( const char *arr_name, size_t arr_len )
             return;
         }
     }
-    new_arr = FMemAlloc( sizeof( arr_info ) + arr_len );
+    new_arr = MemAllocSafe( sizeof( arr_info ) + arr_len );
     new_arr->link = NULL;
     for( i = 0; i < arr_len; i++ ) {
         new_arr->arr[i] = toupper( arr_name[i] );
@@ -176,7 +176,7 @@ void AddDependencyInfo( source_t *fi )
             }
         }
         if( stat( p, &stat_info ) != -1 ) {
-            new_dep = FMemAlloc( sizeof( dep_info ) + strlen( p ) );
+            new_dep = MemAllocSafe( sizeof( dep_info ) + strlen( p ) );
             new_dep->link = NULL;
             strcpy( new_dep->fn, p );
             new_dep->time_stamp = stat_info.st_mtime;
@@ -223,7 +223,7 @@ static void AddDefaultLib( const char *libname, char priority )
      * if library entry not found then create new one
      */
     if( lib == NULL ) {
-        lib = FMemAlloc( sizeof( default_lib ) + strlen( libname ) );
+        lib = MemAllocSafe( sizeof( default_lib ) + strlen( libname ) );
         strcpy( lib->libname, libname );
     }
     /*
@@ -324,7 +324,7 @@ bool CurrToken( const char *tok )
     const char  *ptr;
 
     ptr = TokStart;
-    for(;;) {
+    for( ;; ) {
         if( ptr == TokEnd )
             break;
         if( toupper( *ptr ) != *tok )
@@ -350,7 +350,7 @@ void ScanToken( void )
     TokStart = ptr;
     first = true;
     found_token = false;
-    for(;;) {
+    for( ;; ) {
         switch( *ptr ) {
         case ' ' :
         case '\t' :
@@ -359,7 +359,7 @@ void ScanToken( void )
             break;
         case '"' :
             if( first ) {
-                for(;;) {
+                for( ;; ) {
                     ++ptr;
                     if( *ptr == NULLCHAR )
                         break;
@@ -440,7 +440,7 @@ static void ScanFnToken( void )
             break;
         case '"' :
             if( first ) {
-                for(;;) {
+                for( ;; ) {
                     ++ptr;
                     if( *ptr == NULLCHAR )
                         break;
@@ -512,7 +512,7 @@ static void     Pragma( void )
                 size_t      len;
 
                 len = TokEnd - TokStart;
-                p = FMemAlloc( len + 1 );
+                p = MemAllocSafe( len + 1 );
                 t = TokStart;
                 if( *t == '"' ) {
                     t++;
@@ -521,7 +521,7 @@ static void     Pragma( void )
                 strncpy( p, t, len );
                 p[len] = NULLCHAR;
                 AddDefaultLib( p, '9' );
-                FMemFree( p );
+                MemFree( p );
                 ScanFnToken();
             }
         }
@@ -559,7 +559,7 @@ void DoPragma( const char *ptr )
     TokStart = ptr;
     TokEnd = ptr;
     ScanToken();
-    for(;;) {
+    for( ;; ) {
         status = CSpawn( &Pragma );
         if( status != 0 ) {
             if( ProgSw & PS_FATAL_ERROR ) {

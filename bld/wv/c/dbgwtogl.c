@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2024      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2024-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -53,8 +53,8 @@ gui_menu_struct *WndAppendToggles( mad_toggle_strings const *toggles, unsigned *
 
     for( num_toggles = 0; toggles[num_toggles].menu != MAD_MSTR_NIL; ++num_toggles ) ;
     menu_items = num_old + num_toggles;
-    popup = WndMustAlloc( menu_items * sizeof( gui_menu_struct ) );
-    memcpy( popup, old, num_old * sizeof( gui_menu_struct ) );
+    popup = MemAllocSafe( menu_items * sizeof( *popup ) );
+    memcpy( popup, old, num_old * sizeof( *popup ) );
     for( i = 0; i < num_old; ++i ) {
         popup[i].style &= ~WND_MENU_ALLOCATED;
     }
@@ -64,7 +64,7 @@ gui_menu_struct *WndAppendToggles( mad_toggle_strings const *toggles, unsigned *
         menu->id = id++;
         menu->style = GUI_STYLE_MENU_ENABLED;
         menu->hinttext = LIT_ENG( Empty );
-        menu->label = DupStr( TxtBuff );
+        menu->label = MemStrdupSafe( TxtBuff );
         menu->child = NoMenu;
         ++menu;
     }
@@ -81,8 +81,8 @@ void WndDeleteToggles( gui_menu_struct *popup, unsigned num_old, unsigned num_to
     NullPopupMenu( popup );
     menu = popup + num_old;
     for( i = 0; i < num_toggles; ++i ) {
-        WndFree( (void *)menu->label );
+        MemFree( (void *)menu->label );
         ++menu;
     }
-    WndFree( popup );
+    MemFree( popup );
 }

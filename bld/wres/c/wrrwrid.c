@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,39 +35,61 @@
 #include "layer0.h"
 #include "read.h"
 #include "reserr.h"
+#include "util.h"
 #include "wresrtns.h"
+
+
+void *ResReadWResID( FILE *fp, unsigned offs, uint_16 ver )
+/*********************************************************/
+{
+    WResID          *id;
+    uint_8          isname;
+    char            *ptr;
+    bool            error;
+    size_t          numchars;
+    size_t          numread;
+
+    numchars = 0;
+    error = false;
+    isname = ResReadUint8( &error, fp );
+    if( error )
+        return( NULL );
+    if( isname ) {
+        isname = true;  /* normalize value to boolean type */
+        if( ver < 3 ) {
+            numchars = ResReadUint8( &error, fp );
+        } else {
+            numchars = ResReadUint16( &error, fp );
+        }
+        if( error )
+            return( NULL );
+        ptr = AllocWResIDName( offs + offsetof( WResID, ID.Name ), numchars );
+    } else {
+        ptr = AllocWResIDNum( offs + offsetof( WResID, ID.Num ) );
+    }
+    if( ptr == NULL ) {
+        WRES_ERROR( WRS_MALLOC_FAILED );
+        return( NULL );
+    }
+    id = (WResID *)( ptr + offs );
+    id->IsName = isname;
+    if( isname ) {
+        id->ID.Name.NumChars = numchars;
+        if( (numread = WRESREAD( fp, id->ID.Name.Name, numchars )) != numchars ) {
+            error = WRES_ERROR( WRESIOERR( fp, numread ) ? WRS_READ_FAILED : WRS_READ_INCOMPLETE );
+        }
+    } else {
+        id->ID.Num = ResReadUint16( &error, fp );
+    }
+    if( error ) {
+        WRESFREE( ptr );
+        return( NULL );
+    }
+    return( ptr );
+}
 
 WResID *WResReadWResID( FILE *fp )
 /********************************/
 {
-    WResID          newid;
-    WResID          *newidptr;
-    size_t          numread;
-    unsigned        extrabytes;     /* chars to be read beyond the fixed size */
-
-    /* read in the fixed part of the record */
-    if( WResReadFixedWResID( &newid, fp ) )
-        return( NULL );
-
-    if( newid.IsName ) {
-        extrabytes = newid.ID.Name.NumChars - 1;
-    } else {
-        extrabytes = 0;
-    }
-
-    newidptr = WRESALLOC( sizeof( WResID ) + extrabytes );
-    if( newidptr == NULL ) {
-        WRES_ERROR( WRS_MALLOC_FAILED );
-    } else {
-        memcpy( newidptr, &newid, sizeof( WResID ) );
-        if( extrabytes != 0 ) {
-            if( (numread = WRESREAD( fp, newidptr->ID.Name.Name + 1, extrabytes )) != extrabytes ) {
-                WRES_ERROR( WRESIOERR( fp, numread ) ? WRS_READ_FAILED : WRS_READ_INCOMPLETE );
-                WRESFREE( newidptr );
-                newidptr = NULL;
-            }
-        }
-    }
-
-    return( newidptr );
-} /* WResReadWResID */
+    return( ResReadWResID( fp, 0, WRESVERSION ) );
+}

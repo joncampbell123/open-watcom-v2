@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -36,72 +37,85 @@
 #include "wresrtns.h"
 
 
-static WResTypeNode *newTypeNode( const WResID *type )
+static size_t WResIDSize( const WResID *id )
+/******************************************/
 {
-    WResTypeNode        *newnode;
-    int                 extrabytes;
+    size_t  size;
 
-    extrabytes = WResIDExtraBytes( type );
-    newnode = WRESALLOC( sizeof( WResTypeNode ) + extrabytes );
-    if( newnode != NULL ) {
-        newnode->Next = NULL;
-        newnode->Prev = NULL;
-        newnode->Head = NULL;
-        newnode->Tail = NULL;
-        newnode->Info.NumResources = 0;
-        memcpy( &(newnode->Info.TypeName), type, sizeof( WResID ) + extrabytes );
+    if( id->IsName ) {
+        size = offsetof( WResID, ID.Name.Name ) + id->ID.Name.NumChars;
+    } else {
+        size = offsetof( WResID, ID.Num ) + sizeof( id->ID.Num );
+    }
+    return( size );
+}
+
+static WResTypeNode *newTypeNode( const WResID *type_id )
+{
+    WResTypeNode        *typenode;
+    size_t              id_size;
+
+    id_size = WResIDSize( type_id );
+    typenode = WRESALLOC( offsetof( WResTypeNode, Info.TypeName ) + id_size );
+    if( typenode != NULL ) {
+        typenode->Next = NULL;
+        typenode->Prev = NULL;
+        typenode->Head = NULL;
+        typenode->Tail = NULL;
+        typenode->Info.NumResources = 0;
+        memcpy( &(typenode->Info.TypeName), type_id, id_size );
     } else {
         WRES_ERROR( WRS_MALLOC_FAILED );
     }
-    return( newnode );
+    return( typenode );
 }
 
-static WResLangNode *newLangNode( uint_16 memflags, uint_32 offset,
+static WResLangNode *newLangNode( ResMemFlags res_flags, uint_32 offset,
                                   uint_32 length, const WResLangType *lang,
                                   void *fileinfo )
 {
-    WResLangNode        *newnode;
+    WResLangNode        *langnode;
 
-    newnode = WRESALLOC( sizeof( WResLangNode ) );
-    if( newnode == NULL ) {
+    langnode = WRESALLOC( sizeof( WResLangNode ) );
+    if( langnode == NULL ) {
         WRES_ERROR( WRS_MALLOC_FAILED );
     } else {
-        newnode->Next = NULL;
-        newnode->Prev = NULL;
-        newnode->data = NULL;
-        newnode->fileInfo = fileinfo;
-        newnode->Info.MemoryFlags = memflags;
-        newnode->Info.Offset = offset;
-        newnode->Info.Length = length;
+        langnode->Next = NULL;
+        langnode->Prev = NULL;
+        langnode->data = NULL;
+        langnode->fileInfo = fileinfo;
+        langnode->Info.res_flags = res_flags;
+        langnode->Info.Offset = offset;
+        langnode->Info.Length = length;
         if( lang == NULL ) {
-            newnode->Info.lang.lang = DEF_LANG;
-            newnode->Info.lang.sublang = DEF_SUBLANG;
+            langnode->Info.lang.lang = DEF_LANG;
+            langnode->Info.lang.sublang = DEF_SUBLANG;
         } else {
-            newnode->Info.lang = *lang;
+            langnode->Info.lang = *lang;
         }
     }
-    return( newnode );
+    return( langnode );
 }
 
-static WResResNode *newResNode( const WResID *name )
+static WResResNode *newResNode( const WResID *res_id )
 {
-    WResResNode         *newnode;
-    int                 extrabytes;
+    WResResNode         *resnode;
+    size_t              id_size;
 
-    extrabytes = WResIDExtraBytes( name );
-    newnode = WRESALLOC( sizeof( WResResNode ) + extrabytes );
-    if( newnode == NULL ) {
+    id_size = WResIDSize( res_id );
+    resnode = WRESALLOC( offsetof( WResResNode, Info.ResName ) + id_size );
+    if( resnode == NULL ) {
         WRES_ERROR( WRS_MALLOC_FAILED );
     } else {
-        newnode->Next = NULL;
-        newnode->Prev = NULL;
-        newnode->Head = NULL;
-        newnode->Tail = NULL;
-        newnode->Info.NumResources = 0;
-        memcpy( &(newnode->Info.ResName), name, sizeof( WResID ) + extrabytes );
+        resnode->Next = NULL;
+        resnode->Prev = NULL;
+        resnode->Head = NULL;
+        resnode->Tail = NULL;
+        resnode->Info.NumResources = 0;
+        memcpy( &(resnode->Info.ResName), res_id, id_size );
     }
 
-    return( newnode );
+    return( resnode );
 }
 
 /*
@@ -111,81 +125,81 @@ static WResResNode *newResNode( const WResID *name )
  *                   and return an error. Return is true if any error has
  *                   occured (including duplicate entry)
  */
-bool WResAddResource( const WResID *type, const WResID *name,
-                    uint_16 memflags, long offset, uint_32 length,
-                    WResDir currdir, const WResLangType *lang,
+bool WResAddResource( const WResID *type_id, const WResID *res_id,
+                    ResMemFlags res_flags, long offset, uint_32 length,
+                    WResDir dir, const WResLangType *lang,
                     bool *duplicate )
 /************************************************************/
 {
     bool                rc;
-    WResDirWindow       dup;
+    WResDirWindow       wind_dup;
 
-    rc = WResAddResource2( type, name, memflags, offset, length, currdir,
-                             lang, &dup, NULL );
+    rc = WResAddResource2( type_id, res_id, res_flags, offset, length, dir,
+                             lang, &wind_dup, NULL );
     if( duplicate != NULL ) {
-        *duplicate = !WResIsEmptyWindow( dup );
+        *duplicate = !WResIsEmptyWindow( wind_dup );
     }
     return( rc );
 }
 
-bool WResAddResource2( const WResID *type, const WResID *name,
-                    uint_16 memflags, long offset, uint_32 length,
-                    WResDir currdir, const WResLangType *lang,
-                    WResDirWindow *duplicate, void *fileinfo )
+bool WResAddResource2( const WResID *type_id, const WResID *res_id,
+                    ResMemFlags res_flags, long offset, uint_32 length,
+                    WResDir dir, const WResLangType *lang,
+                    WResDirWindow *wind_dup, void *fileinfo )
 /************************************************************/
 {
 
-    WResTypeNode        *currtype;
-    WResResNode         *currres;
-    WResLangNode        *currlang;
+    WResTypeNode        *typenode;
+    WResResNode         *resnode;
+    WResLangNode        *langnode;
 
     /* set duplicate false so other errors will have it set correctly */
-    if( duplicate != NULL ) {
-        WResSetEmptyWindow( duplicate );
+    if( wind_dup != NULL ) {
+        WResSetEmptyWindow( wind_dup );
     }
-    currres = NULL;
+    resnode = NULL;
 
-    currtype = __FindType( type, currdir );
-    if( currtype != NULL ) {
+    typenode = __FindType( type_id, dir );
+    if( typenode != NULL ) {
         /* if the type is in there already check for a duplicate resource */
-        currres = __FindRes( name, currtype );
-        if( currres != NULL ) {
-            currlang = __FindLang( lang, currres );
-            if( currlang != NULL ) {
-                if( duplicate != NULL )
-                    WResMakeWindow( duplicate, currtype, currres, currlang );
+        resnode = __FindRes( res_id, typenode );
+        if( resnode != NULL ) {
+            langnode = __FindLang( lang, resnode );
+            if( langnode != NULL ) {
+                if( wind_dup != NULL )
+                    WResMakeWindow( wind_dup, typenode, resnode, langnode );
                 return( WRES_ERROR( WRS_DUP_ENTRY ) );
             }
         }
     }
-    if( currtype == NULL ) {
+    if( typenode == NULL ) {
         /* otherwise add the type to the list */
-        currtype = newTypeNode( type );
-        if( currtype == NULL ) {
+        typenode = newTypeNode( type_id );
+        if( typenode == NULL ) {
             return( true );
         }
-        ResAddLLItemAtEnd( (void**)&(currdir->Head), (void**)&(currdir->Tail), currtype );
+        ResAddLLItemAtEnd( (void**)&(dir->Head), (void**)&(dir->Tail), typenode );
         /* adjust the count of the number of types */
-        currdir->NumTypes += 1;
+        dir->NumTypes += 1;
     }
 
-    if( currres  == NULL ) {
+    if( resnode  == NULL ) {
         /* add the resource to the current type */
-        currres = newResNode( name );
-        if( currres == NULL ) {
+        resnode = newResNode( res_id );
+        if( resnode == NULL ) {
             return( true );
         }
-        ResAddLLItemAtEnd( (void**)&(currtype->Head), (void**)&(currtype->Tail), currres );
+        ResAddLLItemAtEnd( (void**)&(typenode->Head), (void**)&(typenode->Tail), resnode );
         /* adjust the counts of the number of resources */
-        currtype->Info.NumResources += 1;
-        currdir->NumResources += 1;
+        typenode->Info.NumResources += 1;
+        dir->NumResources += 1;
     }
-    currlang = newLangNode( memflags, offset, length, lang, fileinfo );
-    if( currlang == NULL ) {
+    langnode = newLangNode( res_flags, offset, length, lang, fileinfo );
+    if( langnode == NULL ) {
         return( true );
     }
-    ResAddLLItemAtEnd( (void**)&(currres->Head), (void**)&(currres->Tail), currlang );
-    currres->Info.NumResources ++;
+    ResAddLLItemAtEnd( (void**)&(resnode->Head), (void**)&(resnode->Tail), langnode );
+    resnode->Info.NumResources ++;
 
     /* no error has occured */
     return( false );

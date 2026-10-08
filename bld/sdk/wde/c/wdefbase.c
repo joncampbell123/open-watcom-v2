@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -127,7 +127,9 @@ WINEXPORT bool   CALLBACK WdeBaseDispatcher( ACTION_ID, OBJPTR, void *, void * )
 /****************************************************************************/
 /* static variables                                                         */
 /****************************************************************************/
+#ifdef __WINDOWS__
 static DISPATCH_FN  *WdeBaseDispatch;
+#endif
 
 static DISPATCH_ITEM WdeBaseActions[] = {
     #define pick(e,n,c) {e, (DISPATCH_RTN *)WdeBase ## n},
@@ -150,7 +152,7 @@ OBJPTR CALLBACK WdeBaseCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle )
 
     WdeDebugCreate( "Base", parent, obj_rect, handle );
 
-    new = (WdeBaseObject *)WRMemAlloc( sizeof( WdeBaseObject ) );
+    new = MemAlloc( sizeof( WdeBaseObject ) );
     if( new == NULL ) {
         WdeWriteTrail( "WdeBaseCreate: Malloc failed" );
         return( (OBJPTR)new );
@@ -160,7 +162,11 @@ OBJPTR CALLBACK WdeBaseCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle )
     new->object_id = BASE_OBJ;
     new->parent = parent;
     new->font = WdeGetEditFont();
+#ifdef __WINDOWS__
     OBJ_DISPATCHER_SET( new, WdeBaseDispatch );
+#else
+    OBJ_DISPATCHER_SET( new, WdeBaseDispatcher );
+#endif
     new->res_info = WdeGetCurrentRes();
 
     if( new->font == NULL || new->res_info == NULL ) {
@@ -227,13 +233,17 @@ bool WdeBaseInit( bool first )
 {
     /* unused parameters */ (void)first;
 
+#ifdef __WINDOWS__
     WdeBaseDispatch = MakeProcInstance_DISPATCHER( WdeBaseDispatcher, WdeGetAppInstance() );
+#endif
     return( true );
 }
 
 void WdeBaseFini( void )
 {
+#ifdef __WINDOWS__
     FreeProcInstance_DISPATCHER( WdeBaseDispatch );
+#endif
 }
 
 bool WdeBaseIsMarkValid( WdeBaseObject *obj, bool *flag, void *p2 )
@@ -305,7 +315,7 @@ bool WdeBaseDestroy( WdeBaseObject *obj, bool *flag, bool *p2 )
 
     Destroy( obj->o_item, *flag );
 
-    WRMemFree( obj );
+    MemFree( obj );
 
     return( true );
 }

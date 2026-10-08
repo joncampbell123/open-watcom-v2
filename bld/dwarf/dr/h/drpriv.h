@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2024-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2024-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -56,8 +56,8 @@ typedef struct {
 } filetab_entry;
 
 typedef struct {
-    filetab_idx         len;
     filetab_entry       *tab;
+    filetab_idx         len;
 } file_table;
 
 typedef struct {
@@ -84,14 +84,14 @@ typedef struct dr_cu_info {
 } dr_cu_info;
 
 typedef struct dr_dbg_info {
-    struct dr_dbg_info *next;
-    void *              file;   // task's file information.
+    struct dr_dbg_info  *next;
+    void                *file;   // task's file information.
     sect_info           sections[DR_DEBUG_NUM_SECTS];
-    dr_cu_info          compunit;
-    dr_cu_handle        last_ccu;
+    dr_cu_info          cu_info;
+    dr_cui_handle       last_cui;
     df_ver              wat_producer_ver;
     unsigned_8          addr_size;
-    bool                byte_swap;
+    bool                big_endian;
 } dr_dbg_info;
 
 extern dr_dbg_handle    DR_CurrNode;

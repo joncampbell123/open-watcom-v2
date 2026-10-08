@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -65,12 +65,9 @@
 #include "iopath.h"
 #include "guistats.h"
 #include "pathgrp2.h"
-#include "roundmac.h"
 
 #include "clibext.h"
 
-
-#define DRIVE_NUM(x)    (toupper((x)) - 'A' + 1)
 
 #define TMPFILENAME     "_watcom_.tmp"
 
@@ -479,7 +476,7 @@ void ResetAllFsysInfo( void )
 
     for( i = 0; i < FsysArray.num; ++i ) {
         if( FsysInfo[i].root != NULL ) {
-            GUIMemFree( FsysInfo[i].root );
+            MemFree( FsysInfo[i].root );
             FsysInfo[i].root = NULL;
         }
     }
@@ -502,10 +499,10 @@ void FiniFsysInfo( void )
     array_idx   i;
 
     for( i = 0; i < FsysArray.num; i++ ) {
-        GUIMemFree( FsysInfo[i].root );
+        MemFree( FsysInfo[i].root );
     }
     FsysArray.num = 0;
-    GUIMemFree( FsysInfo );
+    MemFree( FsysInfo );
 }
 
 static const char *GetRootFromPath( VBUF *root, const char *path )
@@ -561,14 +558,14 @@ static const char *GetRootFromPath( VBUF *root, const char *path )
         /*
          * turn a path like "c:\dir" into "c:\"
          */
-        c = toupper( path[0] );
+        c = toupper( ((unsigned char *)path)[0] );
     } else if( getcwd( curr_dir, sizeof( curr_dir ) ) == NULL ) {
         return( NULL );
     } else {
         /*
          * for relative paths like "\dir" use the current drive.
          */
-        c = toupper( curr_dir[0] );
+        c = toupper( ((unsigned char *)curr_dir)[0] );
     }
     VbufSetChr( root, c );
     VbufConcStr( root, ":\\" );
@@ -610,7 +607,7 @@ static int AddFsysInfo( int target )
     }
     BumpArray( &FsysArray );
     ResetFsysInfoData( &FsysInfo[i] );
-    FsysInfo[i].root = GUIStrDup( p );
+    FsysInfo[i].root = MemStrdupSafe( p );
     VbufFree( &root );
     SimSetTargetFsys( target, i );
     return( i );
@@ -650,16 +647,33 @@ static bool updateFsysInfo( fsys_info *info, bool removable )
 
 #if defined( __UNIX__ )
     {
-        struct statvfs      vfs;
+        struct statvfs  vfs;
 
         /* unused parameters */ (void)removable;
 
+#if 0
         if( statvfs( info->root, &vfs ) == 0 ) {
             info->block_size = ( vfs.f_frsize != 0 ) ? vfs.f_frsize : vfs.f_bsize;
             info->free_space = (fsys_size)vfs.f_bfree * (fsys_size)info->block_size;
         } else {
             info->block_size = 1;
         }
+#else
+        int         fd;
+
+        fd = open(info->root, O_RDONLY | O_DIRECTORY);
+        if (fd >= 0) {
+            if (fstatvfs(fd, &vfs) == 0) {
+                info->block_size = ( vfs.f_frsize ) ? vfs.f_frsize : vfs.f_bsize;
+                if (vfs.f_bavail != 0) {
+                    info->free_space = (fsys_size)vfs.f_bavail * info->block_size;
+                } else {
+                    info->free_space = (fsys_size)vfs.f_bfree * info->block_size;
+                }
+            }
+            close(fd);
+        }
+#endif
     }
 #elif defined( __OS2__ )
     {
@@ -692,7 +706,7 @@ static bool updateFsysInfo( fsys_info *info, bool removable )
 
         /* unused parameters */ (void)removable;
 
-        drive_num = DRIVE_NUM( info->root[0] );
+        drive_num = DRIVE_NUM( info->root );
 
         rc = DosQueryFSInfo( (ULONG)drive_num, FSIL_ALLOC, (PVOID)&fsinfo, sizeof( fsinfo ) );
         if( rc == 0 ) {
@@ -764,7 +778,7 @@ static bool updateFsysInfo( fsys_info *info, bool removable )
         union REGS          r;
         char                drive_num;
 
-        drive_num = DRIVE_NUM( info->root[0] );
+        drive_num = DRIVE_NUM( info->root );
 
         r.w.ax = 0x440E;    /* get logical drive */
         r.w.bx = drive_num;
@@ -1029,11 +1043,12 @@ bool CheckFsys( bool issue_message )
     if( !SimCalcTargetSpaceNeeded() )
         return( false );
     max_targets = SimNumTargets();
-    space = GUIMemAlloc( max_targets * sizeof( *space ) );
+    space = MemAllocSafe( max_targets * sizeof( *space ) );
     ok = true;
     for( i = 0; i < max_targets; i++ ) {
         SimSetTargetMarked( i, false );
     }
+    targ_root = "";
     if( ok ) {
         /*
          * check for enough disk space, combine drives that are the same
@@ -1165,7 +1180,7 @@ bool CheckFsys( bool issue_message )
             SetVariableByName( drive_freesp, buff );
         }
     }
-    GUIMemFree( space );
+    MemFree( space );
     return( ok );
 }
 
@@ -1205,31 +1220,16 @@ bool DoDeleteFile( const VBUF *path )
 COPYFILE_ERROR DoCopyFile( const VBUF *src_file, const VBUF *dst_file, copy_mode copymode )
 /*****************************************************************************************/
 {
-    static char         lastchance[1024];
-    size_t              buffer_size = 16 * 1024;
+    static char         copy_buffer[_32K];
     file_handle         src_afh;
     int                 dst_fh;
     int                 bytes_read, bytes_written, style;
-    char                *pbuff;
     COPYFILE_ERROR      ret;
 
     src_afh = FileOpen( src_file, DATA_BIN );
     if( src_afh == NULL ) {
         return( CFE_CANTOPENSRC );
     }
-
-    for( ;; ) {
-        pbuff = GUIMemAlloc( buffer_size );
-        if( pbuff != NULL )
-            break;
-        buffer_size >>= 1;
-        if( buffer_size < sizeof( lastchance ) ) {
-            pbuff = lastchance;
-            buffer_size = sizeof( lastchance );
-            break;
-        }
-    }
-
     if( copymode & COPY_APPEND ) {
         style = O_RDWR | O_BINARY;
     } else {
@@ -1238,8 +1238,6 @@ COPYFILE_ERROR DoCopyFile( const VBUF *src_file, const VBUF *dst_file, copy_mode
     dst_fh = open_vbuf( dst_file, style, PMODE_R_USR_W );
     if( dst_fh == -1 ) {
         FileClose( src_afh );
-        if( pbuff != lastchance )
-            GUIMemFree( pbuff );
         dst_fh = open_vbuf( dst_file, O_RDONLY );
         if( dst_fh != -1 ) {
             /*
@@ -1256,13 +1254,13 @@ COPYFILE_ERROR DoCopyFile( const VBUF *src_file, const VBUF *dst_file, copy_mode
 
     ret = CFE_NOERROR;
     do {
-        bytes_read = FileRead( src_afh, pbuff, buffer_size );
-        if( bytes_read < 0 ) {
+        bytes_read = FileRead( src_afh, copy_buffer, sizeof( copy_buffer ) );
+        if( bytes_read == READ_ERROR ) {
             SetupError( "IDS_READERROR" );
             ret = CFE_ERROR;
             break;
         }
-        bytes_written = write( dst_fh, pbuff, bytes_read );
+        bytes_written = write( dst_fh, copy_buffer, bytes_read );
         BumpStatus( bytes_written );
         if( bytes_written != bytes_read
           || StatusCancelled() ) {
@@ -1280,11 +1278,9 @@ COPYFILE_ERROR DoCopyFile( const VBUF *src_file, const VBUF *dst_file, copy_mode
             ret = CFE_ERROR;
             break;
         }
-    } while( (size_t)bytes_read == buffer_size );
+    } while( (size_t)bytes_read == sizeof( copy_buffer ) );
     close( dst_fh );
     FileClose( src_afh );
-    if( pbuff != lastchance )
-        GUIMemFree( pbuff );
     if( ret == CFE_NOERROR ) {
         /*
          * Make the destination file have the same time stamp
@@ -1462,7 +1458,7 @@ static void NewFileToCheck( const VBUF *name, bool is_dll )
 {
     file_check  *new;
 
-    new = GUIMemAlloc( sizeof( *new ) );
+    new = MemAllocSafe( sizeof( *new ) );
     new->next = fileCheckThisPack;
     fileCheckThisPack = new;
     VbufInit( &new->name );
@@ -1504,9 +1500,9 @@ static void TransferCheckList( void )
 static bool CheckPendingFiles( void )
 /***********************************/
 {
-    file_check  *curr;
-    file_check  *next;
-    bool        cancel;
+    file_check      *curr;
+    file_check      *next;
+    bool            cancel;
 
     for( curr = fileCheck; curr != NULL; curr = next ) {
         next = curr->next;
@@ -1518,7 +1514,7 @@ static bool CheckPendingFiles( void )
         if( cancel )
             return( false );
         VbufFree( &curr->name );
-        GUIMemFree( curr );
+        MemFree( curr );
     }
     return( true );
 }
@@ -1726,8 +1722,8 @@ static bool DoCopyFiles( void )
                     while( split != NULL ) {
                         junk = split;
                         split = split->next;
-                        GUIMemFree( junk->src_path );
-                        GUIMemFree( junk );
+                        MemFree( junk->src_path );
+                        MemFree( junk );
                     }
                     owner_split = &split;
                     *owner_split = NULL;
@@ -1787,7 +1783,6 @@ static bool DoCopyFiles( void )
                         StatusLinesVbuf( STAT_COPYINGFILE, &dst_file );
                         checkForNewName( filenum, subfilenum, &dst_file );
                         copy_error = DoCopyFile( &src_file, &dst_file, getCopyMode( filenum, subfilenum ) );
-
                         switch( copy_error ) {
                         case CFE_ABORT:
                         case CFE_ERROR:
@@ -2027,7 +2022,7 @@ void DeleteObsoleteFiles( void )
         }
     }
     VbufInit( &temp_vbuf );
-    found = GUIMemAlloc( sizeof( bool ) * group );
+    found = MemAllocSafe( sizeof( bool ) * group );
     memset( found, false, sizeof( bool ) * group );
     found_any = false;
     group = 0;
@@ -2067,7 +2062,7 @@ void DeleteObsoleteFiles( void )
         }
     }
     VbufFree( &temp_vbuf );
-    GUIMemFree( found );
+    MemFree( found );
 }
 
 void GetInstallName( VBUF *name )
@@ -2082,7 +2077,6 @@ void GetInstallName( VBUF *name )
 
         VbufSetStr( &argv0, InstallerFile );
         VbufSplitpath( &argv0, NULL, NULL, name, NULL );
-//        strupr( name );
 
         VbufFree( &argv0 );
     }
@@ -2149,7 +2143,7 @@ gui_message_return MsgBox( gui_window *gui, const char *msg_id,
 /*************************************************************/
 {
     gui_message_return  result;
-    char                msg_buf[1024];
+    char                msg_buf[_1K];
     const char          *errormessage;
     va_list             args;
     VBUF                msg_text;
@@ -2264,9 +2258,9 @@ static void AddDefine( char *def )
     if( p != NULL ) {
         *p = '\0';
         ++p;
-        var = GUIMemAlloc( sizeof( DEF_VAR ) );
-        var->variable = GUIStrDup( def );
-        var->value = GUIStrDup( p );
+        var = MemAllocSafe( sizeof( DEF_VAR ) );
+        var->variable = MemStrdupSafe( def );
+        var->value = MemStrdupSafe( p );
         var->link = ExtraVariables;
         ExtraVariables = var;
     }
@@ -2293,9 +2287,9 @@ static void FreeDefinedVars( void )
 
     while( (var = ExtraVariables) != NULL ) {
         ExtraVariables = var->link;
-        GUIMemFree( var->variable );
-        GUIMemFree( var->value );
-        GUIMemFree( var );
+        MemFree( var->variable );
+        MemFree( var->value );
+        MemFree( var );
     }
 }
 
@@ -2419,8 +2413,8 @@ bool GetDirParams( int argc, char **argv, VBUF *inf_name, VBUF *src_path, VBUF *
                 if( argv[i][2] == '='
                   && argv[i][3] != '\0'
                   && access( &argv[i][3], R_OK ) == 0 ) {
-                    GUIMemFree( VariablesFile );
-                    VariablesFile = GUIStrDup( &argv[i][3] );
+                    MemFree( VariablesFile );
+                    VariablesFile = MemStrdupSafe( &argv[i][3] );
                 }
                 break;
             case 'd':
@@ -2508,7 +2502,7 @@ bool FreeDirParams( void )
 /************************/
 {
     FreeDefinedVars();
-    GUIMemFree( VariablesFile );
+    MemFree( VariablesFile );
 
     return( true );
 }
@@ -2519,7 +2513,7 @@ static void removeTrailingSpaces( char *s )
     size_t  len;
 
     len = strlen( s );
-    while( len-- > 0 && isspace( s[len] ) ) {
+    while( len-- > 0 && isspace( ((unsigned char *)s)[len] ) ) {
         s[len] = '\0';
     }
 }
@@ -2539,7 +2533,9 @@ void ReadVariablesFile( const char *name )
     }
 
     while( (line = fgets( buf, sizeof( buf ), fp )) != NULL ) {
-        SKIP_SPACES( line );
+        while( isspace( *(unsigned char *)line ) ) {
+            line++;
+        }
         if( *line == '#'
           || *line == '\0' ) {
             continue;
@@ -2549,7 +2545,9 @@ void ReadVariablesFile( const char *name )
         if( variable != NULL ) {
             value = strtok( NULL, "=\t\0" );
             if( value != NULL ) {
-                SKIP_SPACES( value );
+                while( isspace( *(unsigned char *)value ) ) {
+                    value++;
+                }
                 removeTrailingSpaces( value );
                 if( name == NULL
                   || stricmp( name, variable ) == 0 ) {

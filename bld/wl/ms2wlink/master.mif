@@ -11,18 +11,21 @@ memory_model_i86 = m
 !include cproj.mif
 !include defrule.mif
 !include deftarg.mif
-!include trmem.mif
 
 #
 # cflags
 #
 .c: ../c;$(trmem_dir)
 
-inc_dirs = -I"../h"
+inc_dirs = -I"../h" -I"$(trmem_dir)"
 
-extra_cpp_flags_f_mem = $(trmem_cpp_flags)
-
-extra_c_flags_f_mem   = $(trmem_cover_cflags)
+!ifeq trmem 1
+! ifdef __WATCOM_TOOLS__
+!  if $(__WATCOM_TOOLS__) < 1300
+extra_c_flags_f_mem = -of+
+!  endif
+! endif
+!endif
 
 #
 # lflags

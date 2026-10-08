@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -41,19 +41,41 @@
 #include "cle.h"
 #include "fmeminit.h"
 #include "utility.h"
-#include "wresmem.h"
-#include "trmemcvr.h"
+#include "memfuncs.h"
+#include "trmem.h"
 
 #include "clibext.h"
 #include "cspawn.h"
 
+
+#ifdef TRMEM
+
+static _trmem_hdl   TrHdl = _TRMEM_HDL_NONE;
+static FILE         *TrFile;       /* file handle we'll write() to */
+
+static void memPrintLine( void *file, const char *buf, size_t len )
+{
+    /* unused parameters */ (void)file; (void)len;
+
+    fprintf( stderr, "***%s\n", buf );
+    if( TrFile != NULL ) {
+        fprintf( TrFile, "%s\n", buf );
+    }
+}
+
+#endif  /* TRMEM */
 
 void    FMemInit( void ) {
 //========================
 
     UnFreeMem = 0;
 #if defined( TRMEM )
-    TRMemOpen();
+    TrFile = fopen( "mem.trk", "w" );
+    TrHdl = _trmem_open( malloc, free, _TRMEM_NO_REALLOC, strdup,
+                            NULL, memPrintLine, _TRMEM_DEF );
+    if( TrHdl == _TRMEM_HDL_NONE ) {
+        exit( EXIT_FAILURE );
+    }
 #else
     SysMemInit();
 #endif
@@ -71,98 +93,151 @@ void    FMemErrors( void ) {
 }
 
 
-void    FMemFini( void ) {
-//========================
-
+void    FMemFini( void )
+//======================
+{
 #if defined( TRMEM )
-    TRMemClose();
+    if( TrHdl != _TRMEM_HDL_NONE ) {
+        _trmem_prt_list_ex( TrHdl, 100 );
+        _trmem_close( TrHdl );
+        if( TrFile != NULL ) {
+            fclose( TrFile );
+            TrFile = NULL;
+        }
+        TrHdl = _TRMEM_HDL_NONE;
+    }
 #else
+    FMemErrors();
     SysMemFini();
 #endif
 }
 
+static void *check_nomem( void *ptr )
+{
+    if( ptr == NULL ) {
+        if( (ProgSw & PS_STMT_TOO_BIG) == 0
+          && (StmtSw & SS_SCANNING) && (ITHead != NULL) ) {
+            FreeITNodes( ITHead );
+            ITHead = NULL;
+            Error( MO_LIST_TOO_BIG );
+            ProgSw |= PS_STMT_TOO_BIG;
+        } else {
+            ProgSw |= PS_FATAL_ERROR;
+            PurgeAll(); // free up memory so we can process the error
+            Error( MO_DYNAMIC_OUT );
+            CSuicide();
+        }
+    }
+    return( ptr );
+}
 
-void    *FMemAlloc( size_t size ) {
-//=================================
-
+#if defined( TRMEM )
+static void *doAlloc( size_t size, _trmem_who who )
+#else
+static void *doAlloc( size_t size )
+#endif
+//=================================================
+{
     void        *p;
 
 #if defined( TRMEM )
-    p = TRMemAlloc( size );
+    p = _trmem_alloc( size, who, TrHdl );
 #else
     p = malloc( size );
 #endif
     if( p == NULL ) {
         FrlFini( &ITPool );
 #if defined( TRMEM )
-        p = TRMemAlloc( size );
+        p = _trmem_alloc( size, who, TrHdl );
 #else
         p = malloc( size );
 #endif
-        if( p == NULL ) {
-            if( (ProgSw & PS_STMT_TOO_BIG) == 0
-              && (StmtSw & SS_SCANNING) && (ITHead != NULL) ) {
-                FreeITNodes( ITHead );
-                ITHead = NULL;
-                Error( MO_LIST_TOO_BIG );
-                ProgSw |= PS_STMT_TOO_BIG;
-            } else {
-                ProgSw |= PS_FATAL_ERROR;
-                PurgeAll(); // free up memory so we can process the error
-                Error( MO_DYNAMIC_OUT );
-                CSuicide();
-            }
-        } else {
-            UnFreeMem++;
-        }
-    } else {
+    }
+    return( p );
+}
+
+#if defined( TRMEM )
+static char *doStrdup( const char *str, _trmem_who who )
+#else
+static char *doStrdup( const char *str )
+#endif
+//======================================================
+{
+    void        *p;
+
+#if defined( TRMEM )
+    p = _trmem_strdup( str, who, TrHdl );
+#else
+    p = strdup( str );
+#endif
+    if( p == NULL ) {
+        FrlFini( &ITPool );
+#if defined( TRMEM )
+        p = _trmem_strdup( str, who, TrHdl );
+#else
+        p = strdup( str );
+#endif
+    }
+    return( p );
+}
+
+TRMEMAPI( MemAlloc )
+void    *MemAlloc( size_t size )
+//==============================
+{
+    void        *p;
+
+#if defined( TRMEM )
+    p = doAlloc( size, _TRMEM_WHO( 1 ) );
+#else
+    p = doAlloc( size );
+#endif
+    if( p != NULL ) {
         UnFreeMem++;
     }
     return( p );
 }
 
-void    *wres_alloc( size_t size )
-//================================
+TRMEMAPI( MemAllocSafe )
+void    *MemAllocSafe( size_t size )
+//==================================
 {
-#if defined( TRMEM )
-    return( TRMemAlloc( size ) );
-#else
-    return( malloc( size ) );
-#endif
-}
-
-void    FMemFree( void *p ) {
-//===========================
+    void        *p;
 
 #if defined( TRMEM )
-    TRMemFree( p );
+    p = check_nomem( doAlloc( size, _TRMEM_WHO( 2 ) ) );
 #else
-    free( p );
+    p = check_nomem( doAlloc( size ) );
 #endif
-    UnFreeMem--;
+    UnFreeMem++;
+    return( p );
 }
 
-void    wres_free( void *p )
-//==========================
+TRMEMAPI( MemStrdupSafe )
+char    *MemStrdupSafe( const char *str )
+//=======================================
 {
+    void        *p;
+
 #if defined( TRMEM )
-    TRMemFree( p );
+    p = check_nomem( doStrdup( str, _TRMEM_WHO( 3 ) ) );
 #else
-    free( p );
+    p = check_nomem( doStrdup( str ) );
 #endif
+    UnFreeMem++;
+    return( p );
 }
 
-char *FMemStrDup( const char *buf )
-//=================================
+TRMEMAPI( MemFree )
+void    MemFree( void *p )
+//========================
 {
-    char    *new;
-    size_t  len;
-
-    len = strlen( buf ) + 1;
-    new = FMemAlloc( len );
-    if( new != NULL ) {
-        memcpy( new, buf, len );
+    if( p != NULL ) {
+#ifdef TRMEM
+        _trmem_free( p, _TRMEM_WHO( 4 ), TrHdl );
+#else
+        free( p );
+#endif
+        UnFreeMem--;
     }
-    return( new );
 }
-

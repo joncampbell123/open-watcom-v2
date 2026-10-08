@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -42,15 +42,14 @@
 #include "watcom.h"
 #include "builder.h"
 #include "memutils.h"
-#ifdef TRMEM
-    #include "trmem.h"
-#endif
+#include "trmem.h"
 
 #include "clibext.h"
 
 
 #ifdef TRMEM
-static _trmem_hdl   TRMemHandle;
+
+static _trmem_hdl   TrHdl = _TRMEM_HDL_NONE;
 
 static void     TRPrintLine( void *parm, const char *buff, size_t len )
 {
@@ -58,23 +57,24 @@ static void     TRPrintLine( void *parm, const char *buff, size_t len )
 
     printf( "%s\n", buff );
 }
-#endif
 
-void MOpen( void )
-/****************/
+#endif  /* TRMEM */
+
+void MemOpen( void )
+/******************/
 {
 #ifdef TRMEM
-    TRMemHandle = _trmem_open( malloc, free, NULL, NULL, NULL, TRPrintLine,
-            _TRMEM_ALLOC_SIZE_0 | _TRMEM_REALLOC_SIZE_0 | _TRMEM_OUT_OF_MEMORY | _TRMEM_CLOSE_CHECK_FREE );
+    TrHdl = _trmem_open( malloc, free, _TRMEM_NO_REALLOC, strdup,
+                               NULL, TRPrintLine, _TRMEM_DEF );
 #endif
 }
 
-void MClose( void )
+void MemClose( void )
 /*****************/
 {
 #ifdef TRMEM
-    _trmem_prt_list( TRMemHandle );
-    _trmem_close( TRMemHandle );
+    _trmem_prt_list( TrHdl );
+    _trmem_close( TrHdl );
 #endif
 }
 
@@ -91,7 +91,7 @@ void Fatal( const char *str, ... )
         va_end( args );
     }
     CloseLog();
-    MClose();
+    MemClose();
     exit( 1 );
 }
 
@@ -141,12 +141,13 @@ void CloseLog( void )
     }
 }
 
-void *MAlloc( size_t size )
+TRMEMAPI( MemAllocSafe )
+void *MemAllocSafe( size_t size )
 {
     void        *p;
 
 #ifdef TRMEM
-    p = _trmem_alloc( size, _trmem_guess_who(), TRMemHandle );
+    p = _trmem_alloc( size, _TRMEM_WHO( 1 ), TrHdl );
 #else
     p = malloc( size );
 #endif
@@ -156,12 +157,13 @@ void *MAlloc( size_t size )
     return( p );
 }
 
-char *MStrdup( const char *s )
+TRMEMAPI( MemStrdupSafe )
+char *MemStrdupSafe( const char *s )
 {
     void        *p;
 
 #ifdef TRMEM
-    p = _trmem_strdup( s, _trmem_guess_who(), TRMemHandle );
+    p = _trmem_strdup( s, _TRMEM_WHO( 2 ), TrHdl );
 #else
     p = strdup( s );
 #endif
@@ -171,21 +173,14 @@ char *MStrdup( const char *s )
     return( p );
 }
 
-void MFree( void *p )
+TRMEMAPI( MemFree )
+void MemFree( void *p )
 {
 #ifdef TRMEM
-    _trmem_free( p, _trmem_guess_who(), TRMemHandle );
+    _trmem_free( p, _TRMEM_WHO( 3 ), TrHdl );
 #else
     free( p );
 #endif
-}
-
-const char *SkipBlanks( const char *p )
-{
-    while( IS_BLANK( *p ) ) {
-        ++p;
-    }
-    return( p );
 }
 
 char *GetPathOrFile( const char *p, char *buffer )
@@ -193,26 +188,27 @@ char *GetPathOrFile( const char *p, char *buffer )
     char        c;
     char        quotechar;
 
-    p = SkipBlanks( p );
-    if( *p == '\0' )
-        return( NULL );
-    quotechar = ( *p == '"' ) ? *p++ : ' ';
-    while( (c = *p) != '\0' ) {
-        if( c == quotechar ) {
-            p++;
-            break;
-        }
-#ifdef __UNIX__
-        if( c == '\\' ) {
-            c = '/';
-        }
-#else
-        if( c == '/' ) {
-            c = '\\';
-        }
-#endif
-        *buffer++ = c;
+    while( isspace( *(unsigned char *)p ) )
         p++;
+    if( *p != '\0' ) {
+        quotechar = ( *p == '"' ) ? *p++ : ' ';
+        while( (c = *p) != '\0' ) {
+            if( c == quotechar ) {
+                p++;
+                break;
+            }
+#ifdef __UNIX__
+            if( c == '\\' ) {
+                c = '/';
+            }
+#else
+            if( c == '/' ) {
+                c = '\\';
+            }
+#endif
+            *buffer++ = c;
+            p++;
+        }
     }
     *buffer = '\0';
     return( (char *)p );

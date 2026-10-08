@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -100,7 +100,7 @@ void    InitComIO( void ) {
     TermCursor = 0;
     ErrCursor  = 0;
     ListCursor = 0;
-    TermBuff = FMemAlloc( TERM_BUFF_SIZE );
+    TermBuff = MemAllocSafe( TERM_BUFF_SIZE );
     ErrBuff = NULL;
     ListBuff = NULL;
     CurrFile = NULL;
@@ -116,7 +116,7 @@ void    InitComIO( void ) {
 void    FiniComIO( void ) {
 //===================
 
-    FMemFree( TermBuff );
+    MemFree( TermBuff );
 }
 
 
@@ -147,7 +147,7 @@ void    OpenSrc( void ) {
 
     erase_err = ErrFile == NULL;
     MakeName( SrcName, SrcExtn, bld_name );
-    fp = SDOpenText( bld_name, "rt" );
+    fp = SDOpen( bld_name, "rt" );
     if( fp != NULL ) {
         SrcInclude( bld_name );
         CurrFile->fileptr = fp;
@@ -213,7 +213,7 @@ void    ReadSrc( void ) {
             }
         } else {
             CurrFile->rec++;
-            SrcBuff[ len ] = NULLCHAR;
+            SrcBuff[len] = NULLCHAR;
         }
     }
 }
@@ -251,7 +251,7 @@ void    Include( const char *inc_name )
     if( AlreadyOpen( bld_name ) )
         return;
     // try file called <include_name>.FOR.
-    fp = SDOpenText( bld_name, "rt" );
+    fp = SDOpen( bld_name, "rt" );
     if( fp != NULL ) {
         SrcInclude( bld_name );
         CurrFile->fileptr = fp;
@@ -296,8 +296,8 @@ void    SrcInclude( const char *name )
 {
     source_t    *src;
 
-    src = FMemAlloc( sizeof( source_t ) );
-    src->name = FMemAlloc( strlen( name ) + 1 );
+    src = MemAllocSafe( sizeof( source_t ) );
+    src->name = MemAllocSafe( strlen( name ) + 1 );
     strcpy( src->name, name );
     src->rec = 0;
     src->link = CurrFile;
@@ -336,8 +336,8 @@ void    Conclude( void ) {
         }
     }
     SDClose( old->fileptr );
-    FMemFree( old->name );
-    FMemFree( old );
+    MemFree( old->name );
+    MemFree( old );
     ProgSw &= ~PS_INC_EOF;
     BISetSrcFile();             // tell browser which file we return to
 }
@@ -359,14 +359,14 @@ void    OpenErr( void ) {
     if( (Options & OPT_ERRFILE) && ( (ProgSw & PS_ERR_OPEN_TRIED) == 0 ) ) {
         ProgSw |= PS_ERR_OPEN_TRIED;
         MakeName( SDFName( SrcName ), ErrExtn, buffer );
-        ErrFile = SDOpenText( buffer, "wt" );
+        ErrFile = SDOpen( buffer, "wt" );
         if( SDError( ErrFile, errmsg, sizeof( errmsg ) ) ) {
             InfoError( SM_OPENING_FILE, buffer, errmsg );
         }
         if( ErrFile != NULL ) {
             ErrCursor = 0;
             if( ErrBuff == NULL ) {
-                ErrBuff = FMemAlloc( ERR_BUFF_SIZE );
+                ErrBuff = MemAllocSafe( ERR_BUFF_SIZE );
             }
         }
     }
@@ -380,11 +380,11 @@ void    CompErr( uint msg ) {
 }
 
 
-void    PrintErr( const char *string )
-//====================================
+void    PrintErr( const char *str )
+//=================================
 {
-    JustErr( string );
-    PrtLst( string );
+    JustErr( str );
+    PrtLst( str );
 }
 
 
@@ -458,22 +458,22 @@ static  void    SendBuff( const char *str, char *buff, size_t buff_size, size_t 
 }
 
 
-static  void    ErrOut( const char *string )
-//==========================================
+static  void    ErrOut( const char *str )
+//=======================================
 {
     if( ErrFile != NULL ) {
-        SendBuff( string, ErrBuff, ERR_BUFF_SIZE, &ErrCursor, ErrFile, &ChkErrErr );
+        SendBuff( str, ErrBuff, ERR_BUFF_SIZE, &ErrCursor, ErrFile, &ChkErrErr );
     }
 }
 
 
-void    JustErr( const char *string )
-//===================================
+void    JustErr( const char *str )
+//================================
 {
     if( ErrToTerm() ) {
-        TOut( string );
+        TOut( str );
     }
-    ErrOut( string );
+    ErrOut( str );
 }
 
 
@@ -497,7 +497,7 @@ void    CloseErr( void ) {
     ErrFile = NULL;
     if( ErrBuff == NULL )
         return;
-    FMemFree( ErrBuff );
+    MemFree( ErrBuff );
     ErrBuff = NULL;
 }
 
@@ -514,19 +514,19 @@ static  void    ChkTermErr( void ) {
 }
 
 
-void    TOutNL( const char *string )
-//==================================
+void    TOutNL( const char *str )
+//===============================
 {
-    TOut( string );
+    TOut( str );
     SDWriteTextNL( TermFile, TermBuff, TermCursor );
     TermCursor = 0;
 }
 
 
-void    TOut( const char *string )
-//================================
+void    TOut( const char *str )
+//=============================
 {
-    SendBuff( string, TermBuff, TERM_BUFF_SIZE, &TermCursor, TermFile, &ChkTermErr );
+    SendBuff( str, TermBuff, TERM_BUFF_SIZE, &TermCursor, TermFile, &ChkTermErr );
 }
 
 
@@ -550,12 +550,12 @@ static  void    OpenListingFile( bool reopen ) {
         // ignore other listing file options
     } else {
         GetLstName( name );
-        ListFile = SDOpenText( name, "wb" );
+        ListFile = SDOpen( name, "wb" );
         if( SDError( ListFile, errmsg, sizeof( errmsg ) ) ) {
             InfoError( SM_OPENING_FILE, name, errmsg );
         } else {
             ListFlag |= LF_CC_NOLF;
-            ListBuff = FMemAlloc( LIST_BUFF_SIZE + 1 );
+            ListBuff = MemAllocSafe( LIST_BUFF_SIZE + 1 );
             if( ListBuff == NULL ) {
                 CloseLst();
                 InfoError( MO_DYNAMIC_OUT );
@@ -650,11 +650,11 @@ void    GetLstName( char *buffer ) {
 }
 
 
-void    PrtLstNL( const char *string )
-//====================================
+void    PrtLstNL( const char *str )
+//=================================
 {
     ListFlag |= LF_NEW_LINE;
-    PrtLst( string );
+    PrtLst( str );
     ListFlag &= LF_OFF;
 }
 
@@ -715,8 +715,8 @@ static  void    SetCtrlSeq( void ) {
 }
 
 
-static  void    PutLst( const char *string )
-//==========================================
+static  void    PutLst( const char *str )
+//=======================================
 {
     size_t      len;
     bool        newline;
@@ -727,11 +727,11 @@ static  void    PutLst( const char *string )
             SetCtrlSeq();
         }
         len = LIST_BUFF_SIZE - ListCursor - 1; // -1 for NULLCHAR
-        len = CharSetInfo.extract_text( string, len );
-        len = CopyMaxStr( string, &ListBuff[ ListCursor ], len );
+        len = CharSetInfo.extract_text( str, len );
+        len = CopyMaxStr( str, &ListBuff[ListCursor], len );
         ListCursor += len;
-        string += len;
-        if( *string == NULLCHAR )
+        str += len;
+        if( *str == NULLCHAR )
             break;
         SendRec();
     }
@@ -741,14 +741,14 @@ static  void    PutLst( const char *string )
 }
 
 
-void    PrtLst( const char *string )
-//==================================
+void    PrtLst( const char *str )
+//===============================
 {
     if( ListFlag & LF_QUIET )
         return;
     if( ListFile == NULL )
         return;
-    PutLst( string );
+    PutLst( str );
 }
 
 
@@ -762,7 +762,7 @@ void    CloseLst( void ) {
     ListFile = NULL;
     if( ListBuff == NULL )
         return;
-    FMemFree( ListBuff );
+    MemFree( ListBuff );
     ListBuff = NULL;
 }
 

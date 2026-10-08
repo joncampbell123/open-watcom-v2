@@ -38,6 +38,8 @@
 #include "initarg.h"
 #include "cmain.h"
 #include "initdll.h"
+#include "xmain.h"
+
 
 /*
         ___Argc, ___Argv will be filled in by an initializer routine
@@ -45,16 +47,18 @@
 */
 
 #if defined(__SW_BD)
+
 int _WCNEAR _CMain( void )
 {
     return( __dll_initialize() );
 }
+
 #else
-extern int     main( int, char ** );
 
 _WCNORETURN void _WCNEAR _CMain( void )
 {
     exit( main( ___Argc, ___Argv ) );
     // never return
 }
+
 #endif

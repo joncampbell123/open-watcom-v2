@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -31,22 +31,24 @@
 
 
 #include <stdlib.h>
+#include <stddef.h>
 #include <ctype.h>
 #include "wresall.h"
 #include "rcstrblk.h"
 #include "rcstr.h"
 #include "rcrtns.h"
+#include "memfuncs.h"
 
 
 #if !defined( INSIDE_WLINK ) || defined( _OS2 )
-static size_t RemoveRedundantStrings( void **strlist, size_t num,
+static size_t RemoveRedundantStrings( name_ptr *strlist, size_t num,
                     int (*compare)(const void *, const void *) )
 /****************************************************************
  * strlist is a SORTED array of char *'s of size num
  */
 {
-    void **     curr;       /* element being examined */
-    void **     last;       /* last unique element */
+    name_ptr        *curr;      /* element being examined */
+    name_ptr        *last;      /* last unique element */
 
     curr = strlist;
     last = strlist - 1;     /* this is incremented in first iteration */
@@ -64,7 +66,7 @@ static size_t RemoveRedundantStrings( void **strlist, size_t num,
 } /* RemoveRedundantStrings */
 
 
-static size_t SortAndRemoveRedundantStrings( void **strlist, size_t num,
+static size_t SortAndRemoveRedundantStrings( name_ptr *strlist, size_t num,
                             int (*compare)(const void *, const void *) )
 /***********************************************************************
  * strlist is an array of char *'s of size num
@@ -74,15 +76,15 @@ static size_t SortAndRemoveRedundantStrings( void **strlist, size_t num,
     return( RemoveRedundantStrings( strlist, num, compare ) );
 } /* SortAndRemoveRedundantStrings */
 
-static size_t InitStringList( WResDir dir, void **list, size_t len )
-/*******************************************************************
+static size_t InitStringIDNamesList( WResDir dir, name_ptr *list, size_t len )
+/*****************************************************************************
  * The list will be a list of pointers to WResIDName's
  */
 {
     WResDirWindow   wind;
     WResTypeInfo    *typeinfo;
     WResResInfo     *resinfo;
-    void            **element;
+    name_ptr        *element;
 
     element = list;
     for( wind = WResFirstResource( dir ); !WResIsEmptyWindow( wind ); wind = WResNextResource( wind, dir ) ) {
@@ -91,7 +93,7 @@ static size_t InitStringList( WResDir dir, void **list, size_t len )
             if( typeinfo->TypeName.IsName ) {
                 if( len == 0 )
                     return( 0 );      /* should never occur */
-                *element = &(typeinfo->TypeName.ID.Name);
+                element->u.name_id = &(typeinfo->TypeName.ID.Name);
                 element++;
                 len--;
             }
@@ -101,7 +103,7 @@ static size_t InitStringList( WResDir dir, void **list, size_t len )
             if( resinfo->ResName.IsName ) {
                 if( len == 0 )
                     return( 0 );      /* should never occur */
-                *element = &(resinfo->ResName.ID.Name);
+                element->u.name_id = &(resinfo->ResName.ID.Name);
                 element++;
                 len--;
             }
@@ -109,112 +111,79 @@ static size_t InitStringList( WResDir dir, void **list, size_t len )
     }
 
     return( element - list );
-} /* InitStringList */
+} /* InitStringIDNamesList */
 
-static void *MemUprCpy( void *dst, const void *src, size_t length )
-/*****************************************************************/
+static char *StrUprCpy( char *dst, const char *src, uint_16 length )
+/******************************************************************/
 {
-    char        *c_dst;
-    const char  *c_src;
-
-    for( c_dst = dst, c_src = src; length > 0; c_dst++, c_src++, length-- ) {
-        *c_dst = toupper( (unsigned char)*c_src );
+    /* output length */
+    *dst++ = length;
+    /* output string without NULL terminator*/
+    while( length-- > 0 ) {
+        *dst++ = toupper( *(unsigned char *)src );
+        src++;
     }
-
     return( dst );
-} /* MemUprCpy */
+}
 
-static void *MemUprCpyUni( void *dst, const void *src, size_t length )
-/********************************************************************/
+static char *StrUprCpyToUni( char *dst, const char *src, uint_16 length )
+/***********************************************************************/
 {
-    uint_16     *c_dst;
-    const char  *c_src;
-
-    for( c_dst = dst, c_src = src; length > 0; c_dst++, c_src++, length-- ) {
-        *c_dst = toupper( (unsigned char)*c_src );
+    /* output length */
+    MPUT_16( dst, length );
+    dst += sizeof( uint_16 );
+    /* output string without NULL terminator*/
+    while( length-- > 0 ) {
+        *dst++ = toupper( *(unsigned char *)src );
+        *dst++ = '\0';
+        src++;
     }
-
     return( dst );
-} /* MemUprCpy */
+}
 
-static void CopyString( void **nextstr, WResIDName **name, bool use_unicode )
-/****************************************************************************/
-{
-    WResIDName          *currname;
-    StringItem16        *name16;
-    StringItem32        *name32;
-
-    currname = *name;
-    *name = *nextstr;
-
-    if( use_unicode ) {
-        name32 = *nextstr;
-        name32->NumChars = currname->NumChars;
-        MemUprCpyUni( &name32->Name, &currname->Name, currname->NumChars );
-        *nextstr = (uint_8 *)(*nextstr) + 2 * ( currname->NumChars - 1 ) + sizeof( StringItem32 );
-    } else {
-        name16 = *nextstr;
-        name16->NumChars = currname->NumChars;
-        MemUprCpy( &name16->Name, &currname->Name, currname->NumChars );
-        *nextstr = (uint_8 *)(*nextstr) + currname->NumChars - 1 + sizeof( StringItem16 );
-    }
-} /* CopyString */
-
-static void ConstructStringBlock( StringsBlock *str )
-/****************************************************
+static void ConstructStringIDNamesBlock( StringsBlock *str )
+/*************************************************************
  * the string list should be filled in when this is called
  */
 {
-    char            *nextstring;    /* make this a char * so we can add by */
-                                    /* by bytes */
-    WResIDName      *currname;
+    char            *nextstring;
+    WResIDName      *name_id;
     unsigned        i;
     unsigned        cnt;
+    uint_16         len;
 
     /*
      * calculate the size of the block needed
      */
     str->StringBlockSize = 0;
-#if 0
-    for( currname = str->StringList; currname < str->StringList + str->StringListLen; currname++ ) {
-        if( str->UseUnicode ) {
-            str->StringBlockSize += sizeof( StringItem32 ) + 2 * ((**currname).NumChars - 1);
-        } else {
-            str->StringBlockSize += sizeof( StringItem16 ) + (**currname).NumChars - 1;
-        }
-    }
-#else
     cnt = str->StringListLen;
-    for( i=0; i < cnt; i++ ) {
-        currname = str->StringList[i];
+    for( i = 0; i < cnt; i++ ) {
+        len = str->StringList[i].u.name_id->NumChars + 1;
         if( str->UseUnicode ) {
-            str->StringBlockSize += sizeof( StringItem32 ) + 2 * ((*currname).NumChars - 1);
+            str->StringBlockSize += 2 * len;
         } else {
-            str->StringBlockSize += sizeof( StringItem16 ) + (*currname).NumChars - 1;
+            str->StringBlockSize += len;
         }
     }
-#endif
     /*
      * allocate the block for the strings
      */
-    str->StringBlock = RESALLOC( str->StringBlockSize );
+    str->StringBlock = MemAllocSafe( str->StringBlockSize );
     /*
      * copy the strings into the block
      */
     nextstring = str->StringBlock;
-#if 0
-    for( currname = str->StringList; currname < str->StringList + str->StringListLen; currname++ ) {
-        CopyString( &nextstring, currname, str->UseUnicode );
-    }
-#else
     cnt = str->StringListLen;
     for( i = 0; i < cnt; i++ ) {
-        currname = str->StringList[i];
-        str->StringList[i] = nextstring;
-        CopyString( (void **)&nextstring, &currname, str->UseUnicode );
+        name_id = str->StringList[i].u.name_id;
+        str->StringList[i].u.str = nextstring;
+        if( str->UseUnicode ) {
+            nextstring = StrUprCpyToUni( nextstring, name_id->Name, name_id->NumChars );
+        } else {
+            nextstring = StrUprCpy( nextstring, name_id->Name, name_id->NumChars );
+        }
     }
-#endif
-} /* ConstructStringBlock */
+} /* ConstructStringIDNamesBlock */
 
 static int CompareWResIDNames( const void *n1, const void *n2 )
 /*************************************************************/
@@ -222,11 +191,10 @@ static int CompareWResIDNames( const void *n1, const void *n2 )
     return( WResIDNameCmp( *(const WResIDName **)(n1), *(const WResIDName **)(n2) ) );
 }
 
-void StringBlockBuild( StringsBlock *str, WResDir dir, bool use_unicode )
-/***********************************************************************/
+void StringIDNamesBlockBuild( StringsBlock *str, WResDir dir, bool use_unicode )
+/******************************************************************************/
 {
-    size_t  list_len;
-    void    **new_list;
+    size_t          list_len;
 
     if( WResIsEmpty( dir ) ) {
         /*
@@ -237,40 +205,37 @@ void StringBlockBuild( StringsBlock *str, WResDir dir, bool use_unicode )
         /*
          * set the initial list_len to be the max possible
          */
-        list_len = WResGetNumTypes( dir ) + WResGetNumResources( dir );
+        list_len = dir->NumTypes + dir->NumResources;
         str->UseUnicode = use_unicode;
-        str->StringList = RESALLOC( list_len * sizeof( void * ) );
+        str->StringList = MemAllocSafe( list_len * sizeof( *str->StringList ) );
 
-        list_len = InitStringList( dir, str->StringList, list_len );
+        list_len = InitStringIDNamesList( dir, str->StringList, list_len );
         list_len = SortAndRemoveRedundantStrings( str->StringList, list_len, CompareWResIDNames );
-        str->StringListLen = list_len;
+        str->StringListLen = (uint_16)list_len;
 
         if( list_len == 0 ) {
-            RESFREE( str->StringList );
+            MemFree( str->StringList );
             str->StringList = NULL;
             str->StringBlock = NULL;
             str->StringBlockSize = 0;
         } else {
-            new_list = RCREALLOC( str->StringList, list_len * sizeof( void * ) );
-            if( new_list != NULL ) {
-                str->StringList = new_list;
-            }
-            ConstructStringBlock( str );
+            str->StringList = MemReallocSafe( str->StringList, list_len * sizeof( *str->StringList ) );
+            ConstructStringIDNamesBlock( str );
         }
     }
-} /* StringBlockBuild */
+} /* StringIDNamesBlockBuild */
 
 static int genericCompare( const char *name1, uint_16 len1,
                            const char *name2, uint_16 len2, bool use_unicode )
 /****************************************************************************/
 {
     int                 char_num;
-    uint_16             ch1;
-    uint_16             ch2;
     const char          *char1;
     const char          *char2;
     uint_16             *char2u;
     uint_16             min_chars;
+    int                 ch1;
+    int                 ch2;
 
     min_chars = len1;
     if( min_chars > len2 )
@@ -281,8 +246,8 @@ static int genericCompare( const char *name1, uint_16 len1,
         char1 = name1;
         char2 = name2;
         while( char_num < min_chars ) {
-            ch1 = toupper( (unsigned char)*char1 );
-            ch2 = toupper( (unsigned char)*char2 );
+            ch1 = toupper( *(unsigned char *)char1 );
+            ch2 = toupper( *(unsigned char *)char2 );
             if( ch1 < ch2 ) {
                 return( -1 );
             } else if( ch1 > ch2 ) {
@@ -296,8 +261,8 @@ static int genericCompare( const char *name1, uint_16 len1,
         char1 = name1;
         char2u = (uint_16 *)name2;
         while( char_num < min_chars ) {
-            ch1 = toupper( (unsigned char)*char1 );
-            ch2 = toupper( (unsigned char)*char2u );
+            ch1 = toupper( *(unsigned char *)char1 );
+            ch2 = toupper( *(unsigned char *)char2u );
             if( ch1 < ch2 ) {
                 return( -1 );
             } else if( ch1 > ch2 ) {
@@ -342,10 +307,10 @@ int CompareStringItems32( const StringItem32 *item1,
 {
     uint_16     *ptr1;
     uint_16     *ptr2;
-    uint_16      ch1;
-    uint_16      ch2;
-    uint_16      min_chars;
-    int          char_num;
+    int         ch1;
+    int         ch2;
+    uint_16     min_chars;
+    int         char_num;
 
     char_num = 0;
     ptr1 = (uint_16 *)item1->Name;
@@ -354,8 +319,8 @@ int CompareStringItems32( const StringItem32 *item1,
     if( min_chars > item2->NumChars )
         min_chars = item2->NumChars;
     while( char_num < min_chars ) {
-        ch1 = toupper( (unsigned char)*ptr1 );
-        ch2 = toupper( (unsigned char)*ptr2 );
+        ch1 = toupper( *(unsigned char *)ptr1 );
+        ch2 = toupper( *(unsigned char *)ptr2 );
         if( ch1 < ch2 ) {
             return( -1 );
         } else if( ch1 > ch2 ) {
@@ -377,8 +342,8 @@ int CompareStringItems32( const StringItem32 *item1,
     }
 }
 
-int_32 StringBlockFind( StringsBlock *str, WResIDName *name )
-/************************************************************
+int_32 StringBlockFind( StringsBlock *str, WResIDName *name_id )
+/***************************************************************
  * if the return code is -1 the name was not found, otherwise it is the
  * number of bytes into the StringBlock at which to find the name.
  */
@@ -386,12 +351,12 @@ int_32 StringBlockFind( StringsBlock *str, WResIDName *name )
     uint_8          **location;
 
     if( str->UseUnicode ) {
-        location = bsearch( name, str->StringList, str->StringListLen,
-                    sizeof( void * ),
+        location = bsearch( name_id, str->StringList, str->StringListLen,
+                    sizeof( *str->StringList ),
                     ( int (*)(const void *, const void *) )compareStrings32 );
     } else {
-        location = bsearch( name, str->StringList, str->StringListLen,
-                    sizeof( void * ),
+        location = bsearch( name_id, str->StringList, str->StringListLen,
+                    sizeof( *str->StringList ),
                     ( int (*)(const void *, const void *) )compareStrings16 );
     }
 

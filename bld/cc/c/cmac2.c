@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -31,8 +31,9 @@
 
 
 #include "cvars.h"
-#include "scan.h"
 #include <stddef.h>
+#include "i64.h"
+#include "scan.h"
 #include "cgmisc.h"
 #include "cmacadd.h"
 #include "cscanbuf.h"
@@ -40,8 +41,6 @@
 
 
 #define HasVarArgs(m)       (((m) & MFLAG_HAS_VAR_ARGS) != 0)
-
-#define PREPROC_WEIGHT(c)   ((c >= 'a' && c < 'a' + sizeof( PreProcWeights )) ? PreProcWeights[c - 'a'] : 0)
 
 extern bool PrintWhiteSpace;  //ppc printing   (from ccmain.c)
 
@@ -61,9 +60,6 @@ static void    CError( void );
 static void    CIdent( void );
 static void    CWarning( void );
 
-static MEPTR   GrabTokens( mac_parm_count parm_count, macro_flags mflags, MPPTR formal_parms, const char *mac_name, source_loc *src_loc );
-static mac_parm_count FormalParm( MPPTR formal_parms );
-
 struct preproc {
     char  *directive;
     void  (*samelevel)( void ); /* func to call when SkipLevel == NestLevel */
@@ -72,7 +68,7 @@ struct preproc {
 
 static unsigned char PreProcWeights[] = {
 /* a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u, v, w, x, y, z */
-   2, 0, 0, 9, 1, 4, 3, 0, 5, 0, 0, 7, 0, 0, 0,10, 0,11, 0,13,12, 0,14
+   2, 0, 0, 9, 1, 4, 3, 0, 5, 0, 0, 7, 0, 0, 0,10, 0,11, 0,13,12, 0,14, 0, 0, 0
 };
 
 static struct preproc PreProcTable[] = {
@@ -175,17 +171,25 @@ static void PreProcStmt( void )
 {
     struct preproc      *pp;
     unsigned            hash;
+    int                 c1;
+    int                 c2;
 
     NextChar();                 /* skip over '#' */
     PPNextToken();
     if( CurToken == T_ID ) {
-        hash = ( TokenLen + PREPROC_WEIGHT( Buffer[0] ) + PREPROC_WEIGHT( Buffer[TokenLen - 1] ) ) & 0x0f;
-        pp = &PreProcTable[hash];
-        if( strcmp( pp->directive, Buffer ) == 0 ) {
-            if( SkipLevel == NestLevel ) {
-                pp->samelevel();
+        c1 = IndexLower( ((unsigned char *)Buffer)[0] );
+        c2 = IndexLower( ((unsigned char *)Buffer)[TokenLen - 1] );
+        if( c1 >= 0 && c2 >= 0 ) {
+            hash = (TokenLen + PreProcWeights[c1] + PreProcWeights[c2]) & 0x0f;
+            pp = &PreProcTable[hash];
+            if( strcmp( pp->directive, Buffer ) == 0 ) {
+                if( SkipLevel == NestLevel ) {
+                    pp->samelevel();
+                } else {
+                    pp->skipfunc();
+                }
             } else {
-                pp->skipfunc();
+                CUnknown();
             }
         } else {
             CUnknown();
@@ -340,12 +344,140 @@ void CInclude( void )
 }
 
 
+static int FormalParm( MPPTR formal_parms )
+{
+    int     parm_num;
+
+    parm_num = 1;
+    for( ; formal_parms != NULL; formal_parms = formal_parms->next ) {
+        if( strcmp( formal_parms->parm, Buffer ) == 0 ) {
+            return( parm_num );
+        }
+        ++parm_num;
+    }
+    return( 0 );
+}
+
+
+static MEPTR GrabTokens( int parm_count, macro_flags mflags, MPPTR formal_parms, const char *mac_name, source_loc *loc )
+{
+    MEPTR           mentry;
+    MEPTR           new_mentry;
+    TOKEN           prev_token;
+    TOKEN           prev_non_ws_token;
+    size_t          mlen;
+    int             parm_num;
+
+    mentry = CreateMEntry( mac_name, 0 );
+    mentry->u.parm_count = parm_count;
+    mentry->src_loc = *loc;
+    mlen = mentry->macro_len;
+    mentry->macro_defn = mlen;
+    prev_token = T_NULL;
+    prev_non_ws_token = T_NULL;
+    if( CurToken != T_NULL ) {
+        do {
+            CurToken = ScanToken();
+        } while( CurToken == T_WHITE_SPACE );
+        if( CurToken == T_SHARP_SHARP ) {
+            CErr1( ERR_MISPLACED_SHARP_SHARP );
+            PPNextToken();
+        }
+    }
+    for( ; CurToken != T_NULL && CurToken != T_EOF ; ) {
+        switch( CurToken ) {
+        case T_SHARP:
+            /*
+             * if it is a function-like macro definition
+             */
+            if( parm_count != 0 ) {
+                CurToken = T_MACRO_SHARP;
+            }
+            MacroSegmentAddToken( &mlen, CurToken );
+            break;
+        case T_SHARP_SHARP:
+            CurToken = T_MACRO_SHARP_SHARP;
+            MacroSegmentAddToken( &mlen, CurToken );
+            break;
+        case T_WHITE_SPACE:
+            if( prev_token != T_WHITE_SPACE ) {
+                MacroSegmentAddToken( &mlen, CurToken );
+            }
+            break;
+        case T_ID:
+            parm_num = FormalParm( formal_parms );
+            if( parm_num != 0 ) {
+                if( HasVarArgs( mflags ) && (parm_num == parm_count - 1) ) {
+                    CurToken = T_MACRO_VAR_PARM;
+                } else {
+                    CurToken = T_MACRO_PARM;
+                }
+            }
+            MacroSegmentAddToken( &mlen, CurToken );
+            if( parm_num != 0 ) {
+                MacroSegmentAddChar( &mlen, parm_num - 1 );
+            } else {
+                MacroSegmentAddMem( &mlen, Buffer, TokenLen + 1 );
+            }
+            break;
+        case T_BAD_CHAR:
+            MacroSegmentAddToken( &mlen, CurToken );
+            MacroSegmentAddChar( &mlen, Buffer[0] );
+            if( Buffer[1] != '\0' ) {
+                CurToken = T_WHITE_SPACE;
+                MacroSegmentAddToken( &mlen, CurToken );
+            }
+            break;
+        case T_STRING:
+            if( CompFlags.wide_char_string ) {
+                CurToken = T_LSTRING;
+            }
+            /* fall through */
+        case T_LSTRING:
+        case T_CONSTANT:
+        case T_BAD_TOKEN:
+        case T_PPNUMBER:
+            MacroSegmentAddToken( &mlen, CurToken );
+            MacroSegmentAddMem( &mlen, Buffer, TokenLen + 1 );
+            break;
+        default:
+            MacroSegmentAddToken( &mlen, CurToken );
+            break;
+        }
+        if( CurToken != T_WHITE_SPACE ) {
+            if( prev_non_ws_token == T_MACRO_SHARP && CurToken != T_MACRO_PARM && CurToken != T_MACRO_VAR_PARM ) {
+                CErr1( ERR_MUST_BE_MACRO_PARM );
+//                SET_MTOKEN( MacroOffset + mlen - SIZE_MTOKEN, T_SHARP );
+            }
+            prev_non_ws_token = CurToken;
+        }
+        prev_token = CurToken;
+        CurToken = ScanToken();
+    }
+    if( prev_non_ws_token == T_MACRO_SHARP ) {
+        CErr1( ERR_MUST_BE_MACRO_PARM );
+    }
+    if( prev_token == T_WHITE_SPACE ) {
+        mlen -= SIZE_MTOKEN;
+    }
+    MacroSegmentAddToken( &mlen, T_NULL );
+    if( prev_non_ws_token == T_MACRO_SHARP_SHARP ) {
+        CErr1( ERR_MISPLACED_SHARP_SHARP );
+    }
+    new_mentry = MacroDefine( mlen, mflags );
+    if( new_mentry != NULL ) {
+        MacroSize += mlen;
+    }
+    return( new_mentry );
+}
+
+
 MEPTR MacroScan( void )
 {
     MPPTR           mp;
     MPPTR           prev_mp;
     MPPTR           formal_parms;
-    mac_parm_count  parm_count;
+    int             parm_count;
     macro_flags     mflags;
     bool            ppscan_mode;
     char            *token_buf;
@@ -361,7 +493,7 @@ MEPTR MacroScan( void )
         CErr1( ERR_CANT_DEFINE_DEFINED );
         return( NULL );
     }
-    token_buf = CMemStrDup( Buffer );
+    token_buf = CMemStrdup( Buffer );
     formal_parms = NULL;
     macro_loc = SrcFileLoc;
     parm_count = 0;             /* 0 ==> no () following */
@@ -393,9 +525,9 @@ MEPTR MacroScan( void )
                 prev_mp->next = mp;
             }
             if( CurToken == T_DOT_DOT_DOT ) {
-                mp->parm = CMemStrDup( "__VA_ARGS__" );
+                mp->parm = CMemStrdup( "__VA_ARGS__" );
             } else {
-                mp->parm = CMemStrDup( Buffer );
+                mp->parm = CMemStrdup( Buffer );
             }
             prev_mp = mp;
             PPNextToken();
@@ -439,134 +571,6 @@ static void CDefine( void )
         mentry->macro_flags |= MFLAG_USER_DEFINED;
     }
 }
-
-static MEPTR GrabTokens( mac_parm_count parm_count, macro_flags mflags, MPPTR formal_parms, const char *mac_name, source_loc *loc )
-{
-    MEPTR           mentry;
-    MEPTR           new_mentry;
-    TOKEN           prev_token;
-    TOKEN           prev_non_ws_token;
-    size_t          mlen;
-    mac_parm_count  parmno;
-
-    mentry = CreateMEntry( mac_name, 0 );
-    mentry->parm_count = parm_count;
-    mentry->src_loc = *loc;
-    mlen = mentry->macro_len;
-    mentry->macro_defn = mlen;
-    prev_token = T_NULL;
-    prev_non_ws_token = T_NULL;
-    if( CurToken != T_NULL ) {
-        do {
-            CurToken = ScanToken();
-        } while( CurToken == T_WHITE_SPACE );
-        if( CurToken == T_SHARP_SHARP ) {
-            CErr1( ERR_MISPLACED_SHARP_SHARP );
-            PPNextToken();
-        }
-    }
-    for( ; CurToken != T_NULL && CurToken != T_EOF ; ) {
-        switch( CurToken ) {
-        case T_SHARP:
-            /*
-             * if it is a function-like macro definition
-             */
-            if( parm_count != 0 ) {
-                CurToken = T_MACRO_SHARP;
-            }
-            MacroSegmentAddToken( &mlen, CurToken );
-            break;
-        case T_SHARP_SHARP:
-            CurToken = T_MACRO_SHARP_SHARP;
-            MacroSegmentAddToken( &mlen, CurToken );
-            break;
-        case T_WHITE_SPACE:
-            if( prev_token != T_WHITE_SPACE ) {
-                MacroSegmentAddToken( &mlen, CurToken );
-            }
-            break;
-        case T_ID:
-            parmno = FormalParm( formal_parms );
-            if( parmno != 0 ) {
-                if( HasVarArgs( mflags ) && (parmno == parm_count - 1) ) {
-                    CurToken = T_MACRO_VAR_PARM;
-                } else {
-                    CurToken = T_MACRO_PARM;
-                }
-            }
-            MacroSegmentAddToken( &mlen, CurToken );
-            if( parmno != 0 ) {
-                MacroSegmentAddChar( &mlen, parmno - 1 );
-            } else {
-                MacroSegmentAddMem( &mlen, Buffer, TokenLen + 1 );
-            }
-            break;
-        case T_BAD_CHAR:
-            MacroSegmentAddToken( &mlen, CurToken );
-            MacroSegmentAddChar( &mlen, Buffer[0] );
-            if( Buffer[1] != '\0' ) {
-                CurToken = T_WHITE_SPACE;
-                MacroSegmentAddToken( &mlen, CurToken );
-            }
-            break;
-        case T_STRING:
-            if( CompFlags.wide_char_string ) {
-                CurToken = T_LSTRING;
-            }
-            /* fall through */
-        case T_LSTRING:
-        case T_CONSTANT:
-        case T_BAD_TOKEN:
-        case T_PPNUMBER:
-            MacroSegmentAddToken( &mlen, CurToken );
-            MacroSegmentAddMem( &mlen, Buffer, TokenLen + 1 );
-            break;
-        default:
-            MacroSegmentAddToken( &mlen, CurToken );
-            break;
-        }
-        if( CurToken != T_WHITE_SPACE ) {
-            if( prev_non_ws_token == T_MACRO_SHARP && CurToken != T_MACRO_PARM && CurToken != T_MACRO_VAR_PARM ) {
-                CErr1( ERR_MUST_BE_MACRO_PARM );
-//                MTOK( MacroOffset + mlen - sizeof( TOKEN ) ) = T_SHARP;
-            }
-            prev_non_ws_token = CurToken;
-        }
-        prev_token = CurToken;
-        CurToken = ScanToken();
-    }
-    if( prev_non_ws_token == T_MACRO_SHARP ) {
-        CErr1( ERR_MUST_BE_MACRO_PARM );
-    }
-    if( prev_token == T_WHITE_SPACE ) {
-        MTOKDEC( mlen );
-    }
-    MacroSegmentAddToken( &mlen, T_NULL );
-    if( prev_non_ws_token == T_MACRO_SHARP_SHARP ) {
-        CErr1( ERR_MISPLACED_SHARP_SHARP );
-    }
-    new_mentry = MacroDefine( mlen, mflags );
-    if( new_mentry != NULL ) {
-        MacroSize += mlen;
-    }
-    return( new_mentry );
-}
-
-
-static mac_parm_count FormalParm( MPPTR formal_parms )
-{
-    mac_parm_count i;
-
-    i = 1;
-    for( ; formal_parms != NULL; formal_parms = formal_parms->next ) {
-        if( strcmp( formal_parms->parm, Buffer ) == 0 ) {
-            return( i );
-        }
-        ++i;
-    }
-    return( 0 );
-}
-
 
 static void CIfDef( void )
 {
@@ -773,7 +777,7 @@ static void CLine( void )
     PPNextToken();
     if( ExpectingConstant() ) {
         if( !CompFlags.cpp_ignore_line ) {
-            src_line = Constant; // stash in case of side effects
+            src_line = U32FetchTrunc( Constant64 ); // stash in case of side effects
             SrcFiles->src_loc.line = src_line - 1; /* don't count this line */
         }
         PPNextToken();
@@ -893,7 +897,7 @@ TOKEN Process_Pragma( void )
         if( CurToken == T_STRING ) {
             char        *token_buf;
 
-            token_buf = CMemStrDup( Buffer );
+            token_buf = CMemStrdup( Buffer );
             PPNextToken();
             if( CurToken == T_RIGHT_PAREN ) {
                 ppctl_t old_ppctl;

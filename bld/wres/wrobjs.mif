@@ -30,7 +30,6 @@ wres_core_objs = &
     wrfreedi.obj &
     wrgetli.obj &
     wridcmp.obj &
-    wridexby.obj &
     wridfnoo.obj &
     wridfrnu.obj &
     wridfrst.obj &
@@ -40,9 +39,6 @@ wres_core_objs = &
     wrinitdi.obj &
     wriswrf.obj &
     wrreaddi.obj &
-    wrrewrid.obj &
-    wrrfrr.obj &
-    wrrftr.obj &
     wrrhr.obj &
 
 # Additional objects for the full wres library
@@ -60,7 +56,8 @@ wres_more_objs = &
     resrmenu.obj &
     reswmenu.obj &
     resnamor.obj &
-    resraw.obj &
+    resrawr.obj &
+    resraww.obj &
     resstr.obj &
     restbar.obj &
     restell.obj &
@@ -96,6 +93,5 @@ wres_more_objs = &
     write.obj &
     wrmergdi.obj &
     wrnextrs.obj &
-    wrrfwrid.obj &
     wrrwrid.obj &
     wrwritdi.obj

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -113,7 +113,7 @@ bool WInitStatusLines( HINSTANCE inst )
 
     StatusWndInit( inst, WStatusWndProc, 0, NULL );
 
-    return( TRUE );
+    return( true );
 }
 
 void WFiniStatusLines( void )
@@ -146,7 +146,7 @@ void WDestroyStatusLine( WStatBar *wsb )
 {
     if( wsb != NULL ) {
         StatusWndDestroy( wsb->stat );
-        WRMemFree( wsb );
+        MemFree( wsb );
     }
 }
 
@@ -156,7 +156,7 @@ WStatBar *WCreateStatusLine( HWND parent, HINSTANCE inst )
     RECT                rect;
     status_block_desc   sbd[1];
 
-    wsb = (WStatBar *)WRMemAlloc( sizeof( WStatBar ) );
+    wsb = MemAlloc( sizeof( WStatBar ) );
     if( wsb != NULL ) {
         wsb->stat = StatusWndStart();
         if( wsb->stat == NULL ) {
@@ -202,7 +202,7 @@ bool WSetStatusByID( WStatBar *wsb, msg_id id1, msg_id id2 )
     char        *str2;
     bool        ret;
 
-    ret = FALSE;
+    ret = false;
     str1 = NULL;
     str2 = NULL;
 
@@ -238,15 +238,15 @@ bool WSetStatusText( WStatBar *wsb, const char *s1, const char *s2 )
         if( einfo != NULL ) {
             wsb = einfo->wsb;
             if( wsb == NULL ) {
-                return( FALSE );
+                return( false );
             }
         } else {
-            return( FALSE );
+            return( false );
         }
     }
 
     if( wsb->win == (HWND)NULL ) {
-        return( TRUE );
+        return( true );
     }
 
     if( s1 != NULL ) {
@@ -285,7 +285,7 @@ bool WSetStatusText( WStatBar *wsb, const char *s1, const char *s2 )
         return( WDisplayStatusText( wsb ) );
     }
 
-    return( TRUE );
+    return( true );
 }
 
 bool WStatusWndProc( HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam )
@@ -305,5 +305,5 @@ bool WDisplayStatusText( WStatBar *wsb )
         ReleaseDC( wsb->win, hdc );
     }
 
-    return( TRUE );
+    return( true );
 }

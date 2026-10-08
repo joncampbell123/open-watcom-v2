@@ -107,7 +107,7 @@ INT_PTR CALLBACK IntDialogDlgProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
     case WM_CLOSE:
         tmp = ExceptionAction;
         CheckDlgButton( hwnd, INT_TERMINATE, BST_CHECKED );
-        SendMessage( hwnd, WM_COMMAND, INT_ACT, 0L );
+        SendMessage( hwnd, WM_COMMAND, INT_ACT, 0 );
         ExceptionAction = tmp;
         ret = true;
         break;
@@ -149,7 +149,6 @@ INT_PTR CALLBACK IntDialogDlgProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
  */
 appl_action __cdecl __far FaultHandler( fault_frame ff )
 {
-    DLGPROC     dlgproc;
     appl_action appl_act;
     char        *fault_str;
     msg_id      faultid;
@@ -220,7 +219,7 @@ appl_action __cdecl __far FaultHandler( fault_frame ff )
 
     LoadDbgInfo();
     if( LogInfo.flags[LOGFL_AUTOLOG] != '1' ) {
-        dlgproc = MakeProcInstance_DLG( IntDialogDlgProc, Instance );
+        DLGPROC dlgproc = MakeProcInstance_DLG( IntDialogDlgProc, Instance );
         appl_act = JDialogBox( Instance, "INTERRUPT", NULL, dlgproc );
         FreeProcInstance_DLG( dlgproc );
     } else {

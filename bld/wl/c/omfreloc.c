@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -75,12 +75,12 @@ static void GetFrame( unsigned method, frame_spec *frame )
 {
     extnode     *ext;
     grpnode     *group;
-    segnode     *seg;
+    segnode     *snode;
 
     switch( method ) {
     case FRAME_SEG:
-        seg = (segnode *) FindNode( SegNodes, GetIdx() );
-        frame->u.sdata = seg->entry;
+        snode = (segnode *)FindNode( SegNodes, GetIdx() );
+        frame->u.sdata = snode->entry;
         frame->type = FIX_FRAME_SEG;
         break;
     case FRAME_GRP:
@@ -102,7 +102,7 @@ static void GetFrame( unsigned method, frame_spec *frame )
         }
         break;
     case FRAME_ABS:
-        _TargU16toHost( MGET_U16_UN( ObjBuff ), frame->u.abs );
+        frame->u.abs = MGET_LE_U16_UN( ObjBuff );
         ObjBuff += sizeof( unsigned_16 );
         frame->type = FIX_FRAME_ABS;
         break;
@@ -122,12 +122,12 @@ static void GetTarget( unsigned method, target_spec *target )
 {
     extnode             *ext;
     grpnode             *group;
-    segnode             *seg;
+    segnode             *snode;
 
     switch( method ) {
     case TARGET_SEG:
-        seg = (segnode *) FindNode( SegNodes, GetIdx() );
-        target->u.sdata = seg->entry;
+        snode = (segnode *)FindNode( SegNodes, GetIdx() );
+        target->u.sdata = snode->entry;
         target->type = FIX_TARGET_SEG;
         break;
     case TARGET_GRP:
@@ -141,7 +141,7 @@ static void GetTarget( unsigned method, target_spec *target )
         target->type = FIX_TARGET_EXT;
         break;
     case TARGET_ABS:
-        _TargU16toHost( MGET_U16_UN( ObjBuff ), target->u.abs );
+        target->u.abs = MGET_LE_U16_UN( ObjBuff );
         ObjBuff += sizeof( unsigned_16 );
         target->type = FIX_TARGET_ABS;
         break;
@@ -156,13 +156,13 @@ void DoRelocs( void )
     unsigned    typ;
     offset      location;
     offset      addend;
-    frame_spec  fthread;
-    target_spec tthread;
+    frame_spec  frame;
+    target_spec target;
 
-    if( ObjFormat & FMT_IGNORE_FIXUPP )
+    if( ObjFormat & OBJFMT_IGNORE_FIXUPP )
         return;
-    if( ObjFormat & FMT_IS_LIDATA ) {
-        LnkMsg( LOC_REC+WRN+MSG_REL_IN_LIDATA, NULL );
+    if( ObjFormat & OBJFMT_IS_LIDATA ) {
+        LnkMsg( WRN+LOC_REC+MSG_REL_IN_LIDATA, NULL );
         return;
     }
     do {
@@ -189,14 +189,14 @@ void DoRelocs( void )
                 fixtype = FIX_HIGH_OFFSET_8;
                 break;
             case LOC_OFFSET_LOADER:
-                if( ObjFormat & FMT_EASY_OMF ) {
+                if( ObjFormat & OBJFMT_EASY_OMF ) {
                     fixtype = FIX_OFFSET_32;                    /* Pharlap only */
                 } else {
                     fixtype = FIX_OFFSET_16 | FIX_LOADER_RES;   /* OMF standard */
                 }
                 break;
             case LOC_PHARLAP_BASE_OFFSET_32:
-                if( ObjFormat & FMT_EASY_OMF ) {
+                if( ObjFormat & OBJFMT_EASY_OMF ) {
                     fixtype = FIX_BASE_OFFSET_32;               /* Pharlap only */
                 }
                 break;
@@ -221,32 +221,32 @@ void DoRelocs( void )
              * frame processing
              */
             if( typ & FIXDAT_FTHREAD ) {
-                fthread = FrameThreads[( typ >> 4 ) & 3];
+                frame = FrameThreads[( typ >> 4 ) & 3];
             } else {
-                GetFrame( ( typ >> 4 ) & 7, &fthread );
+                GetFrame( ( typ >> 4 ) & 7, &frame );
             }
             /*
              * target processing
              */
             if( typ & FIXDAT_TTHREAD ) {
-                tthread = TargThreads[typ & 3];
+                target = TargThreads[typ & 3];
             } else {
-                GetTarget( typ & 3, &tthread );
+                GetTarget( typ & 3, &target );
             }
             /*
              * target addend processing
              */
             addend = 0;
             if( (typ & FIXDAT_PBIT) == 0 ) {
-                if( ObjFormat & FMT_32BIT_REC ) {
-                    addend = MGET_U32_UN( ObjBuff );
+                if( ObjFormat & OBJFMT_32BIT_REC ) {
+                    addend = MGET_LE_U32_UN( ObjBuff );
                     ObjBuff += sizeof( unsigned_32 );
                 } else {
-                    addend = MGET_U16_UN( ObjBuff );
+                    addend = MGET_LE_U16_UN( ObjBuff );
                     ObjBuff += sizeof( unsigned_16 );
                 }
             }
-            StoreFixup( location, fixtype, &fthread, &tthread, addend );
+            StoreFixup( location, fixtype, &frame, &target, addend );
         } else {
             /*
              * thread
@@ -270,27 +270,27 @@ static void StoreBakPat( segdata *sdata, byte loctype )
     bakpat_list         *bkptr;
 
     len = EOObjRec - ObjBuff;
-    _ChkAlloc( bkptr, sizeof( bakpat_list ) + len - 1 );
+    bkptr = MemAllocSafe( sizeof( bakpat_list ) + len - 1 );
     bkptr->len = len;
     bkptr->loctype = loctype;
     bkptr->sdata = sdata;   /* We don't know the data offset yet. */
-    bkptr->is32bit = (ObjFormat & FMT_32BIT_REC) != 0;
+    bkptr->is32bit = (ObjFormat & OBJFMT_32BIT_REC) != 0;
     memcpy( bkptr->data, ObjBuff, len );
-    LinkList( &BakPats, bkptr );
+    AppendList( (void **)&BakPats, bkptr );
 }
 
 void ProcBakpat( void )
 /****************************/
 /* store the bakpat record away for future processing */
 {
-    segnode             *seg;
+    segnode             *snode;
     byte                loctype;
 
-    seg = (segnode *) FindNode( SegNodes, GetIdx() );
-    if( seg->info & SEG_DEAD )
+    snode = (segnode *)FindNode( SegNodes, GetIdx() );
+    if( snode->info & SEGINF_DEAD )
         return;
     loctype = *ObjBuff++;
-    StoreBakPat( seg->entry, loctype );
+    StoreBakPat( snode->entry, loctype );
 }
 
 void DoBakPats( void )
@@ -314,15 +314,15 @@ void DoBakPats( void )
         value = 0;
         while( bkptr->len > 0 ) {
             if( bkptr->is32bit ) {
-                _TargU32toHost( MGET_U32( data ), off );
+                off = MGET_LE_U32_UN( data );
                 data += sizeof( unsigned_32 );
-                _TargU32toHost( MGET_U32( data ), value );
+                value = MGET_LE_U32_UN( data );
                 data += sizeof( unsigned_32 );
                 bkptr->len -= 2 * sizeof( unsigned_32 );
             } else {
-                _TargU16toHost( MGET_U16( data ), off );
+                off = MGET_LE_U16_UN( data );
                 data += sizeof( unsigned_16 );
-                _TargU16toHost( MGET_U16( data ), value );
+                value = MGET_LE_U16_UN( data );
                 data += sizeof( unsigned_16 );
                 bkptr->len -= 2 * sizeof( unsigned_16 );
             }
@@ -346,7 +346,7 @@ void DoBakPats( void )
                 break;
             }
         }
-        _LnkFree( bkptr );
+        MemFree( bkptr );
     }
     BakPats = NULL;
 }

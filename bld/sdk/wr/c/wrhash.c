@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -44,7 +44,6 @@
 #include "jdlg.h"
 #include "winexprt.h"
 #include "wresdefn.h"
-#include "wclbproc.h"
 
 
 /****************************************************************************/
@@ -253,7 +252,7 @@ bool WRAPI WRCreateDLGInclude( WResDir *dir, const char *include )
     }
 
     if( ok ) {
-        str = WRStrDup( include );
+        str = WRStrdup( include );
         ok = (str != NULL);
     }
 
@@ -261,7 +260,7 @@ bool WRAPI WRCreateDLGInclude( WResDir *dir, const char *include )
         lang.lang = DEF_LANG;
         lang.sublang = DEF_SUBLANG;
         len = strlen( include ) + 1;
-        ok = !WResAddResource( type, res, MEMFLAG_DISCARDABLE, 0, len, *dir, &lang, NULL );
+        ok = !WResAddResource( type, res, RESFLAG_DISCARDABLE, 0, len, *dir, &lang, NULL );
     }
 
     if( ok ) {
@@ -308,7 +307,7 @@ WRHashTable * WRAPI WRInitHashTable( void )
 {
     WRHashTable         *table;
 
-    table = (WRHashTable *)MemAlloc( sizeof( WRHashTable ) );
+    table = MemAlloc( sizeof( WRHashTable ) );
     if( table == NULL ) {
         return( NULL );
     }
@@ -665,7 +664,7 @@ WRHashEntry * WRAPI WRAddHashEntry( WRHashTable *table, const char *name, WRHash
         return( NULL );
     }
 
-    symbol = WRStrDup( name );
+    symbol = WRStrdup( name );
     if( symbol == NULL ) {
         return( NULL );
     }
@@ -706,7 +705,7 @@ WRHashEntry * WRAPI WRAddHashEntry( WRHashTable *table, const char *name, WRHash
     }
 
     size = sizeof( WRHashEntry ) + strlen( symbol );
-    entry = (WRHashEntry *)MemAlloc( size );
+    entry = MemAlloc( size );
     if( entry != NULL ) {
         nhash = WRGetNameHash( symbol );
         vhash = WRGetValueHash( value );
@@ -845,7 +844,7 @@ char * WRAPI WRResolveValue( WRHashTable *table, WRHashValue value )
     vlist = WRLookupValue( table, value );
     if( vlist != NULL ) {
         if( vlist->next == NULL ) {
-            name = WRStrDup( vlist->entry->name );
+            name = WRStrdup( vlist->entry->name );
         }
         WRValueListFree( vlist );
     }
@@ -962,7 +961,6 @@ bool WRAPI WREditSym( HWND parent, WRHashTable **table,
     WREditSymInfo       info;
     WRHashTable         *tmp;
     HINSTANCE           inst;
-    DLGPROC             dlgproc;
     INT_PTR             ret;
     bool                ok;
 
@@ -975,18 +973,20 @@ bool WRAPI WREditSym( HWND parent, WRHashTable **table,
     }
 
     if( ok ) {
-        inst = WRGetInstance();
-        dlgproc = MakeProcInstance_DLG( WREditSymbolsDlgProc, inst );
-        ok = (dlgproc != NULL);
-    }
-
-    if( ok ) {
         info.help_callback = help_callback;
         info.table = tmp;
         info.modified = false;
         info.flags = *flags;
-        ret = JDialogBoxParam( inst, "WRSymbols", parent, dlgproc, (LPARAM)(LPVOID)&info );
-        FreeProcInstance_DLG( dlgproc );
+        inst = WRGetInstance();
+#ifdef __WINDOWS__
+        {
+            DLGPROC dlgproc = MakeProcInstance_DLG( WREditSymbolsDlgProc, inst );
+            ret = JDialogBoxParam( inst, "WRSymbols", parent, dlgproc, (LPARAM)(LPVOID)&info );
+            FreeProcInstance_DLG( dlgproc );
+        }
+#else
+        ret = JDialogBoxParam( inst, "WRSymbols", parent, WREditSymbolsDlgProc, (LPARAM)(LPVOID)&info );
+#endif
         ok = false;
         if( ret ) {
             UpdateWindow( parent );
@@ -1121,7 +1121,6 @@ static bool WRAddNewSymbol( HWND hDlg, WRHashTable *table, HELPFUNC help_callbac
 {
     WRAddSymInfo        info;
     WRHashEntry         *entry;
-    DLGPROC             dlgproc;
     HINSTANCE           inst;
     INT_PTR             modified;
     bool                ret;
@@ -1146,10 +1145,15 @@ static bool WRAddNewSymbol( HWND hDlg, WRHashTable *table, HELPFUNC help_callbac
     ret = false;
 
     inst = WRGetInstance();
-    dlgproc = MakeProcInstance_DLG( WRAddSymDlgProc, inst );
-    modified = JDialogBoxParam( inst, "WRAddSymbol", hDlg, dlgproc, (LPARAM)(LPVOID)&info );
-    FreeProcInstance_DLG( dlgproc );
-
+#ifdef __WINDOWS__
+    {
+        DLGPROC dlgproc = MakeProcInstance_DLG( WRAddSymDlgProc, inst );
+        modified = JDialogBoxParam( inst, "WRAddSymbol", hDlg, dlgproc, (LPARAM)(LPVOID)&info );
+        FreeProcInstance_DLG( dlgproc );
+    }
+#else
+    modified = JDialogBoxParam( inst, "WRAddSymbol", hDlg, WRAddSymDlgProc, (LPARAM)(LPVOID)&info );
+#endif
     if( modified == IDOK ) {
         ret = WRAddSymbol( hDlg, table, modify, info.symbol, info.value );
     }
@@ -1186,7 +1190,7 @@ static bool WRRemoveSymbol( HWND hDlg, WRHashTable *table )
         return( false );
     }
 
-    rc = SendMessage( lbox, LB_DELETESTRING, index, 0 );
+    rc = SendMessage( lbox, LB_DELETESTRING, (WPARAM)index, 0 );
     if( rc != 0 ) {
         if( index != 0 && index == rc ) {
             index--;

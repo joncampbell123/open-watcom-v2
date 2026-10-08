@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -101,6 +101,11 @@ void *MemAlloc( size_t size )
 void MemFree( void *ptr )
 {
     free( ptr );
+}
+
+void *MemRealloc( void *ptr, size_t size )
+{
+    return( realloc( ptr, size ) );
 }
 
 static bool skipEntry( const char *path, const char *mask, struct dirent *dire )
@@ -316,6 +321,10 @@ static void processFileList( const char *fullmask )
     char                mask[_MAX_PATH];
     pgroup2             pg1;
     pgroup2             pg2;
+#ifndef __UNIX__
+    char                *p;
+    int                 c;
+#endif
 
     has_wild = false;
     for( tmp = fullmask; *tmp != '\0'; tmp++ ) {
@@ -341,7 +350,10 @@ static void processFileList( const char *fullmask )
             _splitpath2( dire->d_name, pg2.buffer, NULL, NULL, &pg2.fname, &pg2.ext );
             _makepath( fullname, pg1.drive, pg1.dir, pg2.fname, pg2.ext );
 #ifndef __UNIX__
-            strlwr( fullname );
+            p = fullname;
+            while( (c = *(unsigned char *)p) != '\0' ) {
+                *p++ = (char)tolower( c );
+            }
 #endif
             processFile( fullname );
         }

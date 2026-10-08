@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -43,39 +44,39 @@ static bool ResOS2WriteStringTableBlock( StringTableBlock *currblock, FILE *fp, 
 {
     int         stringid;
     bool        error;
-    WResIDName  *name;
+    WResIDName  *name_id;
 
     /*
      * Write string table codepage
      */
-    error = ResWriteUint16( codepage, fp );
+    error = ResWriteUint16( fp, codepage );
     if( error )
         return( error );
 
     error = false;
     for( stringid = 0; stringid < STRTABLE_STRS_PER_BLOCK && !error; stringid++ ) {
-        name = currblock->String[stringid];
-        if( name == NULL ) {
+        name_id = currblock->String[stringid];
+        if( name_id == NULL ) {
             /*
              * Write an empty string
              */
-            error = ResWriteUint16( 1, fp );
+            error = ResWriteUint16( fp, 1 );
         } else {
             size_t  len;
             /*
              * The string can't be longer than 255 chars
              */
-            len = name->NumChars + 1;
+            len = name_id->NumChars + 1;
             if( len > 255 )
                 len = 255;
-            error = ResWriteUint8( len, fp );
+            error = ResWriteUint8( fp, len );
             if( !error )
-                error = ResWriteStringLen( name->Name, false, fp, len - 1 );
+                error = ResWriteStringLen( name_id->Name, len - 1, false, false, fp );
             /*
              * The terminating NULL is not stored in the table, need to add it now
              */
             if( !error ) {
-                error = ResWriteUint8( 0, fp );
+                error = ResWriteUint8( fp, 0 );
             }
         }
     }
@@ -83,35 +84,18 @@ static bool ResOS2WriteStringTableBlock( StringTableBlock *currblock, FILE *fp, 
     return( error );
 } /* ResOS2WriteStringTableBlock */
 
-FullStringTable *SemOS2NewStringTable( void )
-/*******************************************/
-{
-    FullStringTable     *newtable;
-
-    newtable = RESALLOC( sizeof( FullStringTable ) );
-    if( newtable != NULL ) {
-        newtable->Head = NULL;
-        newtable->Tail = NULL;
-        newtable->next = NULL;
-        newtable->lang.lang = DEF_LANG;
-        newtable->lang.sublang = DEF_SUBLANG;
-    }
-
-    return( newtable );
-} /* SemOS2NewStringTable */
-
-static void SemOS2FreeStringTable( FullStringTable *oldtable )
-/*****************************************************/
+static void SemOS2FreeStringTable( FullStringTable *table )
+/*********************************************************/
 {
     FullStringTableBlock        *currblock;
     FullStringTableBlock        *nextblock;
 
-    for( currblock = oldtable->Head; currblock != NULL; currblock = nextblock ) {
+    for( currblock = table->Head; currblock != NULL; currblock = nextblock ) {
         nextblock = currblock->Next;
         ResFreeStringTableBlock( &(currblock->Block) );
-        RESFREE( currblock );
+        MemFree( currblock );
     }
-    RESFREE( oldtable );
+    MemFree( table );
 } /* SemOS2FreeStringTable */
 
 static FullStringTableBlock *findStringTableBlock( FullStringTable *table,
@@ -134,21 +118,19 @@ static FullStringTableBlock *newStringTableBlock( void )
 {
     FullStringTableBlock        *newblock;
 
-    newblock = RESALLOC( sizeof( FullStringTableBlock ) );
-    if( newblock != NULL ) {
-        newblock->Next = NULL;
-        newblock->Prev = NULL;
-        newblock->BlockNum = 0;
-        newblock->UseUnicode = (CmdLineParms.TargetOS == RC_TARGET_OS_WIN32);
-        newblock->Flags = 0;
-        newblock->codePage = 850;
-        ResInitStringTableBlock( &(newblock->Block) );
-    }
+    newblock = MemAllocSafe( sizeof( FullStringTableBlock ) );
+    newblock->Next = NULL;
+    newblock->Prev = NULL;
+    newblock->BlockNum = 0;
+    newblock->iswin32 = false;
+    newblock->res_flags = DEFAULT_FLAGS_NONE;
+    newblock->codePage = SemOS2GetDefaultCodepage();
+    ResInitStringTableBlock( &(newblock->Block) );
 
     return( newblock );
 } /* newStringTableBlock */
 
-void SemOS2AddStrToStringTable( FullStringTable *currtable,
+FullStringTable *SemOS2AddStrToStringTable( FullStringTable *table,
                                  uint_16 stringid, char *string )
 /***************************************************************/
 {
@@ -156,10 +138,19 @@ void SemOS2AddStrToStringTable( FullStringTable *currtable,
     uint_16                     blocknum;
     uint_16                     stringnum;
 
+    if( table == NULL ) {
+        table = MemAllocSafe( sizeof( FullStringTable ) );
+        table->Head = NULL;
+        table->Tail = NULL;
+        table->next = NULL;
+        table->lang.lang = DEF_LANG;
+        table->lang.sublang = DEF_SUBLANG;
+    }
+
     blocknum = stringid >> 4;
     stringnum = stringid & 0x000f;
 
-    currblock = findStringTableBlock( currtable, blocknum );
+    currblock = findStringTableBlock( table, blocknum );
     if( currblock != NULL ) {
         if( currblock->Block.String[stringnum] != NULL ) {
             /*
@@ -171,10 +162,11 @@ void SemOS2AddStrToStringTable( FullStringTable *currtable,
     } else {
         currblock = newStringTableBlock();
         currblock->BlockNum = blocknum;
-        ResAddLLItemAtEnd( (void **)&(currtable->Head), (void **)&(currtable->Tail), currblock );
+        ResAddLLItemAtEnd( (void **)&(table->Head), (void **)&(table->Tail), currblock );
     }
+    currblock->Block.String[stringnum] = WResStringIDNameFromStr( string );
+    return( table );
 
-    currblock->Block.String[stringnum] = WResIDNameFromStr( string );
 } /* SemOS2AddStrToStringTable */
 
 static void mergeStringTableBlocks( FullStringTableBlock *currblock,
@@ -198,11 +190,11 @@ static void mergeStringTableBlocks( FullStringTableBlock *currblock,
     }
 } /* mergeStringTableBlocks */
 
-static void semMergeStringTables( FullStringTable *currtable,
-            FullStringTable *oldtable, ResMemFlags newblockflags,
+static void semMergeStringTables( FullStringTable *table,
+            FullStringTable *old_table, ResMemFlags res_flags,
             uint_32 codepage )
 /****************************************************************
- * merge oldtable into currtable and free oldtable when done
+ * merge old_table into table and free old_table when done
  * returns TRUE if there was one or more duplicate entries
  */
 {
@@ -211,22 +203,22 @@ static void semMergeStringTables( FullStringTable *currtable,
     FullStringTableBlock        *nextblock;
 
     /*
-     * run through the list of block in oldtable
+     * run through the list of block in old_table
      */
-    for( oldblock = oldtable->Head; oldblock != NULL; oldblock = nextblock ) {
+    for( oldblock = old_table->Head; oldblock != NULL; oldblock = nextblock ) {
         /*
-         * find oldblock in currtable if it is there
+         * find oldblock in table if it is there
          */
         nextblock = oldblock->Next;
-        currblock = findStringTableBlock( currtable, oldblock->BlockNum );
+        currblock = findStringTableBlock( table, oldblock->BlockNum );
         if( currblock == NULL ) {
             /*
-             * if oldblock in not in currtable move it there from oldtable
+             * if oldblock in not in table move it there from old_table
              */
-            ResDeleteLLItem( (void **)&(oldtable->Head), (void **)&(oldtable->Tail), oldblock );
-            oldblock->Flags = newblockflags;
+            ResDeleteLLItem( (void **)&(old_table->Head), (void **)&(old_table->Tail), oldblock );
+            oldblock->res_flags = res_flags;
             oldblock->codePage = codepage;
-            ResAddLLItemAtEnd( (void **)&(currtable->Head), (void **)&(currtable->Tail), oldblock );
+            ResAddLLItemAtEnd( (void **)&(table->Head), (void **)&(table->Tail), oldblock );
         } else {
             /*
              * otherwise move the WSemID's to that block
@@ -235,30 +227,30 @@ static void semMergeStringTables( FullStringTable *currtable,
         }
     }
 
-    SemOS2FreeStringTable( oldtable );
+    SemOS2FreeStringTable( old_table );
 } /* semMergeStringTables */
 
-static void setStringTableFlags( FullStringTable *currtable,
-                                ResMemFlags flags, uint_32 codepage )
-/*******************************************************************/
+static void setStringTableFlags( FullStringTable *table,
+                                ResMemFlags res_flags, uint_32 codepage )
+/***********************************************************************/
 {
     FullStringTableBlock    *currblock;
 
-    for( currblock = currtable->Head; currblock != NULL;
+    for( currblock = table->Head; currblock != NULL;
                 currblock = currblock->Next ) {
-        currblock->Flags = flags;
+        currblock->res_flags = res_flags;
         currblock->codePage = codepage;
     }
 }
 
-static void addTable( FullStringTable **tables, FullStringTable *newtable )
-/*************************************************************************/
+static void addTable( FullStringTable **tables, FullStringTable *table )
+/**********************************************************************/
 {
     while( *tables != NULL )
         tables = &( ( *tables )->next );
 
-    *tables = newtable;
-    newtable->next = NULL;
+    *tables = table;
+    table->next = NULL;
 }
 
 static FullStringTable *findTable( FullStringTable *tables )
@@ -267,58 +259,58 @@ static FullStringTable *findTable( FullStringTable *tables )
     return( tables );
 }
 
-void SemOS2MergeStrTable( FullStringTable *currtable, ResMemFlags flags, uint_32 codepage )
+void SemOS2MergeStrTable( FullStringTable *table, ResMemFlags res_flags, uint_32 codepage )
 /*****************************************************************************************/
 {
-    FullStringTable     *table;
+    FullStringTable     *old_table;
 
-    table = findTable( CurrResFile.StringTable );
-    if( table == NULL ) {
-        setStringTableFlags( currtable, flags, codepage );
-        addTable( &CurrResFile.StringTable, currtable );
+    old_table = findTable( CurrResFile.StringTable );
+    if( old_table == NULL ) {
+        setStringTableFlags( table, res_flags, codepage );
+        addTable( &CurrResFile.StringTable, table );
     } else {
-        semMergeStringTables( table, currtable, flags, codepage );
+        semMergeStringTables( old_table, table, res_flags, codepage );
     }
 }
 
-void SemOS2MergeMsgTable( FullStringTable *currtable, ResMemFlags flags )
-/***********************************************************************/
+void SemOS2MergeMsgTable( FullStringTable *table, ResMemFlags res_flags, uint_32 codepage )
+/*****************************************************************************************/
 {
-    FullStringTable     *table;
+    FullStringTable     *old_table;
 
-    table = findTable( CurrResFile.ErrorTable );
-    if( table == NULL ) {
-        setStringTableFlags( currtable, flags, SemOS2DefaultCodepage() );
-        addTable( &CurrResFile.ErrorTable, currtable );
+    old_table = findTable( CurrResFile.ErrorTable );
+    if( old_table == NULL ) {
+        setStringTableFlags( table, res_flags, codepage );
+        addTable( &CurrResFile.ErrorTable, table );
     } else {
-        semMergeStringTables( table, currtable, flags, SemOS2DefaultCodepage() );
+        semMergeStringTables( old_table, table, res_flags, codepage );
     }
 }
 
-void SemOS2WriteStringTable( FullStringTable *currtable, WResID *type )
-/**********************************************************************
- * write the table identified by currtable as a table of type type and then
+void SemOS2WriteStringTable( FullStringTable *table, WResID *type_id )
+/*********************************************************************
+ * write the table identified by table as a table of type type and then
  * free the memory that it occupied
  */
 {
     FullStringTableBlock    *currblock;
     FullStringTable         *nexttable;
-    WResID                  *name;
+    WResID                  *res_id;
     bool                    error;
     ResLocation             loc;
 
-    for( ; currtable != NULL; currtable = nexttable ) {
-        nexttable = currtable->next;
-        for( currblock = currtable->Head; currblock != NULL; currblock = currblock->Next ) {
+    for( ; table != NULL; table = nexttable ) {
+        nexttable = table->next;
+        for( currblock = table->Head; currblock != NULL; currblock = currblock->Next ) {
             loc.start = SemStartResource();
 
             error = ResOS2WriteStringTableBlock( &(currblock->Block),
                                                  CurrResFile.fp,
                                                  currblock->codePage );
             if( error ) {
-                RcError( ERR_WRITTING_RES_FILE, CurrResFile.filename, LastWresErrStr() );
+                RcError( ERR_WRITTING_RES, CurrResFile.filename, LastWresErrStr() );
                 ErrorHasOccured = true;
-                SemOS2FreeStringTable( currtable );
+                SemOS2FreeStringTable( table );
                 return;
             }
 
@@ -326,12 +318,11 @@ void SemOS2WriteStringTable( FullStringTable *currtable, WResID *type )
             /*
              * +1 because WResID's can't be 0
              */
-            name = WResIDFromNum( currblock->BlockNum + 1 );
-            SemAddResource( name, type, currblock->Flags, loc );
-            RESFREE( name );
+            res_id = WResIDFromNum( currblock->BlockNum + 1 );
+            SemAddResource( res_id, type_id, currblock->res_flags, loc );
+            MemFree( res_id );
         }
-        SemOS2FreeStringTable( currtable );
+        SemOS2FreeStringTable( table );
     }
-    RESFREE( type );
-    return;
+    MemFree( type_id );
 }

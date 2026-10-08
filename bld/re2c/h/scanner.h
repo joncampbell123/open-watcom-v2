@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,7 +35,9 @@
 #define _scanner_h
 
 #include <stdio.h>
-#include "token.h"
+#include "bool.h"
+#include "ytab.h"
+
 
 typedef struct Scanner {
     FILE        *in;
@@ -44,9 +46,10 @@ typedef struct Scanner {
     uint        tline, cline;
 } Scanner;
 
-extern Scanner  *Scanner_new( FILE * );
-extern int      Scanner_echo( Scanner *, FILE * );
-extern int      Scanner_scan( Scanner * );
-extern void     Scanner_fatal( Scanner *, const char * );
+extern Scanner      *Scanner_new( FILE * );
+extern void         Scanner_delete( Scanner * );
+extern bool         Scanner_echo( Scanner *, FILE * );
+extern YYTOKENTYPE  Scanner_scan( Scanner * );
+extern void         Scanner_fatal( Scanner *, const char * );
 
 #endif

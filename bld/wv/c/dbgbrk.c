@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,7 +35,7 @@
 #include "dbgerr.h"
 #include "dbgitem.h"
 #include "liteng.h"
-#include "dbgmem.h"
+#include "memfuncs.h"
 #include "namelist.h"
 #include "dbgstk.h"
 #include "dbgrep.h"
@@ -46,7 +46,7 @@
 #include "strutil.h"
 #include "dbgmad.h"
 #include "dbgscan.h"
-#include "madinter.h"
+#include "wvmadcli.h"
 #include "dbgutil.h"
 #include "trapglbl.h"
 #include "dbgmemor.h"
@@ -65,7 +65,7 @@
 #include "remasync.h"
 #include "dbgmisc.h"
 #include "dipimp.h"
-#include "dipinter.h"
+#include "wvdipcli.h"
 #include "dbgreg.h"
 #include "addarith.h"
 #include "dbginsty.h"
@@ -75,7 +75,6 @@
 #include "dlgbreak.h"
 
 
-extern void         ErrorBox( char * );
 extern bool         CheckBPIns( void );
 extern bool         DlgAreYouNuts( unsigned long );
 
@@ -427,7 +426,7 @@ brkp *FindBreak( address addr )
  * DispBPMsg -- display breakpoints that were hit
  */
 
-static char *StrVal( char *which, brkp *wp, char *p )
+static char *StrVal( const char *which, brkp *wp, char *p )
 {
     size_t      max;
 
@@ -492,15 +491,15 @@ bool DispBPMsg( bool stack_cmds )
         }
         if( stack_cmds && bp->status.b.resume ) {
             cmds = AllocCmdList( "go/keep", sizeof( "go/keep" ) );
-            PushCmdList( cmds );
-            TypeInpStack( INP_HOOK );
+            if( PushCmdList( cmds ) )
+                TypeInpStack( INP_HOOK );
             FreeCmdList( cmds );
             ret = true;
         }
         if( stack_cmds && ( bp->cmds != NULL ) && bp->status.b.use_cmds ) {
             bp->status.b.cmds_pushed = true;
-            PushCmdList( bp->cmds );
-            TypeInpStack( INP_BREAK_POINT );
+            if( PushCmdList( bp->cmds ) )
+                TypeInpStack( INP_BREAK_POINT );
             ret = true;
         }
     }
@@ -521,8 +520,8 @@ bool DispBPMsg( bool stack_cmds )
 
 static char *GetBPCmd( brkp *bp, brk_event event, char *buff, unsigned buff_len )
 {
-    char        *cmds;
-    char        *cond;
+    const char  *cmds;
+    const char  *cond;
     char        *p;
     char        *end = buff + buff_len ;
 
@@ -679,15 +678,15 @@ void RemovePoint( brkp *bp )
             }
             RecordBreakEvent( bp, B_CLEAR );
             FreeCmdList( bp->cmds );
-            _Free( bp->condition );
-            _Free( bp->source_line );
-            _Free( bp->image_name );
-            _Free( bp->mod_name );
-            _Free( bp->sym_name );
+            MemFree( bp->condition );
+            MemFree( bp->source_line );
+            MemFree( bp->image_name );
+            MemFree( bp->mod_name );
+            MemFree( bp->sym_name );
             *owner = bp->next;
             DbgUpdate( UP_BREAK_CHANGE );
             FiniMappableAddr( &bp->loc );
-            _Free( bp );
+            MemFree( bp );
             break;
         }
     }
@@ -1045,7 +1044,7 @@ char *CopySourceLine( cue_handle *cueh )
         return( NULL );
     for( p = TxtBuff; *p == ' '; ++p )
         {}
-    source_line = DupStr( p );
+    source_line = MemStrdupSafe( p );
     return( source_line );
 }
 
@@ -1080,14 +1079,14 @@ void SetPointAddr( brkp *bp, address addr )
 
     if( bp->status.b.unmapped )
         return;
-    _Free( bp->source_line );
+    MemFree( bp->source_line );
     bp->source_line = NULL;
     bp->loc.addr = addr;
-    _Free( bp->mod_name );
+    MemFree( bp->mod_name );
     bp->mod_name = NULL;
-    _Free( bp->image_name );
+    MemFree( bp->image_name );
     bp->image_name = NULL;
-    _Free( bp->sym_name );
+    MemFree( bp->sym_name );
     bp->sym_name = NULL;
     bp->cue_diff = 0;
     bp->addr_diff = 0;
@@ -1098,10 +1097,10 @@ void SetPointAddr( brkp *bp, address addr )
         if( image == NULL )
             return;
         DIPModName( mod, TxtBuff, TXT_LEN );
-        bp->mod_name = DupStr( TxtBuff );
+        bp->mod_name = MemStrdupSafe( TxtBuff );
         if( image->image_name[0] != NULLCHAR ) {
             start = SkipPathInfo( image->image_name, OP_REMOTE );
-            bp->image_name = DupStrLen( start, ExtPointer( start, OP_REMOTE ) - start );
+            bp->image_name = MemToStringSafe( start, ExtPointer( start, OP_REMOTE ) - start );
         } else {
             bp->image_name = NULL;
         }
@@ -1109,12 +1108,12 @@ void SetPointAddr( brkp *bp, address addr )
         case SR_EXACT:
             bp->source_line = CopySourceLine( cueh );
             Format( TxtBuff, "%d", DIPCueLine( cueh ) );
-            bp->sym_name = DupStr( TxtBuff );
+            bp->sym_name = MemStrdupSafe( TxtBuff );
             ok = GetBPSymAddr( bp, &addr );
             break;
         case SR_CLOSEST:
             Format( TxtBuff, "%d", DIPCueLine( cueh ) );
-            bp->sym_name = DupStr( TxtBuff );
+            bp->sym_name = MemStrdupSafe( TxtBuff );
             bp->addr_diff = addr.mach.offset - DIPCueAddr( cueh ).mach.offset;
             ok = GetBPSymAddr( bp, &addr );
             break;
@@ -1122,9 +1121,9 @@ void SetPointAddr( brkp *bp, address addr )
             ok = false;
         }
         if( !ok ) {
-            _Free( bp->image_name );
-            _Free( bp->mod_name );
-            _Free( bp->sym_name );
+            MemFree( bp->image_name );
+            MemFree( bp->mod_name );
+            MemFree( bp->sym_name );
             bp->image_name = NULL;
             bp->mod_name = NULL;
             bp->sym_name = NULL;
@@ -1194,7 +1193,7 @@ static brkp *AddPoint( address loc, mad_type_handle mth, bool unmapped )
 
     if( !IS_BP_EXECUTE( mth ) && !BrkCheckWatchLimit( loc, mth ) )
         return( NULL );
-    _Alloc( bp, sizeof( brkp ) );
+    bp = MemAllocSafe( sizeof( *bp ) );
     InitMappableAddr( &bp->loc );
     bp->mth = mth;
     bp->arch = SysConfig.arch;
@@ -1278,10 +1277,9 @@ static brkp *TogglePoint( memory_expr def_seg )
     if( IS_NIL_ADDR( addr ) ) {
         Error( ERR_NONE, LIT_ENG( ERR_NO_SUCH_POINT ) );
         return( NULL );
-    } else {
-        ToggleBreak( addr );
-        return( bp );
     }
+    ToggleBreak( addr );
+    return( bp );
 }
 
 
@@ -1327,12 +1325,12 @@ void SetBPAutoDestruct( brkp *bp, int autodes )
 void SetBPCondition( brkp *bp, const char *condition )
 {
     if( bp->condition != NULL ) {
-        _Free( bp->condition );
+        MemFree( bp->condition );
     }
     if( condition == NULL || condition[0] == NULLCHAR ) {
         bp->condition = NULL;
     } else {
-        bp->condition = DupStr( condition );
+        bp->condition = MemStrdupSafe( condition );
     }
     bp->status.b.use_condition = ( bp->condition != NULL );
 }
@@ -1440,8 +1438,8 @@ static brkp *SetPoint( memory_expr def_seg, mad_type_handle mth )
         case B_MAPADDRESS:
             mapaddress = true;
             ScanItem( true, &start, &len );
-            DbgFree( image_name );
-            image_name = DupStrLen( start, len );
+            MemFree( image_name );
+            image_name = MemToStringSafe( start, len );
             loc = NilAddr;
             loc.mach.segment = ReqLongExpr();
             loc.mach.offset = ReqLongExpr();
@@ -1450,14 +1448,14 @@ static brkp *SetPoint( memory_expr def_seg, mad_type_handle mth )
         case B_SYMADDRESS:
             symaddress = true;
             ScanItem( true, &start, &len );
-            DbgFree( image_name );
-            image_name = DupStrLen( start, len );
+            MemFree( image_name );
+            image_name = MemToStringSafe( start, len );
             ScanItem( true, &start, &len );
-            DbgFree( mod_name );
-            mod_name = DupStrLen( start, len );
+            MemFree( mod_name );
+            mod_name = MemToStringSafe( start, len );
             ScanItem( true, &start, &len );
-            DbgFree( sym_name );
-            sym_name = DupStrLen( start, len );
+            MemFree( sym_name );
+            sym_name = MemToStringSafe( start, len );
             cue_diff = ReqLongExpr();
             addr_diff = ReqLongExpr();
             loc = NilAddr;
@@ -1490,7 +1488,7 @@ static brkp *SetPoint( memory_expr def_seg, mad_type_handle mth )
             cmds = AllocCmdList( start, len );
         if( ScanQuote( &start, &len ) ) {
             if( len != 0 )
-                condition = DupStrLen( start, len );
+                condition = MemToStringSafe( start, len );
             if( !ScanEOC() ) {
                 countdown = ReqExpr();
             }
@@ -1512,9 +1510,9 @@ static brkp *SetPoint( memory_expr def_seg, mad_type_handle mth )
     }
     bp = AddPoint( loc, mth, unmapped );
     if( bp == NULL ) {
-        DbgFree( image_name );
-        DbgFree( mod_name );
-        DbgFree( sym_name );
+        MemFree( image_name );
+        MemFree( mod_name );
+        MemFree( sym_name );
         return( NULL );
     }
     bp->status.b.unmapped = unmapped;
@@ -1565,7 +1563,7 @@ bool BreakWrite( address addr, mad_type_handle mth, const char *comment )
             bp = AddPoint( addr, mth, false );
             if( bp == NULL )
                 return( true );
-            bp->source_line = DupStr( comment );
+            bp->source_line = MemStrdupSafe( comment );
             RecordBreakEvent( bp, B_SET );
             return( true );
         }
@@ -1602,10 +1600,10 @@ bool BreakOnRawMemory( address addr, const char *comment, dig_type_size size )
     s.addr = addr;
     s.comment = comment;
     s.size = size;
-    return( SpawnP( BreakOnAddress, &s ) == 0 );
+    return( SpawnP( BreakOnAddress, (wspawn_parm)&s ) == 0 );
 }
 
-void BreakOnExprSP( void *_comment )
+void BreakOnExprSP( const char *comment )
 {
     address             addr;
     dig_type_info       ti;
@@ -1624,7 +1622,7 @@ void BreakOnExprSP( void *_comment )
     case INSP_RAW_DATA:
         s.addr = addr;
         s.size = ti.size;
-        s.comment = _comment;
+        s.comment = comment;
         BreakOnAddress( &s );
         break;
     }
@@ -1783,7 +1781,7 @@ unsigned CheckBPs( unsigned conditions, unsigned run_conditions )
                 SetProgState( run_conditions );
                 state_set = true;
             }
-            if( SpawnP( TestExpression, bp ) == 0 ) {
+            if( SpawnP( TestExpression, (wspawn_parm)bp ) == 0 ) {
                 if( !bp->status.b.expr_true ) {
                     hit = false;
                 } else {
@@ -1791,7 +1789,7 @@ unsigned CheckBPs( unsigned conditions, unsigned run_conditions )
                 }
             } else {
                 bp->status.b.expr_error = true;
-                bp->error = DupStr( TxtBuff );
+                bp->error = MemStrdupSafe( TxtBuff );
                 hit = true;
             }
             _SwitchOff( SW_ERR_IN_TXTBUFF );

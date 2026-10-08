@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2024      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2024-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -61,9 +61,13 @@ typedef struct cfstruct {
 typedef cfstruct    *cfhandle;
 
 typedef union flt {
-    float           sngl;
-    double          dble;
+    /*
+     * longest member (ldble) must be first for proper union initialization
+     */
     double          ldble;  // FIXME - need long double support
+    double          dble;
+    float           sngl;
+    unsigned_64     u64;
 } flt;
 
 extern  void        CFCnvTarget( cfloat *f, flt *buffer, int class );

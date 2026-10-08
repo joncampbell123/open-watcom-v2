@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -49,8 +49,6 @@
 
 
 #define HasVarArgs(m)       ((m) & MFLAG_HAS_VAR_ARGS)
-
-#define PREPROC_WEIGHT(c)   ((c >= 'a' && c < 'a' + sizeof( preprocWeights )) ? preprocWeights[c - 'a'] : 0)
 
 typedef struct mac_parm MAC_PARM;
 struct mac_parm {
@@ -220,9 +218,14 @@ static void CDefine( void )
 
 #define SYMBOL_VA_ARGS   "__VA_ARGS__"
 
-static unsigned addParmName( MAC_PARM **h, bool add_name )
+static int addParmName( MAC_PARM **h, bool add_name )
+/****************************************************
+ * return parm_num if exists
+ * otherwise return 0
+ * add it if requested and not found
+ */
 {
-    unsigned    index;
+    int         parm_num;
     size_t      len;
     MAC_PARM    *parm_name;
 
@@ -232,12 +235,12 @@ static unsigned addParmName( MAC_PARM **h, bool add_name )
     } else {
         len = strlen( Buffer ) + 1;
     }
-    index = 0;
+    parm_num = 0;
     RingIterBeg( *h, parm_name ) {
-        ++index;
+        ++parm_num;
         if( NameMemCmp( parm_name->name, Buffer, len ) == 0 ) {
             /* already present */
-            return( index );
+            return( parm_num );
         }
     } RingIterEnd( parm_name );
     if( add_name ) {
@@ -248,7 +251,11 @@ static unsigned addParmName( MAC_PARM **h, bool add_name )
     return( 0 );
 }
 
-static unsigned findParmName( MAC_PARM **h )
+static int findParmName( MAC_PARM **h )
+/**************************************
+ * return parm_num if found,
+ * otherwise return 0
+ */
 {
     if( *h != NULL ) {
         return( addParmName( h, false ) );
@@ -285,25 +292,25 @@ static bool skipEqualOrSharpOK( void )
 
 static MEPTR grabTokens(            // SAVE TOKENS IN A MACRO DEFINITION
     MAC_PARM        **parm_names,   // - macro parm names
-    mac_parm_count  parm_count,     // - parameter count
+    int             parm_count,     // - parameter count
     macro_flags     mflags,         // - macro flags
     macro_scanning  defn,           // - scanning definition
     size_t          name_len,       // - length of macro name
     size_t          mlen,           // - length of macro def'n (so far)
     TOKEN_LOCN      *locn )         // - definition point
 {
-    MEPTR new_mentry;
-    MEPTR mentry;
-    unsigned parm_index;
-    TOKEN prev_token;
-    TOKEN prev_non_ws_token;
+    MEPTR   new_mentry;
+    MEPTR   mentry;
+    int     parm_num;
+    TOKEN   prev_token;
+    TOKEN   prev_non_ws_token;
 
     /* unused parameters */ (void)name_len;
 
     // MacroReallocOverflow was called for the name of the macro + mentry already
     mentry = (MEPTR)MacroOffset;
     DbgAssert( ( MacroReallocOverflow( mlen, 0 ), MacroOffset == (void *)mentry ) );
-    mentry->parm_count = parm_count;
+    mentry->u.parm_count = parm_count;
     mentry->macro_defn = mlen;
     prev_token = T_NULL;
     prev_non_ws_token = T_NULL;
@@ -350,15 +357,15 @@ static MEPTR grabTokens(            // SAVE TOKENS IN A MACRO DEFINITION
             }
             break;
         case T_ID:
-            parm_index = findParmName( parm_names );
-            if( parm_index != 0 ) {
-                if( HasVarArgs( mflags ) && ( parm_index + 1 ) == parm_count ) {
+            parm_num = findParmName( parm_names );
+            if( parm_num != 0 ) {
+                if( HasVarArgs( mflags ) && ( parm_num + 1 ) == parm_count ) {
                     CurToken = T_MACRO_VAR_PARM;
                 } else {
                     CurToken = T_MACRO_PARM;
                 }
                 MacroSegmentAddToken( &mlen, CurToken );
-                MacroSegmentAddChar( &mlen, parm_index - 1 );
+                MacroSegmentAddChar( &mlen, parm_num - 1 );
             } else {
                 MacroSegmentAddToken( &mlen, CurToken );
                 MacroSegmentAddMem( &mlen, Buffer, TokenLen + 1 );
@@ -396,7 +403,7 @@ static MEPTR grabTokens(            // SAVE TOKENS IN A MACRO DEFINITION
         }
     }
     if( prev_token == T_WHITE_SPACE ) {
-        mlen -= sizeof( TOKEN );
+        mlen -= SIZE_MTOKEN;
     }
     MacroSegmentAddToken( &mlen, T_NULL );
     if( prev_non_ws_token == T_MACRO_SHARP_SHARP ) {
@@ -422,7 +429,7 @@ static MEPTR grabTokens(            // SAVE TOKENS IN A MACRO DEFINITION
 MEPTR MacroScan(                // SCAN AND DEFINE A MACRO (#define, -d)
     macro_scanning defn )       // - scanning definition
 {
-    mac_parm_count  parm_count;     // - parameter count, end found
+    int             parm_count;     // - parameter count, end found
     macro_flags     mflags;         // - macro flags
     size_t          name_len;       // - length of macro name
     MEPTR           mentry;         // - final macro defn
@@ -722,18 +729,26 @@ static void CIdent( void )
 static void preProcStmt( void )
 {
     const PPCTRL    *pp;
-    int             hash;
+    unsigned        hash;
+    int             c1;
+    int             c2;
 
     NextChar();
     NextToken();
     if( CurToken == T_ID ) {
-        hash = (TokenLen + PREPROC_WEIGHT( Buffer[0] ) + PREPROC_WEIGHT( Buffer[TokenLen - 1] )) & 0x0f;
-        pp = &controlTable[hash];
-        if( strcmp( pp->directive, Buffer ) == 0 ) {
-            if( SkipLevel == NestLevel ) {
-                pp->samelevel();
+        c1 = IndexLower( ((unsigned char *)Buffer)[0] );
+        c2 = IndexLower( ((unsigned char *)Buffer)[TokenLen - 1] );
+        if( c1 >= 0 && c2 >= 0 ) {
+            hash = (TokenLen + preprocWeights[c1] + preprocWeights[c2]) & 0x0f;
+            pp = &controlTable[hash];
+            if( strcmp( pp->directive, Buffer ) == 0 ) {
+                if( SkipLevel == NestLevel ) {
+                    pp->samelevel();
+                } else {
+                    pp->skiplevel();
+                }
             } else {
-                pp->skiplevel();
+                CUnknown();
             }
         } else {
             CUnknown();

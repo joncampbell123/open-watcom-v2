@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -209,10 +209,10 @@ static void GetMoreBranches( void )
     if( NumBranches > SEG_LIMIT ) {
         LnkMsg( FTL+MSG_NO_VIRT_MEM, NULL );
     }
-    _ChkAlloc( branches, alloc_size * 2 );
+    branches = MemAllocSafe( alloc_size * 2 );
     memcpy( branches, SegTab, alloc_size );
     memset( (char *)branches + alloc_size, 0, alloc_size ); /* null pointers */
-    _LnkFree( SegTab );
+    MemFree( SegTab );
     SegTab = branches;
 }
 
@@ -258,10 +258,10 @@ static virt_struct GetBigStg( virt_mem_size size )
         if( NumHuge > HUGE_LIMIT ) {
             LnkMsg( FTL+MSG_NO_VIRT_MEM, NULL );
         }
-        _ChkAlloc( newtab, alloc_size * 2 );
+        newtab = MemAllocSafe( alloc_size * 2 );
         memcpy( newtab, HugeTab, alloc_size );
         memset( (char *)newtab + alloc_size, 0, alloc_size );
-        _LnkFree( HugeTab );
+        MemFree( HugeTab );
         HugeTab = newtab;
     }
     huge_entry = &HugeTab[NextHuge];
@@ -325,14 +325,14 @@ static void AllocVMNode( seg_table *node )
 {
     void        *mem;
 
-    _LnkAlloc( mem, node->size );
+    mem = MemAlloc( node->size );
     if( mem == NULL ) {
         node->loc.u.spill = SpillAlloc( node->size );
         node->loc.spilled = true;
     } else {
         node->loc.u.addr = mem;
         node->loc.spilled = false;
-        LinkList( &NextSwap, node );
+        AppendList( (void **)&NextSwap, node );
     }
 }
 
@@ -349,7 +349,7 @@ static void AllocHugeVMNode( huge_table *node )
     node->page = PermAlloc( HUGE_NUM_SUBPAGES * sizeof( spilladdr ) );
     page = node->page;
     index = node->numthere - 1;         /* first try to allocate the last bit */
-    _LnkAlloc( mem, node->sizelast );   /* on the end of the page. */
+    mem = MemAlloc( node->sizelast );   /* on the end of the page. */
     if( mem == NULL ) {
         nomem = true;
         node->flags &= ~VIRT_INMEM;
@@ -359,7 +359,7 @@ static void AllocHugeVMNode( huge_table *node )
         nomem = false;
         node->flags |= VIRT_INMEM;
         page[index].u.addr = mem;
-        LinkList( &NextSwap, node );
+        AppendList( (void **)&NextSwap, node );
     }
     page[index].spilled = nomem;
     /*
@@ -370,7 +370,7 @@ static void AllocHugeVMNode( huge_table *node )
         if( nomem ) {
             page[index].u.spill = SpillAlloc( HUGE_SUBPAGE_SIZE );
         } else {
-            _LnkAlloc( mem, HUGE_SUBPAGE_SIZE );
+            mem = MemAlloc( HUGE_SUBPAGE_SIZE );
             if( mem == NULL ) {
                 nomem = true;
                 node->numswapped = index + 1;
@@ -504,10 +504,10 @@ void CopyInfo( virt_mem a, virt_mem b, size_t len )
 {
     void        *buf;
 
-    _ChkAlloc( buf, len );
+    buf = MemAllocSafe( len );
     ReadInfo( b, buf, len );
     PutInfo( a, buf, len );
-    _LnkFree( buf );
+    MemFree( buf );
 }
 
 static bool CompareBlock( void *info, spilladdr loc, size_t off, size_t len )
@@ -615,11 +615,11 @@ void     VirtMemInit( void )
     NextLeaf = 0;
     NextSwap = NULL;
     TinyLeft = 0;
-    _ChkAlloc( SegTab, NumBranches * sizeof( seg_table * ) );
+    SegTab = MemAllocSafe( NumBranches * sizeof( seg_table * ) );
     memset( SegTab, 0, NumBranches * sizeof( seg_table * ) );
     SegTab[1] = PermAlloc( sizeof( seg_table ) * MAX_LEAFS );
     memset( SegTab[1], 0, sizeof( seg_table ) * MAX_LEAFS );
-    _ChkAlloc( HugeTab, NumHuge * sizeof( huge_table ) );
+    HugeTab = MemAllocSafe( NumHuge * sizeof( huge_table ) );
     memset( HugeTab, 0, NumHuge * sizeof( huge_table ) );
 #else
     VMemBlocks = NULL;
@@ -646,10 +646,10 @@ virt_mem AllocStg( virt_mem_size size )
     if( size == 0 )
         return( 0 );
     if( size < TINY_ALLOC_CUTOFF ) {
-        _PermAlloc( ptr, size + sizeof( vmemblock ) - 1 );
+        ptr = _PermAlloc( size + sizeof( vmemblock ) - 1 );
         ptr->next = ptr;
     } else {
-        _ChkAlloc( ptr, size + sizeof( vmemblock ) - 1 );
+        ptr = MemAllocSafe( size + sizeof( vmemblock ) - 1 );
         ptr->prev = NULL;
         ptr->next = VMemBlocks;
         if( VMemBlocks != NULL ) {
@@ -691,7 +691,7 @@ void     ReleaseInfo( virt_mem stg )
             ptr->next->prev = ptr->prev;
         }
     }
-    _LnkFree( ptr );
+    MemFree( ptr );
 #endif
 }
 
@@ -727,7 +727,7 @@ bool     SwapOutVirt( void )
                 spillmem->u.spill = SpillAlloc( size );
                 spillmem->spilled = true;
                 SpillWrite( spillmem->u.spill, 0, mem, size );
-                _LnkFree( mem );
+                MemFree( mem );
                 DEBUG((DBG_VIRTMEM, "swapping out %h to %h", mem, spillmem->u.spill ));
                 return( true );
             }
@@ -737,7 +737,7 @@ bool     SwapOutVirt( void )
                 seg_entry->loc.u.spill = SpillAlloc( seg_entry->size );
                 seg_entry->loc.spilled = true;
                 SpillWrite( seg_entry->loc.u.spill, 0, mem, seg_entry->size );
-                _LnkFree( mem );
+                MemFree( mem );
                 DEBUG((DBG_VIRTMEM, "swapping out %h to %h", mem, seg_entry->loc.u.spill ));
                 return( true );
             }
@@ -765,13 +765,13 @@ void FreeVirtMem( void )
             if( seg_entry != NULL ) {
                 for( leaf = 0; leaf < MAX_LEAFS; leaf++ ) {
                     if( !seg_entry->loc.spilled ) {
-                        _LnkFree( seg_entry->loc.u.addr );
+                        MemFree( seg_entry->loc.u.addr );
                     }
                     seg_entry++;
                 }
             }
         }
-        _LnkFree( SegTab );
+        MemFree( SegTab );
     }
     if( HugeTab != NULL ) {
         for( index = 0; index < NumHuge; index++ ) {
@@ -779,11 +779,11 @@ void FreeVirtMem( void )
             if( huge_entry->page != NULL ) {
                 page = huge_entry->page;
                 for( inner = huge_entry->numswapped; inner < huge_entry->numthere; inner++ ) {
-                    _LnkFree( page[inner].u.addr );
+                    MemFree( page[inner].u.addr );
                 }
             }
         }
-        _LnkFree( HugeTab );
+        MemFree( HugeTab );
     }
 #else
     FreeList( VMemBlocks );

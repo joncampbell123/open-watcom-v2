@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -32,35 +33,34 @@
 #ifndef _MEMORY_H
 #define _MEMORY_H   1
 
-extern void *MallocUnSafe( size_t size );
-extern void *MallocSafe( size_t size );
-extern void *CallocSafe( size_t size ); /* different from stdlib rtn */
-extern void FreeSafe( void *ptr );
-extern char *StrDupSafe( const char *str );
-extern char *CharToStrSafe( char c );
+#include "memfuncs.h"
+
 extern void MemInit( void );
 extern void MemFini( void );
 extern void MemShrink( void );
 
+extern void *MemCAllocSafe( size_t size ); /* different from stdlib rtn */
+extern char *CharToStringSafe( char c );
+
 #ifdef USE_FAR
 
-extern void FAR *FarMallocUnSafe( size_t size );
-extern void FAR *FarMallocSafe( size_t size );
-extern void     FarFreeSafe( void FAR *p );
+extern void         FAR *FarMemAlloc( size_t size );
+extern void         FAR *FarMemAllocSafe( size_t size );
+extern void         FarMemFree( void FAR *p );
 
-#define FarMemCpy           _fmemcpy
-#define FarMemCmp           _fmemcmp
-#define FarMemSet           _fmemset
+#define FarMemCpy       _fmemcpy
+#define FarMemCmp       _fmemcmp
+#define FarMemSet       _fmemset
 
 #else
 
-#define FarMallocUnSafe     MallocUnSafe
-#define FarMallocSafe       MallocSafe
-#define FarFreeSafe         FreeSafe
+#define FarMemAlloc     MemAlloc
+#define FarMemAllocSafe MemAllocSafe
+#define FarMemFree      MemFree
 
-#define FarMemCpy           memcpy
-#define FarMemCmp           memcmp
-#define FarMemSet           memset
+#define FarMemCpy       memcpy
+#define FarMemCmp       memcmp
+#define FarMemSet       memset
 
 #endif
 
@@ -75,12 +75,12 @@ extern void IfMemScarce( bool (*func)( void ) );
  * The prototype would be:  void ConstMemCpy( void *, void *, size_t );
  * Note that each argument is evaluated only once.
  */
-#define ConstMemCpy( d, s, c )                       \
-     {                                               \
-         typedef struct {                            \
-             char _b[ c ];                           \
-         } FAR *_cmc_ptr;                            \
-         *( _cmc_ptr )( d ) = *( _cmc_ptr )( s );    \
-     }
+#define ConstMemCpy( d, s, c )                      \
+    {                                               \
+        typedef struct {                            \
+            char _b[ c ];                           \
+        } FAR *_cmc_ptr;                            \
+        *( _cmc_ptr )( d ) = *( _cmc_ptr )( s );    \
+    }
 
 #endif  /* !_MEMORY_H */

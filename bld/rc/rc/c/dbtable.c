@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -87,7 +87,7 @@ static RcStatus readDBIndex( FILE *fh )
     size_t      size;
 
     size = charInfo.header.num_indices * sizeof( DBIndexEntry );
-    charInfo.index = RESALLOC( size );
+    charInfo.index = MemAllocSafe( size );
     numread = fread( charInfo.index, 1, size, fh );
     if( numread != size ) {
         return( feof( fh ) ? RS_READ_INCMPLT : RS_READ_ERROR );
@@ -102,7 +102,7 @@ static RcStatus readDBTable( FILE *fh )
     size_t      size;
 
     size = charInfo.header.num_entries * sizeof( uint_16 );
-    charInfo.entries = RESALLOC( size );
+    charInfo.entries = MemAllocSafe( size );
     numread = fread( charInfo.entries, 1, size, fh );
     if( numread != size ) {
         return( feof( fh ) ? RS_READ_INCMPLT : RS_READ_ERROR );
@@ -159,17 +159,16 @@ const char *GetLeadBytes( void )
     return( charInfo.begchars );
 }
 
-size_t DBStringToUnicode( size_t len, const char *str, char *buf )
-/****************************************************************/
+size_t DBStringToUnicode( const char *str, size_t len, char *buf, size_t size )
+/*****************************************************************************/
 {
     const uint_8    *ptr;
     const uint_8    *end;
-    uint_16         *ubuf;
+    uint_16         uchar;
     uint_16         dbchar;
     size_t          ret;
 
     ret = 0;
-    ubuf = (uint_16 *)buf;
     end = (uint_8 *)str + len;
     for( ptr = (uint_8 *)str; ptr < end; ptr++ ) {
         if( charInfo.begchars[*ptr] == DB_BEG_CHAR ) {
@@ -179,11 +178,15 @@ size_t DBStringToUnicode( size_t len, const char *str, char *buf )
         } else {
             dbchar = *ptr;
         }
-        if( ubuf != NULL ) {
-            *ubuf = lookUpDBChar( dbchar );
-            ubuf++;
+        if( buf != NULL ) {
+            if( ret + 1 < size ) {
+                uchar = lookUpDBChar( dbchar );
+                buf[ret++] = uchar & 0xff;
+                buf[ret++] = ( uchar >> 8 ) & 0xff;
+            }
+        } else {
+            ret += 2;
         }
-        ret += sizeof( *ubuf );
     }
     return( ret );
 }
@@ -192,11 +195,11 @@ void FreeCharTable( void )
 /************************/
 {
     if( charInfo.index != NULL ) {
-        RESFREE( charInfo.index );
+        MemFree( charInfo.index );
         charInfo.index = NULL;
     }
     if( charInfo.entries != NULL ) {
-        RESFREE( charInfo.entries );
+        MemFree( charInfo.entries );
         charInfo.entries = NULL;
     }
 }

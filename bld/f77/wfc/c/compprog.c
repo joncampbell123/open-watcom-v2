@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -55,10 +55,9 @@
 #include "gsubprog.h"
 #include "tdinit.h"
 #include "rstmgr.h"
+#include "cgmisc.h"
 #include "brseinfo.h"
 
-
-extern  bool    TBreak( void );
 
 static bool CompSProg( void )
 {
@@ -66,8 +65,8 @@ static bool CompSProg( void )
 
     InitSubProg();
     fini_subprog = false;
-    for(;;) {
-        for(;;) {
+    for( ;; ) {
+        for( ;; ) {
             if( CurrFile->flags & INC_PENDING ) {
                 CurrFile->flags &= ~INC_PENDING;
                 ProcInclude();
@@ -115,7 +114,7 @@ static bool CompFile( void )
     bool        tbreak;
 
     tbreak = false;
-    for(;;) {
+    for( ;; ) {
         if( ProgSw & PS_SOURCE_EOF )
             break;
         tbreak = CompSProg();

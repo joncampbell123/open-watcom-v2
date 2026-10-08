@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -79,9 +79,9 @@ type_class_def  AddCallBlock( cg_sym_handle sym, const type_def *tipe )
         PGBlip( FEName( sym ) );
     }
     NewProc( FELexLevel( sym ) );
-    EnLink( AskForSymLabel( sym, CG_FE ), false );
-    CurrProc->label = CurrBlock->label;
+    EnLink( AskForSymLabel( sym, CG_FE ) );
     _MarkBlkAttrSet( CurrBlock, BLK_BIG_LABEL );
+    CurrProc->label = CurrBlock->label;
     type_class = InitCallState( tipe );
     AddIns( MakeNop() );
     return( type_class );
@@ -127,7 +127,7 @@ cn      BGInitCall( an node, const type_def *tipe, aux_handle aux )
         call->ins->head.opcode = OP_CALL;
         type_class = CallState( aux, tipe, call->state );
         mem = node->u.n.name;
-        mem = (name *)SAllocMemory( mem->v.symbol, mem->v.offset, mem->m.memory_type,
+        mem = SAllocMemory( mem->v.symbol, mem->v.offset, mem->m.memory_type,
                             mem->n.type_class, mem->n.size );
         node->u.n.name = mem;
     } else {
@@ -639,7 +639,7 @@ void    BGZapBase( name *base, const type_def *tipe )
     ins = MakeNop();
     if( DummyIndex == NULL )
         DummyIndex = AllocTemp( WD );
-    ins->result = ScaleIndex( DummyIndex, base, 0, XX, tipe->length, 0, X_FAKE_BASE );
+    ins->result = ScaleIndex( DummyIndex, base, 0, XX, tipe->length, SCALE_NONE, X_FAKE_BASE );
     ins->flags.u.nop_flags |= NOP_ZAP_INFO;
     AddIns( ins );
 }

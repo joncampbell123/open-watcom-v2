@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -101,7 +101,7 @@ void WRERemoveStringEditSession( WREStringSession *session )
         if( session->info != NULL ) {
             WStrFreeStringInfo( session->info );
         }
-        WRMemFree( session );
+        MemFree( session );
     }
 }
 
@@ -150,7 +150,7 @@ bool WREAddStringToDir( WRECurrentResInfo *curr )
             rname = WResIDFromNum( 0 );
             ok = (rname != NULL);
             if( ok ) {
-                ok = WRENewResource( curr, tname, rname, DEF_MEMFLAGS, 0, 0,
+                ok = WRENewResource( curr, tname, rname, DEFAULT_FLAGS_MP, 0, 0,
                                      &lang, &dup, RESOURCE2INT( RT_STRING ), tname_alloc );
                 if( !ok && dup ) {
                     ok = true;
@@ -158,7 +158,7 @@ bool WREAddStringToDir( WRECurrentResInfo *curr )
                 num_retries++;
             }
             if( rname != NULL ) {
-                WRMemFree( rname );
+                MemFree( rname );
             }
         }
         if( dup ) {
@@ -171,7 +171,7 @@ bool WREAddStringToDir( WRECurrentResInfo *curr )
     }
 
     if( tname_alloc ) {
-        WRMemFree( tname );
+        MemFree( tname );
     }
 
     return( ok );
@@ -276,7 +276,7 @@ WREStringSession *WREStartStringSession( WRECurrentResInfo *curr, WStringNode *n
 
     session->info->parent = WREGetMainWindowHandle();
     session->info->inst = WREGetAppInstance();
-    session->info->file_name = WREStrDup( WREGetQueryName( curr->info ) );
+    session->info->file_name = WREStrdup( WREGetQueryName( curr->info ) );
     session->info->tables = nodes;
     session->info->is32bit = curr->info->is32bit;
 
@@ -297,7 +297,7 @@ WREStringSession *WREStartStringSession( WRECurrentResInfo *curr, WStringNode *n
         }
     } else {
         WStrFreeStringInfo( session->info );
-        WRMemFree( session );
+        MemFree( session );
         session = NULL;
     }
 
@@ -416,7 +416,7 @@ WREStringSession *WREAllocStringSession( void )
 {
     WREStringSession *session;
 
-    session = (WREStringSession *)WRMemAlloc( sizeof( WREStringSession ) );
+    session = MemAlloc( sizeof( WREStringSession ) );
 
     if( session != NULL ) {
         memset( session, 0, sizeof( WREStringSession ) );
@@ -433,14 +433,14 @@ WStringNode *WREMakeNode( WRECurrentResInfo *curr )
         return( NULL );
     }
 
-    node = (WStringNode *)WRMemAlloc( sizeof( WStringNode ) );
+    node = MemAlloc( sizeof( WStringNode ) );
     if( node == NULL ) {
         return( NULL );
     }
     memset( node, 0, sizeof( WStringNode ) );
 
     node->lang = curr->lang->Info.lang;
-    node->MemFlags = curr->lang->Info.MemoryFlags;
+    node->res_flags = curr->lang->Info.res_flags;
     node->block_name = WRECopyWResID( &curr->res->Info.ResName );
     node->data_size = curr->lang->Info.Length;
     node->data = WREGetCopyResData( curr );
@@ -503,12 +503,12 @@ void WREFreeStringNode( WStringNode *node )
     for( ; node != NULL; node = next ) {
         next = node->next;
         if( node->block_name != NULL ) {
-            WRMemFree( node->block_name );
+            MemFree( node->block_name );
         }
         if( node->data != NULL ) {
-            WRMemFree( node->data );
+            MemFree( node->data );
         }
-        WRMemFree( node );
+        MemFree( node );
     }
 }
 
@@ -522,7 +522,7 @@ WResTypeNode *WREUseStringNodes( WResDir dir, WStringNode *node )
     tname = WResIDFromNum( RESOURCE2INT( RT_STRING ) );
     ok = ( tname != NULL );
     for( ; ok && node != NULL; node = node->next ) {
-        ok = !WResAddResource( tname, node->block_name, node->MemFlags, 0,
+        ok = !WResAddResource( tname, node->block_name, node->res_flags, 0,
                                (uint_32)node->data_size, dir, &node->lang, NULL );
         if( ok ) {
             ok = WRFindAndSetData( dir, tname, node->block_name,
@@ -532,7 +532,7 @@ WResTypeNode *WREUseStringNodes( WResDir dir, WStringNode *node )
     }
 
     if( tname != NULL ) {
-        WRMemFree( tname );
+        MemFree( tname );
     }
 
     if( ok ) {

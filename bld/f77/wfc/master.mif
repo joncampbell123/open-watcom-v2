@@ -6,8 +6,6 @@ proj_name = wfc
 wfc_autodepends = .AUTODEPEND
 !endif
 
-wfc_nofpu = 1
-
 wfc_ntverrc = ..
 
 wfc_trmem = 1
@@ -29,7 +27,6 @@ ntverrc_exe = $(exetarg_name)
 !include cproj.mif
 !include defrule.mif
 !include deftarg.mif
-!include trmem.mif
 
 !include $(cg_dir)/client.mif
 !include asclient.mif
@@ -43,17 +40,16 @@ ntverrc_exe = $(exetarg_name)
 
 inc_dirs= -I. -I.. -I"$(f77wfc_dir)/h" -I"$(f77_dir)/h" &
     $(cli_cg_inc_dirs) $(cli_dwarfw_inc_dirs) $(cli_cfloat_inc_dirs) -I"$(comp_cfg_dir)/h" -I"$(fe_misc_dir)/h" &
-    $(cli_asminline_inc_dirs) $(cli_owl_inc_dirs) -I"$(clib_dir)/h" -I"$(lib_misc_dir)/h"
+    $(cli_asminline_inc_dirs) $(cli_owl_inc_dirs) -I"$(clib_dir)/h" -I"$(lib_misc_dir)/h" -I"$(trmem_dir)"
 
-extra_cpp_flags =
+extra_cpp_flags_target_axp = -DAS_ALPHA
+extra_cpp_flags_target_mps = -DAS_MIPS
+extra_cpp_flags_target_ppc = -DAS_PPC
+
+extra_cpp_flags = $(extra_cpp_flags_target_$(target_cpu))
 !ifdef dll_cg
 extra_cpp_flags += -D_CGDLL
 !endif
-
-extra_cpp_flags_f_fmemmgr = $(trmem_cpp_flags)
-extra_cpp_flags_f_trmemcvr = $(trmem_cpp_flags)
-
-extra_c_flags_f_trmemcvr = $(trmem_cover_cflags)
 
 #
 # aflags
@@ -67,8 +63,8 @@ extra_a_flags_axp = -oc
 # EXE
 #
 exetarg_prebuild_objs = $(cli_asminline_deps) usage.gh wfcmsgs.gh code$(target_cpu).gh
-exetarg_objs          = $(fobjs) $(trmem_objs) $(trmemcvr_objs)
-exetarg_libs          = $(cli_asminline_libs) $(cli_cg_libs)
+exetarg_objs          = $(fobjs) $(trmem_objs)
+exetarg_libs          = $(cli_cg_libs)
 exetarg_res           = $(proj_name).res
 !include exetarg.mif
 

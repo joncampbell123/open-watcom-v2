@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,8 +35,8 @@
 #include "dbgdata.h"
 #include "dbgwind.h"
 #include "dbgerr.h"
-#include "madinter.h"
-#include "dbgmem.h"
+#include "wvmadcli.h"
+#include "memfuncs.h"
 #include "wndregx.h"
 #include "dbgio.h"
 #include "strutil.h"
@@ -441,12 +441,7 @@ wnd_macro *MacAddDel( gui_key key, wnd_class_wv wndclass, cmd_list *cmds )
     if( cmds != NULL ) {
         // add
         if( curr == NULL ) {
-            _Alloc( curr, sizeof( wnd_macro ) );
-            if( curr == NULL ) {
-                FreeCmdList( cmds );
-                Error( ERR_NONE, LIT_ENG( ERR_NO_MEMORY ) );
-                return( curr );
-            }
+            curr = MemAllocSafe( sizeof( *curr ) );
             curr->key = key;
             curr->wndclass = wndclass;
             curr->link = NULL;
@@ -471,7 +466,7 @@ wnd_macro *MacAddDel( gui_key key, wnd_class_wv wndclass, cmd_list *cmds )
             *owner = curr->link;
             WndMenuSetHotKey( curr->menu, curr->type == MACRO_MAIN_MENU, LIT_ENG( Empty ) );
             FreeCmdList( curr->cmd );
-            _Free( curr );
+            MemFree( curr );
             curr = NULL;
         }
     }
@@ -552,7 +547,7 @@ void    FiniMacros( void )
         WndMenuSetHotKey( mac->menu, mac->type == MACRO_MAIN_MENU, LIT_ENG( Empty ) );
         mac = mac->link;
         FreeCmdList( junk->cmd );
-        _Free( junk );
+        MemFree( junk );
     }
     WndMacroList = NULL;
 }

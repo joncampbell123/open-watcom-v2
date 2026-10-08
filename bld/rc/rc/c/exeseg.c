@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -47,14 +47,12 @@ static RcStatus allocSegTable( SegTable *seg, int *err_code )
 {
     int     tablesize;
 
+    /* unused parameters */ (void)err_code;
+
     tablesize = seg->NumSegs * sizeof( segment_record );
-    seg->Segments = RESALLOC( tablesize );
-    if( seg->Segments == NULL ) {
-        *err_code = errno;
-        return( RS_NO_MEM );
-    } else {
-        return( RS_OK );
-    }
+    seg->Segments = MemAllocSafe( tablesize );
+    return( RS_OK );
+
 } /* allocSegTable */
 
 static RcStatus readSegTable( FILE *fp, uint_32 offset, segment_record *segments, size_t size )
@@ -189,29 +187,6 @@ uint_32 ComputeSegmentSize( FILE *fp, SegTable *segs, int shift_count )
 
 } /* ComputeSegmentSize */
 
-static bool myCopyExeData( ExeFileInfo *src, ExeFileInfo *dst, uint_32 length )
-{
-    switch( CopyExeData( src->fp, dst->fp, length ) ) {
-    case RS_OK:
-    case RS_PARAM_ERROR:
-        return( false );
-    case RS_READ_ERROR:
-        RcError( ERR_READING_EXE, src->name, strerror( errno ) );
-        break;
-    case RS_READ_INCMPLT:
-        RcError( ERR_UNEXPECTED_EOF, src->name );
-        break;
-    case RS_WRITE_ERROR:
-        RcError( ERR_WRITTING_FILE, dst->name, strerror( errno ) );
-        break;
-    default:
-        RcError( ERR_INTERNAL, INTERR_UNKNOWN_RCSTATUS );
-        break;
-    }
-    return( true );
-}
-
-
 static CpSegRc copyOneSegment( const segment_record *src_seg,
             segment_record *dst_seg, ExeFileInfo *src, ExeFileInfo *dst,
             int src_shift_count, int dst_shift_count, bool pad_end )
@@ -262,12 +237,20 @@ static CpSegRc copyOneSegment( const segment_record *src_seg,
         }
 
         if( !error ) {
+            RcStatus    ret;
+
             if( src_seg->size == 0 ) {
                 seg_len = 0x10000L;
             } else {
                 seg_len = src_seg->size;
             }
-            error = myCopyExeData( src, dst, seg_len );
+            ret = CopyExeData( src->fp, dst->fp, seg_len );
+            if( ret == RS_READ_ERROR ) {
+                ret = RS_READ_ERROR_EXE;
+//            } else if( ret == RS_WRITE_ERROR ) {
+//                ret = RS_WRITE_ERROR_RES;
+            }
+            error = RcIOError( ret, src->name, dst->name, errno );
         }
 
         if( (src_seg->info & SEG_RELOC)
@@ -293,7 +276,15 @@ static CpSegRc copyOneSegment( const segment_record *src_seg,
              * copy the relocation information
              */
             if( !error ) {
-                error = myCopyExeData( src, dst, numrelocs * OS_RELOC_ITEM_SIZE );
+                RcStatus    ret;
+
+                ret = CopyExeData( src->fp, dst->fp, numrelocs * OS_RELOC_ITEM_SIZE );
+                if( ret == RS_READ_ERROR ) {
+                    ret = RS_READ_ERROR_EXE;
+//                } else if( ret == RS_WRITE_ERROR ) {
+//                    ret = RS_WRITE_ERROR_RES;
+                }
+                error = RcIOError( ret, src->name, dst->name, errno );
             }
             if( numrelocs * OS_RELOC_ITEM_SIZE + seg_len > 0x10000L ) {
                 ret = CPSEG_SEG_TOO_BIG;

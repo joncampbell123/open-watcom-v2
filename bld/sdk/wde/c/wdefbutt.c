@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -97,7 +97,9 @@ static void     WdeButtonGetDefineInfo( WdeDefineObjectInfo *, HWND );
 /* static variables                                                         */
 /****************************************************************************/
 static HINSTANCE                WdeApplicationInstance;
+#ifdef __WINDOWS__
 static DISPATCH_FN              *WdeButtonDispatch;
+#endif
 static WdeDialogBoxControl      *WdeDefaultButton = NULL;
 static int                      WdeButtonWndExtra;
 static WNDPROC                  WdeOriginalButtonProc;
@@ -163,7 +165,7 @@ OBJPTR WdeMakeButton( OBJPTR parent, RECT *obj_rect, OBJPTR handle, DialogStyle 
 
     new = WdeButtonCreate( parent, obj_rect, handle, id, WdeDefaultButton );
 
-    WRMemFree( GETCTL_TEXT( WdeDefaultButton ) );
+    MemFree( GETCTL_TEXT( WdeDefaultButton ) );
     SETCTL_TEXT( WdeDefaultButton, NULL );
 
     return( new );
@@ -182,13 +184,17 @@ OBJPTR WdeButtonCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle,
         return( NULL );
     }
 
-    new = (WdeButtonObject *)WRMemAlloc( sizeof( WdeButtonObject ) );
+    new = MemAlloc( sizeof( WdeButtonObject ) );
     if( new == NULL ) {
         WdeWriteTrail( "WdeButtonCreate: Object malloc failed" );
         return( NULL );
     }
 
+#ifdef __WINDOWS__
     OBJ_DISPATCHER_SET( new, WdeButtonDispatch );
+#else
+    OBJ_DISPATCHER_SET( new, WdeButtonDispatcher );
+#endif
 
     new->object_id = id;
 
@@ -202,7 +208,7 @@ OBJPTR WdeButtonCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle,
 
     if( new->control == NULL ) {
         WdeWriteTrail( "WdeButtonCreate: CONTROL_OBJ not created!" );
-        WRMemFree( new );
+        MemFree( new );
         return( NULL );
     }
 
@@ -211,7 +217,7 @@ OBJPTR WdeButtonCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle,
         if( !Forward( new->object_handle, SET_CLEAR_INT, &b, NULL ) ) {
             WdeWriteTrail( "WdeButtonCreate: SET_CLEAR_INT failed!" );
             Destroy( new->control, false );
-            WRMemFree( new );
+            MemFree( new );
             return( NULL );
         }
     }
@@ -219,14 +225,14 @@ OBJPTR WdeButtonCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle,
     if( !Forward( new->object_handle, SET_OBJECT_INFO, info, NULL ) ) {
         WdeWriteTrail( "WdeButtonCreate: SET_OBJECT_INFO failed!" );
         Destroy( new->control, false );
-        WRMemFree( new );
+        MemFree( new );
         return( NULL );
     }
 
     if( !Forward( new->object_handle, CREATE_WINDOW, NULL, NULL ) ) {
         WdeWriteTrail( "WdeButtonCreate: CREATE_WINDOW failed!" );
         Destroy( new->control, false );
-        WRMemFree( new );
+        MemFree( new );
         return( NULL );
     }
 
@@ -293,14 +299,18 @@ bool WdeButtonInit( bool first )
     SETCTL_TEXT( WdeDefaultButton, NULL );
     SETCTL_CLASSID( WdeDefaultButton, ResNumToControlClass( CLASS_BUTTON ) );
 
+#ifdef __WINDOWS__
     WdeButtonDispatch = MakeProcInstance_DISPATCHER( WdeButtonDispatcher, WdeGetAppInstance() );
+#endif
     return( true );
 }
 
 void WdeButtonFini( void )
 {
     WdeFreeDialogBoxControl( &WdeDefaultButton );
+#ifdef __WINDOWS__
     FreeProcInstance_DISPATCHER( WdeButtonDispatch );
+#endif
 }
 
 bool WdeButtonDestroy( WdeButtonObject *obj, bool *flag, bool *p2 )
@@ -312,7 +322,7 @@ bool WdeButtonDestroy( WdeButtonObject *obj, bool *flag, bool *p2 )
         return( false );
     }
 
-    WRMemFree( obj );
+    MemFree( obj );
 
     return( true );
 }
@@ -388,8 +398,7 @@ bool WdeButtonCopyObject( WdeButtonObject *obj, WdeButtonObject **new, OBJPTR ha
         return( false );
     }
 
-    *new = (WdeButtonObject *)WRMemAlloc( sizeof( WdeButtonObject ) );
-
+    *new = MemAlloc( sizeof( WdeButtonObject ) );
     if( *new == NULL ) {
         WdeWriteTrail( "WdeButtonCopyObject: Object malloc failed" );
         return( false );
@@ -406,7 +415,7 @@ bool WdeButtonCopyObject( WdeButtonObject *obj, WdeButtonObject **new, OBJPTR ha
 
     if( !CopyObject( obj->control, &(*new)->control, (*new)->object_handle) ) {
         WdeWriteTrail( "WdeButtonCopyObject: Control not created!" );
-        WRMemFree( *new );
+        MemFree( *new );
         return( false );
     }
 

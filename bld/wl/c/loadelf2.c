@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -95,15 +95,15 @@ ElfSymTable *CreateElfSymTable( unsigned maxElems, stringtable *strtab )
 {
     ElfSymTable *tab;
 
-    _ChkAlloc( tab, sizeof( ElfSymTable ) );
+    tab = MemAllocSafe( sizeof( ElfSymTable ) );
     tab->numBuckets = FindClosestPrime( maxElems / 2 );
     tab->maxElems = maxElems + 1; // element 0 is NIL
     tab->numElems = 1;
-    _ChkAlloc( tab->table, tab->maxElems * sizeof( tab->table[0] ) );
+    tab->table = MemAllocSafe( tab->maxElems * sizeof( tab->table[0] ) );
     memset( tab->table, 0, tab->maxElems * sizeof( tab->table[0] ) );
-    _ChkAlloc( tab->buckets, tab->numBuckets * sizeof( Elf32_Word ) );
+    tab->buckets = MemAllocSafe( tab->numBuckets * sizeof( Elf32_Word ) );
     memset( tab->buckets, 0, tab->numBuckets * sizeof( unsigned_32 ) );
-    _ChkAlloc( tab->chains, tab->maxElems * sizeof( unsigned_32 ) );
+    tab->chains = MemAllocSafe( tab->maxElems * sizeof( unsigned_32 ) );
     memset( tab->chains, 0, tab->maxElems * sizeof( unsigned_32 ) );
     tab->strtab = strtab;
     if( GetStringTableSize( tab->strtab ) == 0 ) {
@@ -155,7 +155,7 @@ static unsigned_16 ElfSymSecNum( ElfHdr *hdr, symbol *sym, group_entry *group )
     } else if( group == NULL ) {
         return( SHN_ABS );
     } else {
-        secnum += group->grp_addr.seg - 1;
+        secnum += group->addr.seg - 1;
     }
     DbgAssert(group != NULL);
     return( secnum );
@@ -173,8 +173,11 @@ static void SetElfSym( ElfHdr *hdr, Elf32_Sym *elfsym, symbol *sym )
     bind = STB_GLOBAL;
     if( sym->info & SYM_STATIC ) {       // determine binding
         bind = STB_LOCAL;
-    } else if( IS_SYM_REGULAR( sym ) || IS_SYM_IMPORTED( sym ) ||
-               IS_SYM_ALIAS( sym ) || IS_SYM_COMMUNAL( sym ) ) {
+    } else if( IS_SYM_REGULAR( sym )
+      || IS_SYM_IMPORTED( sym )
+      || IS_SYM_ALIAS( sym )
+      || IS_SYM_COMMUNAL( sym ) ) {
+        /* nothing */
     } else if( IS_SYM_WEAK_REF( sym ) ) {
         bind = STB_WEAK;
     } else {
@@ -217,7 +220,8 @@ void WriteElfSymTable( ElfSymTable *tab, ElfHdr *hdr, unsigned hashidx,
     for( i = 1; i < tab->numElems; i++ ) {
         sym = tab->table[i];
         elfsym.st_name = AddStringStringTableOffs( tab->strtab, sym->name.u.ptr );
-        if( tableSH->sh_info == 0 && (sym->info & SYM_STATIC) == 0 ) {
+        if( tableSH->sh_info == 0
+          && (sym->info & SYM_STATIC) == 0 ) {
             tableSH->sh_info = i;
         }
         SetElfSym( hdr, &elfsym, sym );
@@ -250,10 +254,10 @@ void WriteElfSymTable( ElfSymTable *tab, ElfHdr *hdr, unsigned hashidx,
 void ZapElfSymTable( ElfSymTable *tab )
 /********************************************/
 {
-    _LnkFree( tab->table );
-    _LnkFree( tab->buckets );
-    _LnkFree( tab->chains );
-    _LnkFree( tab );
+    MemFree( tab->table );
+    MemFree( tab->buckets );
+    MemFree( tab->chains );
+    MemFree( tab );
 }
 
 #endif

@@ -17,7 +17,6 @@ additional_clean = *.gh *.grh *.grc
 !include cproj.mif
 !include defrule.mif
 !include deftarg.mif
-!include trmem.mif
 
 !include $(orl_dir)/client.mif
 
@@ -32,13 +31,17 @@ dig_arch = all
 .c: .;$(trmem_dir);$(disasm_dir)/stand/c;$(dis_srcs);$(lib_misc_dir)/c;$(watcom_dir)/c
 
 inc_dirs = -I. $(dis_includes) -I"$(disasm_dir)/stand/h" -I"$(disasm_dir)/h" &
-    $(cli_orl_inc_dirs) -I"$(lib_misc_dir)/h" -I"$(comp_cfg_dir)/h"
+    $(cli_orl_inc_dirs) -I"$(lib_misc_dir)/h" -I"$(comp_cfg_dir)/h" -I"$(trmem_dir)"
 
 extra_cpp_flags = -DINSIDE_WDIS $(dig_arch_cpp_flags)
 
-extra_cpp_flags_f_memfuncs = $(trmem_cpp_flags)
-
-extra_c_flags_f_memfuncs = $(trmem_cover_cflags)
+!ifeq trmem 1
+! ifdef __WATCOM_TOOLS__
+!  if $(__WATCOM_TOOLS__) < 1300
+extra_c_flags_f_mem = -of+
+!  endif
+! endif
+!endif
 
 #
 # lflags
@@ -65,7 +68,7 @@ exetarg_objs = &
     hashtabl.obj &
     labproc.obj &
     main.obj &
-    memfuncs.obj &
+    mem.obj &
     msg.obj &
     pass1.obj &
     pass2.obj &
@@ -75,8 +78,7 @@ exetarg_objs = &
     srcmix.obj &
     refproc.obj &
     $(dis_objs) &
-    demangle.obj &
-    $(trmem_objs)
+    demangle.obj $(trmem_objs)
 exetarg_libs          = $(cli_orl_libs)
 exetarg_res           = $(proj_name).res
 !include exetarg.mif

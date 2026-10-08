@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2017-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2017-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -109,11 +109,11 @@ static tix_status init_tix_scanner( const char *termname, FILE **in_file )
     rc = TIX_OK;
     if( *termname != '\0' ) {
         len = strlen( termname ) + 5;
-        tix_name = uimalloc( len );
+        tix_name = MemAllocSafe( len );
         strcpy( tix_name, termname );
         strcat( tix_name, ".tix" );
         fp = ti_fopen( tix_name );
-        uifree( tix_name );
+        MemFree( tix_name );
         if( fp == NULL ) {
             if( strstr( termname, "qnx" ) != 0 ) {
                 fp = ti_fopen( "qnx.tix" );
@@ -170,7 +170,7 @@ tix_status ti_read_tix( const char *termname )
 
     memset( _ti_alt_map, 0, sizeof( _ti_alt_map ) );
 
-    for( i = 0; i < sizeof( ti_char_map ) / sizeof( ti_char_map[0] ); i++ ) {
+    for( i = 0; i < _ARRAY_SIZE( ti_char_map ); i++ ) {
         ti_char_map[i][0] = i;
         ti_char_map[i][1] = 0;
     }

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2017-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2017-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -32,6 +32,7 @@
 
 #include "variety.h"
 #include "widechar.h"
+#include "seterrno.h"
 #include <malloc.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -48,12 +49,12 @@
     #define INCL_DOSMODULEMGR
     #define INCL_ORDINALS
     #include <wos2.h>
-    #include "_defwin.h"
   #endif
 #endif
-#include "rterrno.h"
+#include "defwin.h"
 #include "rterrmsg.h"
 #include "thread.h"
+
 
 #define STR_SIZE        256
 
@@ -64,7 +65,7 @@
  * If printed on console, the text will be printed in format
  *     <hdr>": "<msg>
  */
-void __F_NAME(__rterr_msg,__wrterr_msg)( const CHAR_TYPE *hdr, const CHAR_TYPE *msg )
+void _WCNEAR __F_NAME(__rterr_msg,__wrterr_msg)( const CHAR_TYPE *hdr, const CHAR_TYPE *msg )
 {
 #if defined( __WINDOWS__ )
     #ifdef __WIDECHAR__
@@ -84,7 +85,8 @@ void __F_NAME(__rterr_msg,__wrterr_msg)( const CHAR_TYPE *hdr, const CHAR_TYPE *
     rc = __F_NAME(fputs,fputws)( hdr, stderr );
     rc = __F_NAME(fputs,fputws)( STRING( ": " ), stderr );
     rc = __F_NAME(fputs,fputws)( msg, stderr );
-    if( (rc == EOF) && (_RWD_errno == EBADF) ) {
+    if( (rc == EOF)
+      && (lib_get_errno() == EBADF) ) {
         MessageBox( NULL, msg, hdr, MB_OK | MB_TASKMODAL );
     }
 #elif defined( __OS2_32BIT__ )

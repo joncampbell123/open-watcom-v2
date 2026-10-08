@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2019 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,12 +34,10 @@
 #ifndef WRMEMI_INCLUDED
 #define WRMEMI_INCLUDED
 
-#include "rcrtns.h"
-
 /****************************************************************************/
 /* function prototypes                                                      */
 /****************************************************************************/
-extern void     WRMemOpen( void );
+extern void     WRMemOpen( bool trace, wr_nomem_cb *nomemcb );
 extern void     WRMemClose( void );
 
 #endif

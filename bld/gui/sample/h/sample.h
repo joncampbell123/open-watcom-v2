@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -33,6 +33,7 @@
 #include "sample.rh"
 #include "gui.h"
 #include "guikey.h"
+#include "memfuncs.h"
 
 #define keys                    1
 #define controls_on_main        0
@@ -170,7 +171,7 @@ extern gui_control_info         ComboBoxControl;
 extern gui_control_info         ComboBoxControl2;
 extern gui_control_info         ListBoxControl;
 extern gui_control_info         ComboOkayControl;
-extern char                     *ListBoxData[];
+extern const char               *ListBoxData[];
 extern gui_create_info          Parent;
 extern gui_create_info          Child1;
 extern gui_create_info          Child2;

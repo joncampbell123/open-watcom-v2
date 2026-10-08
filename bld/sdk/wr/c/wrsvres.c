@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -38,7 +38,6 @@
 #include "wrdatai.h"
 #include "wrinfoi.h"
 #include "wresall.h"
-#include "wrmemi.h"
 #include "rcrtns.h"
 
 
@@ -89,7 +88,7 @@ static bool WRWriteResourceToWRES( WResTypeNode *tnode, WResResNode *rnode,
     for( lnode = rnode->Head; lnode != NULL; lnode = lnode->Next ) {
         lang = lnode->Info.lang;
         if( WResAddResource( &tnode->Info.TypeName, &rnode->Info.ResName,
-                             lnode->Info.MemoryFlags, offset,
+                             lnode->Info.res_flags, offset,
                              lnode->Info.Length, new_dir,
                              &lang, &dup ) || dup ) {
             if( dup ) {
@@ -131,7 +130,7 @@ static ResNameOrOrdinal *WRCreateMRESResName( WResResNode *rnode, WResLangNode *
     } else {
         if( rnode->Info.ResName.IsName ) {
             len = rnode->Info.ResName.ID.Name.NumChars;
-            str = (char *)MemAlloc( len + ( 1 + UINT16STRLEN ) * 2 + 1 );
+            str = MemAlloc( len + ( 1 + UINT16STRLEN ) * 2 + 1 );
             if( str == NULL ) {
                 return( NULL );
             }
@@ -139,7 +138,7 @@ static ResNameOrOrdinal *WRCreateMRESResName( WResResNode *rnode, WResLangNode *
             sprintf( str + len, "_%u_%u",
                         lnode->Info.lang.lang, lnode->Info.lang.sublang );
         } else {
-            str = (char *)MemAlloc( UINT16STRLEN + ( 1 + UINT16STRLEN ) * 2 + 1 );
+            str = MemAlloc( UINT16STRLEN + ( 1 + UINT16STRLEN ) * 2 + 1 );
             if( str == NULL ) {
                 return( NULL );
             }
@@ -157,18 +156,20 @@ static bool WRWriteResourceToMRES( WResTypeNode *tnode, WResResNode *rnode,
                                   FILE *src_fp, FILE *dst_fp )
 {
     WResLangNode        *lnode;
-    MResResourceHeader  mheader;
+    MResResourceHeader  msheader;
     bool                ok;
+    bool                iswin32;
 
+    iswin32 = false;
     ok = true;
     for( lnode = rnode->Head; lnode != NULL && ok; lnode = lnode->Next ) {
-        mheader.Size = lnode->Info.Length;
-        mheader.MemoryFlags = lnode->Info.MemoryFlags;
-        mheader.Type = WResIDToNameOrOrdinal( &tnode->Info.TypeName );
-        mheader.Name = WRCreateMRESResName( rnode, lnode );
-        ok = (mheader.Type != NULL && mheader.Name != NULL);
+        msheader.Size = lnode->Info.Length;
+        msheader.res_flags = lnode->Info.res_flags;
+        msheader.Type = WResIDToNameOrOrdinal( &tnode->Info.TypeName );
+        msheader.Name = WRCreateMRESResName( rnode, lnode );
+        ok = (msheader.Type != NULL && msheader.Name != NULL);
         if( ok ) {
-            ok = !MResWriteResourceHeader( &mheader, dst_fp, false );
+            ok = !MResWriteResourceHeader( &msheader, iswin32, dst_fp );
         }
         if( ok ) {
             if( lnode->data != NULL ) {
@@ -177,11 +178,11 @@ static bool WRWriteResourceToMRES( WResTypeNode *tnode, WResResNode *rnode,
                 ok = WRCopyResFromFileToFile( src_fp, lnode->Info.Offset, lnode->Info.Length, dst_fp );
             }
         }
-        if( mheader.Type != NULL ) {
-            MemFree( mheader.Type );
+        if( msheader.Type != NULL ) {
+            MemFree( msheader.Type );
         }
-        if( mheader.Name != NULL ) {
-            MemFree( mheader.Name );
+        if( msheader.Name != NULL ) {
+            MemFree( msheader.Name );
         }
         if( lnode == rnode->Tail ) {
             break;

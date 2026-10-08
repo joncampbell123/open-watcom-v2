@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,8 +34,8 @@
  * specific directories.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstdlib>
 #include <sys/stat.h>
 #include <io.h>
 #include <direct.h>
@@ -46,7 +46,9 @@
 #include "wstrlist.hpp"
 #include "wfilenam.hpp"
 #include "wwindow.hpp"
-#include "wclbproc.h"
+#ifdef __WINDOWS__
+    #include "wclbproc.h"
+#endif
 #include "pathgrp2.h"
 
 #include "clibext.h"
@@ -100,16 +102,16 @@ static void checkRemoveButton( HWND hwnd )
 
 static void getFullFname( HWND hwnd, const char *fname, WString *fullname )
 {
-    size_t      len;
+    std::size_t len;
     pgroup2     pg;
 
     /* unused parameters */ (void)hwnd;
 
-    _splitpath2( fname, pg.buffer, &pg.drive, NULL, NULL, NULL );
+    ::_splitpath2( fname, pg.buffer, &pg.drive, NULL, NULL, NULL );
     if( pg.drive[0] == '\0' ) {
         getcwd( pg.buffer, sizeof( pg.buffer ) );
         *fullname = pg.buffer;
-        len = strlen( pg.buffer );
+        len = std::strlen( pg.buffer );
         if( pg.buffer[len - 1] != '\\' ) {
             fullname->concat( "\\" );
         }
@@ -126,7 +128,7 @@ static void formRelDir( const char *filedir, const char *tgtdir,WString *dir )
     file_bs = filedir;
     // get rid of identical prefix directories
     for( ;; ) {
-        if( tolower( *filedir ) != tolower( *tgtdir ) ) {
+        if( std::tolower( *filedir ) != std::tolower( *tgtdir ) ) {
             filedir = file_bs;
             tgtdir = tgt_bs;
             break;
@@ -169,8 +171,8 @@ static void getRelFname( HWND hwnd, const char *fname, WString *relname )
     info = (GetFilesInfo *)GET_DLGDATA( hwnd );
     getFullFname( hwnd, fname, &fullpath );
     filename = fullpath.gets();
-    _splitpath2( info->tgt_file, pg.buffer, &pg.drive, &pg.dir, NULL, NULL );
-    if( stricmp( pg.drive, filename.drive() ) == 0 ) {
+    ::_splitpath2( info->tgt_file, pg.buffer, &pg.drive, &pg.dir, NULL, NULL );
+    if( ::stricmp( pg.drive, filename.drive() ) == 0 ) {
         formRelDir( filename.dir(), pg.dir, relname );
         relname->concat( filename.fName() );
         relname->concat( filename.ext() );
@@ -206,7 +208,7 @@ static void addFileToList( HWND hwnd, char *fname )
     WFileName   fullname;
     bool        isLong = false;
 
-    size_t len = strlen( fname ) - 1;
+    std::size_t len = std::strlen( fname ) - 1;
     if( fname[0] == '"' && fname[len] == '"' ) {
         fname++;
         fname[len - 1] = '\0';
@@ -248,10 +250,10 @@ static void addCurrentFile( HWND hwnd  )
     if( len > 0 ) {
         fname = new char [len + 1];
         GetWindowText( ctl, fname, len + 1 );
-        if( fname[strlen( fname ) - 1] != '\\' ) {
+        if( fname[std::strlen( fname ) - 1] != '\\' ) {
             stat( fname, &buf );
             if( !S_ISDIR( buf.st_mode ) ) {
-                if( strpbrk( fname, "?*" ) == NULL ) {
+                if( std::strpbrk( fname, "?*" ) == NULL ) {
                     addFileToList( hwnd, fname );
                     SetWindowText( ctl, "" );
                 }
@@ -267,12 +269,12 @@ static void addCurrentFile95( HWND hwnd )
     char        fname[MAX_PATH];
     struct stat buf;
     SendMessage( GetParent( hwnd ), CDM_GETSPEC, MAX_PATH, (LPARAM)fname );
-    if( fname[strlen( fname ) - 1] == '\\' )
+    if( fname[std::strlen( fname ) - 1] == '\\' )
         return;
     stat( fname, &buf );
     if( S_ISDIR( buf.st_mode ) )
         return;
-    if( strpbrk( fname, "?*" ) != NULL )
+    if( std::strpbrk( fname, "?*" ) != NULL )
         return;
     addFileToList( hwnd, fname );
 }
@@ -328,7 +330,7 @@ static void addAllFiles95( HWND hwnd )
         ext++;
     }
     SendMessage( GetParent( hwnd ), CDM_GETFOLDERPATH, _MAX_PATH, (LPARAM)folder );
-    _makepath( path, NULL, folder, ext, NULL );
+    ::_makepath( path, NULL, folder, ext, NULL );
     osffh = FindFirstFile( path, &wfd );
     if( osffh != INVALID_HANDLE_VALUE ) {
         found = true;
@@ -571,10 +573,10 @@ static BOOL fileSelectDlg( HINSTANCE hinst, HWND parent, GetFilesInfo *info,
     pgroup2         pg;
     char            newpath[_MAX_PATH];
 
-    _splitpath2( info->tgt_file, pg.buffer, &pg.drive, &pg.dir, NULL, NULL );
-    _makepath( newpath, pg.drive, pg.dir, NULL, NULL );
+    ::_splitpath2( info->tgt_file, pg.buffer, &pg.drive, &pg.dir, NULL, NULL );
+    ::_makepath( newpath, pg.drive, pg.dir, NULL, NULL );
     fname[0] = 0;
-    memset( &of, 0, sizeof( OPENFILENAME ) );
+    std::memset( &of, 0, sizeof( OPENFILENAME ) );
     of.lStructSize = sizeof( OPENFILENAME );
     of.hwndOwner = parent;
     of.hInstance = hinst;
@@ -600,7 +602,11 @@ static BOOL fileSelectDlg( HINSTANCE hinst, HWND parent, GetFilesInfo *info,
 #if !defined( _WIN64 )
         of.lpTemplateName = "ADD_SRC_DLG";
         of.Flags = OFN_HIDEREADONLY | OFN_ENABLETEMPLATE | OFN_ENABLEHOOK;
+  #ifdef __WINDOWS__
         of.lpfnHook = MakeProcInstance_OFNHOOK( AddSrcDlgProc, hinst );
+  #else
+        of.lpfnHook = AddSrcDlgProc;
+  #endif
 #endif
 #if defined( __NT__ )
   #if !defined( _WIN64 )
@@ -608,7 +614,9 @@ static BOOL fileSelectDlg( HINSTANCE hinst, HWND parent, GetFilesInfo *info,
   #endif
 #endif
     rc = GetOpenFileName( &of );
+  #ifdef __WINDOWS__
     FreeProcInstance_OFNHOOK( of.lpfnHook );
+  #endif
     last_filter_index = of.nFilterIndex;
 #if defined( __NT__ )
   #if !defined( _WIN64 )

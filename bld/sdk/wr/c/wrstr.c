@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -57,13 +57,13 @@
 /* static variables                                                         */
 /****************************************************************************/
 
-static size_t getUniStringLength( WResIDName *id, bool is32bit )
+static size_t getUniStringLength( WResIDName *name_id, bool is32bit )
 {
     char        *str;
     size_t      len;
 
     if( is32bit ) {
-        str = WRStringFromWResIDName( id );
+        str = WRStringFromWResIDName( name_id );
         if( str != NULL ) {
             len = 0;
             WRmbcs2unicode( str, NULL, &len );
@@ -73,8 +73,8 @@ static size_t getUniStringLength( WResIDName *id, bool is32bit )
         }
     } else {
         len = 1;
-        if( id != NULL ) {
-            len += id->NumChars;
+        if( name_id != NULL ) {
+            len += name_id->NumChars;
         }
     }
 
@@ -110,20 +110,20 @@ static char *copyNULLWResIDNameToData( char *data, bool is32bit )
     return( data );
 }
 
-static char *copyWResIDNameToData( char *data, WResIDName *name, bool is32bit )
+static char *copyWResIDNameToData( char *data, WResIDName *name_id, bool is32bit )
 {
     char        *str;
     char        *new_str;
     size_t      len;
 
-    if( name == NULL ) {
+    if( name_id == NULL ) {
         return( copyNULLWResIDNameToData( data, is32bit ) );
     }
 
     if( is32bit ) {
         new_str = NULL;
         len = 0;
-        str = WRStringFromWResIDName( name );
+        str = WRStringFromWResIDName( name_id );
         if( str != NULL ) {
             WRmbcs2unicode( str, &new_str, &len );
             MemFree( str );
@@ -143,11 +143,11 @@ static char *copyWResIDNameToData( char *data, WResIDName *name, bool is32bit )
         MemFree( new_str );
     } else {
         // write the length of the string
-        VALU8( data ) = name->NumChars;
+        VALU8( data ) = name_id->NumChars;
         INCU8( data );
 
         // write the string
-        data = WRCopyString( data, &name->Name[0], name->NumChars );
+        data = WRCopyString( data, name_id->Name, name_id->NumChars );
     }
 
     return( data );
@@ -242,7 +242,7 @@ bool WRAPI WRMakeStringBlockFromData( StringTableBlock *block, char *data, size_
             if( is32bit ) {
                 str = NULL;
                 str_len = 0;
-                uni_str = (char *)MemAlloc( tlen + 2 );
+                uni_str = MemAlloc( tlen + 2 );
                 if( uni_str != NULL ) {
                     memcpy( uni_str, text, tlen );
                     uni_str[tlen] = '\0';
@@ -261,7 +261,7 @@ bool WRAPI WRMakeStringBlockFromData( StringTableBlock *block, char *data, size_
                 return( false );
             }
 
-            block->String[i] = WResIDNameFromStr( str );
+            block->String[i] = WResStringIDNameFromStr( str );
             if( block->String[i] == NULL ) {
                 return( false );
             }

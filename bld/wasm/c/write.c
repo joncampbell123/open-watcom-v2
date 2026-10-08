@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -36,12 +36,10 @@
 #include <time.h>
 #include <sys/stat.h>
 #include "asmalloc.h"
-#include "fatal.h"
 #include "asmeval.h"
 #include "asmglob.h"
 #include "omffixup.h"
 #include "autodept.h"
-#include "dostimet.h"
 #include "mangle.h"
 #include "directiv.h"
 #include "queues.h"
@@ -69,6 +67,24 @@
 #define PRIVATE_PROC_INFO
 
 #define MAX_REC_LENGTH  0xFFFEL
+
+enum {
+    TIME_SEC_B  = 0,
+    TIME_SEC_F  = 0x001f,
+    TIME_MIN_B  = 5,
+    TIME_MIN_F  = 0x07e0,
+    TIME_HOUR_B = 11,
+    TIME_HOUR_F = 0xf800
+};
+
+enum {
+    DATE_DAY_B  = 0,
+    DATE_DAY_F  = 0x001f,
+    DATE_MON_B  = 5,
+    DATE_MON_F  = 0x01e0,
+    DATE_YEAR_B = 9,
+    DATE_YEAR_F = 0xfe00
+};
 
 extern void             CmdlParamsInit( void );
 
@@ -123,10 +139,10 @@ const FNAME *AddFlist( char const *name )
         index++;
         last = flist;
     }
-    flist = AsmAlloc( sizeof( FNAME ) );
-    flist->name = AsmAlloc( len1 );
+    flist = MemAllocSafe( sizeof( FNAME ) );
+    flist->name = MemAllocSafe( len1 );
     memcpy( flist->name, name, len1 );
-    flist->fullname = AsmAlloc( len2 );
+    flist->fullname = MemAllocSafe( len2 );
     memcpy( flist->fullname, fname, len2 );
     flist->mtime = 0;
     if( stat( fname, &statbuf ) == 0 )
@@ -147,9 +163,9 @@ static void FreeFlist( void )
 
     for( ; (curr = FNames) != NULL; ) {
         FNames = curr->next;
-        AsmFree( curr->fullname );
-        AsmFree( curr->name );
-        AsmFree( (void *)curr );
+        MemFree( curr->fullname );
+        MemFree( curr->name );
+        MemFree( (void *)curr );
     }
 }
 
@@ -204,7 +220,7 @@ void OutSelect( bool starts )
 
         if( (Parse_Pass > PASS_1) && !PhaseError ) {
             objr = ObjNewRec( CMD_COMENT );
-            objr->u.coment.attr = 0x80;
+            objr->u.coment.attr = CMT_TNP;
             objr->u.coment.class = CMT_DISASM_DIRECTIVE;
 
             curr = GetCurrAddr();
@@ -247,7 +263,7 @@ static void write_dosseg( void )
     obj_rec_handle  objr;
 
     objr = ObjNewRec( CMD_COMENT );
-    objr->u.coment.attr = 0x80;
+    objr->u.coment.attr = CMT_TNP;
     objr->u.coment.class = CMT_DOSSEG;
     ObjAttachData( objr, (uint_8 *)"", 0 );
     write_record( objr, true );
@@ -267,7 +283,7 @@ static void write_lib( void )
         if( len > 255 )
             len = 255;
         objr = ObjNewRec( CMD_COMENT );
-        objr->u.coment.attr = 0x80;
+        objr->u.coment.attr = CMT_TNP;
         objr->u.coment.class = CMT_DEFAULT_LIBRARY;
         ObjAttachData( objr, (uint_8 *)name, (uint_16)len );
         write_record( objr, true );
@@ -300,7 +316,7 @@ static void write_one_export( dir_node_handle dir )
         ObjPut8( objr, 0 );
         write_record( objr, true );
 
-        AsmFree( name );
+        MemFree( name );
     }
 }
 
@@ -502,7 +518,7 @@ static void write_external( void )
             }
             name = Mangle( &curr->sym );
             len = strlen( name );
-            AsmFree( name );
+            MemFree( name );
             if( len > 255 )
                 len = 255;
             /* + 1 for string len + 1 for type index */
@@ -542,7 +558,7 @@ static void write_external( void )
             if( len > 255 )
                 len = 255;
             ObjPutName( objr, name, (uint_8)len );
-            AsmFree( name );
+            MemFree( name );
             ObjPut8( objr, 0 );    // for the type index
             if( first->e.extinfo->comm ) {
                 /* now add the data type & communal length */
@@ -713,11 +729,32 @@ static bool write_modend( void )
     return( RC_OK );
 }
 
+static unsigned_32 timet2dosu( time_t stamp )
+/*******************************************/
+{
+    struct tm       *t;
+    unsigned short  dos_time;
+    unsigned short  dos_date;
+
+    t = gmtime( &stamp );
+
+    dos_date = (unsigned short)( ( t->tm_year - 80 ) << DATE_YEAR_B )
+             | (unsigned short)( ( t->tm_mon + 1 ) << DATE_MON_B )
+             | (unsigned short)( t->tm_mday << DATE_DAY_B );
+    dos_time = (unsigned short)( ( t->tm_hour ) << TIME_HOUR_B )
+             | (unsigned short)( t->tm_min << TIME_MIN_B )
+             | (unsigned short)( ( t->tm_sec / 2 ) << TIME_SEC_B );
+    return( dos_date * 0x10000UL + dos_time );
+}
+
 static bool write_autodep( void )
 /*******************************/
 {
     obj_rec_handle  objr;
-    char            buff[4 + 1 + 255];
+    struct {
+        unsigned_32 time;
+        char        name[256];
+    } data;
     size_t          len;
     const FNAME     *curr;
 
@@ -731,15 +768,15 @@ static bool write_autodep( void )
         objr = ObjNewRec( CMD_COMENT );
         objr->u.coment.attr = 0x80;
         objr->u.coment.class = CMT_DEPENDENCY;
-        MPUT_LE_32( buff, _timet2dos( curr->mtime ) );
-        buff[4] = (unsigned char)len;
-        memcpy( buff + 4 + 1, curr->fullname, len );
-        ObjAttachData( objr, (uint_8 *)buff, (uint_16)( 4 + 1 + len ) );
+        put32le( (uint_8 *)&data.time, timet2dosu( curr->mtime ) );
+        data.name[0] = (unsigned char)len;
+        memcpy( data.name + 1, curr->fullname, len );
+        ObjAttachData( objr, (uint_8 *)&data, (uint_16)( sizeof( data.time ) + 1 + len ) );
         write_record( objr, true );
     }
     // one NULL dependency record must be on the end
     objr = ObjNewRec( CMD_COMENT );
-    objr->u.coment.attr = 0x80;
+    objr->u.coment.attr = CMT_TNP;
     objr->u.coment.class = CMT_DEPENDENCY;
     ObjAttachData( objr, (uint_8 *)"", 0 );
     write_record( objr, true );
@@ -760,7 +797,7 @@ void AddLinnumDataRef( void )
     }
     if( line_num < 0x8000 ) {
         if( lastLineNumber != line_num ) {
-            curr = AsmAlloc( sizeof( line_num_info ) );
+            curr = MemAllocSafe( sizeof( line_num_info ) );
             curr->number = (uint_16)line_num;
             curr->offset = AsmCodeAddress;
             curr->srcfile = get_curr_srcfile();
@@ -1071,28 +1108,13 @@ static void write_alias( void )
 {
     obj_rec_handle  objr;
     char            *alias;
-    char            *subst;
-    char            new[2 * 256];
-    size_t          len1;
-    size_t          len2;
     bool            first;
 
     first = true;
     while( (alias = GetAliasData( first )) != NULL ) {
         /* output an alias record for this alias */
-        len1 = strlen( alias );
-        subst = alias + len1 + 1;
-        len2 = strlen( subst );
-        if( len1 > 255 )
-            len1 = 255;
-        if( len2 > 255 )
-            len2 = 255;
-        new[0] = (unsigned char)len1;
-        memcpy( new + 1, alias, len1 );
-        new[1 + len1] = (unsigned char)len2;
-        memcpy( new + 1 + len1 + 1, subst, len2 );
         objr = ObjNewRec( CMD_ALIAS );
-        ObjAttachData( objr, (uint_8 *)new, (uint_16)( 1 + len1 + 1 + len2 ) );
+        ObjAttachData( objr, (uint_8 *)alias, (uint_16)strlen( alias ) );
         write_record( objr, true );
         first = false;
     }
@@ -1171,17 +1193,21 @@ static void reset_seg_len( void )
     }
 }
 
-static void writepass1stuff( const char *file_name )
+static void writepass1stuff( const char *name )
 /**************************************************/
 {
     if( CurrProc != NULL ) {
         AsmError( END_OF_PROCEDURE_NOT_FOUND );
         return;
     }
+#ifdef MULTI_THEADR
     write_header( GetModuleName() );
     if( file_name != NULL ) {
-        write_header( file_name );
+        write_header( name );
     }
+#else
+    write_header( name );
+#endif
     write_autodep();
     if( Globals.dosseg )
         write_dosseg();
@@ -1241,7 +1267,7 @@ void WriteObjModule( void )
     char                *p;
     unsigned long       prev_total;
     unsigned long       curr_total;
-    const char          *src_name;
+    const char          *name;
 
     AsmCodeBuffer = codebuf;
 
@@ -1278,16 +1304,24 @@ void WriteObjModule( void )
         put_private_proc_in_public_table();
     }
 #endif
-    src_name = NULL;
+#ifdef MULTI_THEADR
+    name = NULL;
     if( Options.debug_info ) {
-        src_name = ModuleInfo.srcfile->fullname;
+        name = ModuleInfo.srcfile->fullname;
     }
+#else
+    if( Options.debug_info || Options.module_name == NULL ) {
+        name = ModuleInfo.srcfile->fullname;
+    } else {
+        name = Options.module_name;
+    }
+#endif
     for( ;; ) {
         if( !write_to_file || Options.error_count > 0 )
             break;
-        writepass1stuff( src_name );
+        writepass1stuff( name );
         ++Parse_Pass;
-        rewind( AsmFiles.file[ASM] );
+        rewind( AsmFiles.fp[ASM] );
         reset_seg_len();
         BufSize = 0;
         MacroLocalVarCounter = 0;

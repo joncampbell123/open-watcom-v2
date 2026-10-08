@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2018-2018 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2018-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,12 +35,10 @@
 #include <stddef.h>
 #include <stdio.h>
 
+/* may be implemented by application, stub functions */
 extern void     GUIMemOpen( void );
 extern void     GUIMemClose( void );
 extern void     GUIMemRedirect( FILE *fp );
 extern void     GUIMemPrtUsage( void );
-extern void     *GUIMemAlloc( size_t size );
-extern void     GUIMemFree( void * ptr );
-extern void     *GUIMemRealloc( void * ptr, size_t size );
 
 #endif

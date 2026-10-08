@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2018 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -67,7 +67,6 @@ extern void     *TRMemAlloc( size_t size );
 extern void     TRMemFree( void *ptr );
 extern void     *TRMemRealloc( void *ptr, size_t size );
 extern char     *TRMemStrdup( const char *str );
-
 
 /* the rest of these functions are only available if trmemcvr was compiled */
 /* with the options memtioned above */

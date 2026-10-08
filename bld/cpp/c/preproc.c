@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -38,11 +38,10 @@
 #include "pathlist.h"
 #include "pathgrp2.h"
 #include "ppfmttm.h"
+#include "memfuncs.h"
 
 #include "clibext.h"
 
-
-#define DOS_EOF_CHAR    0x1A
 
 #if defined( __UNIX__ )
 #define H_DIR   "../h/"
@@ -98,7 +97,7 @@ static char *str_dup( const char *str )
     char    *p;
 
     len = strlen( str ) + 1;
-    p = PP_Malloc( len );
+    p = MemAllocSafe( len );
     if( p != NULL )
         memcpy( p, str, len );
     return( p );
@@ -112,12 +111,11 @@ static FILE *PP_Open( const char *filename )
     handle = fopen( filename, "rb" );
     if( handle != NULL ) {
         prev_file = PP_File;
-        PP_File = (FILELIST *)PP_Malloc( sizeof( FILELIST ) );
+        PP_File = MemAllocSafe( sizeof( FILELIST ) );
         if( PP_File == NULL ) {
             fclose( handle );
             handle = NULL;
             PP_File = prev_file;
-            PP_OutOfMemory();
         } else {
             PP_File->prev_file = prev_file;
             PP_File->handle    = handle;
@@ -139,8 +137,8 @@ static FILELIST *PP_Close( void )
     fclose( this_file->handle );
     PP_File = this_file->prev_file;
     PPBufPtr = this_file->prev_bufptr;
-    PP_Free( this_file->filename );
-    PP_Free( this_file );
+    MemFree( this_file->filename );
+    MemFree( this_file );
     return( PP_File );
 }
 
@@ -165,12 +163,12 @@ void PPENTRY PP_IncludePathAdd( incl_type incltype, const char *path_list )
         }
         len = strlen( path_list );
         if( old_list == NULL ) {
-            p = new_list = PP_Malloc( len + 1 );
+            p = new_list = MemAllocSafe( len + 1 );
         } else {
             old_len = strlen( old_list );
-            new_list = PP_Malloc( old_len + 1 + len + 1 );
+            new_list = MemAllocSafe( old_len + 1 + len + 1 );
             strcpy( new_list, old_list );
-            PP_Free( old_list );
+            MemFree( old_list );
             p = new_list + old_len;
         }
         while( *path_list != '\0' ) {
@@ -196,13 +194,13 @@ void PPENTRY PP_IncludePathInit( incl_type incltype )
 {
     switch( incltype ) {
     case PPINCLUDE_SYS:
-        IncludePath2 = PP_Malloc( 1 );
+        IncludePath2 = MemAllocSafe( 1 );
         *IncludePath2 = '\0';
         break;
     case PPINCLUDE_USR:
     case PPINCLUDE_SRC:
     default:
-        IncludePath1 = PP_Malloc( 1 );
+        IncludePath1 = MemAllocSafe( 1 );
         *IncludePath1 = '\0';
         break;
     }
@@ -213,7 +211,7 @@ void PPENTRY PP_IncludePathFini( incl_type incltype )
     switch( incltype ) {
     case PPINCLUDE_SYS:
         if( IncludePath2 != NULL ) {
-            PP_Free( IncludePath2 );
+            MemFree( IncludePath2 );
             IncludePath2 = NULL;
         }
         break;
@@ -221,7 +219,7 @@ void PPENTRY PP_IncludePathFini( incl_type incltype )
     case PPINCLUDE_SRC:
     default:
         if( IncludePath1 != NULL ) {
-            PP_Free( IncludePath1 );
+            MemFree( IncludePath1 );
             IncludePath1 = NULL;
         }
         break;
@@ -475,10 +473,10 @@ static char *resize_macro_buf( char *buf, size_t new_size )
 {
     if( new_size > macro_buf_size ) {
         new_size = ( ( 255 + new_size ) / 256 ) * 256;
-        macro_buf = PP_Malloc( new_size );
+        macro_buf = MemAllocSafe( new_size );
         if( buf != NULL ) {
             memcpy( macro_buf, buf, macro_buf_size );
-            PP_Free( buf );
+            MemFree( buf );
         }
         macro_buf_size = new_size;
     }
@@ -488,7 +486,7 @@ static char *resize_macro_buf( char *buf, size_t new_size )
 static void free_macro_buf( void )
 {
     if( macro_buf != NULL ) {
-        PP_Free( macro_buf );
+        MemFree( macro_buf );
         macro_buf = NULL;
     }
     macro_buf_size = 0;
@@ -512,9 +510,9 @@ static size_t PP_ReadBuf( size_t line_len )
     PPBufPtr = this_file->buffer;
     if( PPLineBufSize < line_len + len ) {
         PPLineBufSize *= 2;
-        p = PP_Malloc( PPLineBufSize + 2 );
+        p = MemAllocSafe( PPLineBufSize + 2 );
         memcpy( p, PPLineBuf, line_len );
-        PP_Free( PPLineBuf );
+        MemFree( PPLineBuf );
         PPLineBuf = p;
     }
     return( len );
@@ -537,18 +535,11 @@ static size_t PP_ReadLine( bool *line_generated )
         for( ;; ) {
             for( ;; ) {
                 c = *PPBufPtr;
-                if( c == DOS_EOF_CHAR ) {               // 17-oct-94
-                    c = '\n';
-                    if( line_len != 1 )
-                        break;
-                    c = DOS_EOF_CHAR;
-                } else {
-                    ++PPBufPtr;
-                    if( c != '\0' ) {
-                        break;
-                    }
+                ++PPBufPtr;
+                if( c != '\0' ) {
+                    break;
                 }
-                if( c == DOS_EOF_CHAR || ( PP_ReadBuf( line_len ) == 0 ) ) {
+                if( PP_ReadBuf( line_len ) == 0 ) {
                     // if the last line of a file does not end with a carriage
                     // return then still return what is on that line
                     if( line_len > 1 ) {
@@ -634,7 +625,7 @@ static void open_include_file( const char *filename, const char *end, incl_type 
             PPErrorCallback( buffer );
         }
         sprintf( PPLineBuf + 1, "%cerror Unable to open '%.*s'\n", PPPreProcChar, (int)len, buffer );
-        PP_Free( buffer );
+        MemFree( buffer );
         PPNextTokenPtr = PPLineBuf + 1;
         PPErrorCount++;
     }
@@ -841,10 +832,11 @@ void PPENTRY PP_Define( const char *ptr )
         }
         p = resize_macro_buf( p, len + 1 );
         p[len++] = '\0';
-        me->replacement_list = PP_Malloc( len );
+        if( me->replacement_list != NULL ) {
+            MemFree( me->replacement_list );
+        }
+        me->replacement_list = MemAllocSafe( len );
         memcpy( me->replacement_list, p, len );
-    } else {
-        PP_OutOfMemory();
     }
 }
 
@@ -859,10 +851,8 @@ void PPENTRY PP_Define_1( const char *ptr )
     me = PP_AddMacro( macro_name, ptr - macro_name );
     if( me != NULL ) {
         me->parmcount = 0;
-        me->replacement_list = PP_Malloc( sizeof( "1" ) );
+        me->replacement_list = MemAllocSafe( sizeof( "1" ) );
         strcpy( me->replacement_list, "1" );
-    } else {
-        PP_OutOfMemory();
     }
 }
 
@@ -884,7 +874,7 @@ static void IncLevel( int value )
 {
     CPP_INFO    *cpp;
 
-    cpp = (CPP_INFO *)PP_Malloc( sizeof( CPP_INFO ) );
+    cpp = MemAllocSafe( sizeof( CPP_INFO ) );
     cpp->prev_cpp = PPStack;
     cpp->cpp_type = PP_IF;
     cpp->processing = false;
@@ -1005,7 +995,7 @@ static void PP_Endif( void )
         --NestLevel;
         cpp = PPStack;
         PPStack = cpp->prev_cpp;
-        PP_Free( cpp );
+        MemFree( cpp );
     }
     if( NestLevel < SkipLevel ) {
         SkipLevel = NestLevel;
@@ -1023,30 +1013,30 @@ static int PP_Sharp( const char *ptr )
     while( *ptr >= 'a' && *ptr <= 'z' )
         ++ptr;
     len = ptr - token;
-    if( len == 7 && memcmp( token, "include", 7 ) == 0 ) {
+    if( len == 7 && strncmp( token, "include", 7 ) == 0 ) {
         if( NestLevel == SkipLevel ) {
             PP_Include( ptr );
             return( 0 );
         }
-    } else if( len == 6 && memcmp( token, "define", 6 ) == 0 ) {
+    } else if( len == 6 && strncmp( token, "define", 6 ) == 0 ) {
         if( NestLevel == SkipLevel ) {
             PP_Define( ptr );
         }
-    } else if( len == 5 && memcmp( token, "undef", 5 ) == 0 ) {
+    } else if( len == 5 && strncmp( token, "undef", 5 ) == 0 ) {
         if( NestLevel == SkipLevel ) {
             PP_Undef( ptr );
         }
-    } else if( len == 5 && memcmp( token, "ifdef", 5 ) == 0 ) {
+    } else if( len == 5 && strncmp( token, "ifdef", 5 ) == 0 ) {
         PP_Ifdef( ptr );
-    } else if( len == 6 && memcmp( token, "ifndef", 6 ) == 0 ) {
+    } else if( len == 6 && strncmp( token, "ifndef", 6 ) == 0 ) {
         PP_Ifndef( ptr );
-    } else if( len == 2 && memcmp( token, "if", 2 ) == 0 ) {
+    } else if( len == 2 && strncmp( token, "if", 2 ) == 0 ) {
         PP_If( ptr );
-    } else if( len == 4 && memcmp( token, "elif", 4 ) == 0 ) {
+    } else if( len == 4 && strncmp( token, "elif", 4 ) == 0 ) {
         PP_Elif( ptr );
-    } else if( len == 4 && memcmp( token, "else", 4 ) == 0 ) {
+    } else if( len == 4 && strncmp( token, "else", 4 ) == 0 ) {
         PP_Else();
-    } else if( len == 5 && memcmp( token, "endif", 5 ) == 0 ) {
+    } else if( len == 5 && strncmp( token, "endif", 5 ) == 0 ) {
         PP_Endif();
     } else {
         if( PPFlags & PPFLAG_ASM_COMMENT ) {
@@ -1350,13 +1340,13 @@ int PPENTRY PP_Char( void )
     if( *PPTokenPtr == '\0' ) {
         for( ; (mtok = PPTokenList) != NULL; ) {
             PPTokenList = mtok->next;
-            PP_Free( mtok );
+            MemFree( mtok );
             mtok = PPTokenList;
             if( mtok == NULL )
                 break;
             if( !IS_END_OF_MACRO( mtok ) ) {
                 PPTokenPtr = mtok->data;
-                return( (unsigned char)*PPTokenPtr++ );
+                return( *(unsigned char *)PPTokenPtr++ );
             }
             DeleteNestedMacro();
         }
@@ -1390,7 +1380,7 @@ int PPENTRY PP_Char( void )
             }
         }
     }
-    return( (unsigned char)*PPTokenPtr++ );
+    return( *(unsigned char *)PPTokenPtr++ );
 }
 
 void PPENTRY PP_Init( char c, unsigned char spec_macros )
@@ -1405,7 +1395,7 @@ void PPENTRY PP_Init( char c, unsigned char spec_macros )
     PPTokenList = NULL;
     PPCurToken = NULL;
     PPLineBufSize = PPBUFSIZE;
-    PPLineBuf = PP_Malloc( PPLineBufSize + 2 );
+    PPLineBuf = MemAllocSafe( PPLineBufSize + 2 );
     PPLineBuf[0] = '\0';
     PPLineBuf[1] = '\0';
     PPPreProcChar = c;
@@ -1421,7 +1411,7 @@ int PPENTRY PP_Fini( void )
     PP_IncludePathFini( PPINCLUDE_SYS );
     PP_IncludePathFini( PPINCLUDE_USR );
     PP_MacrosFini();
-    PP_Free( PPLineBuf );
+    MemFree( PPLineBuf );
     PPLineBuf = NULL;
     return( PPErrorCount > 0 );
 }

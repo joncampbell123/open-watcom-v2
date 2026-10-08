@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -38,266 +38,184 @@
 #include "wresrtns.h"
 
 
-static bool readLangInfoList( FILE *fp, WResResNode *res, void *fileinfo )
+static bool readLangInfoLang( WResLangType *lang, FILE *fp )
+{
+    bool        error;
+
+    error = false;
+    lang->lang = ResReadUint16( &error, fp );
+    if( error )
+        return( true );
+    lang->sublang = ResReadUint8( &error, fp );
+    return( error );
+}
+
+static bool readLangInfo( WResLangInfo *linfo, FILE *fp )
+{
+    bool        error;
+
+    error = false;
+    linfo->res_flags = ResReadUint16( &error, fp );
+    if( error )
+        return( true );
+    linfo->Offset = ResReadUint32( &error, fp );
+    if( error )
+        return( true );
+    linfo->Length = ResReadUint32( &error, fp );
+    return( error );
+}
+
+static bool readLangInfoList( FILE *fp, WResResNode *resnode, void *fileinfo )
 {
     unsigned            i;
     WResLangNode        *langnode;
-    size_t              numread;
 
-    for( i = 0; i < res->Info.NumResources; i++ ) {
+    for( i = 0; i < resnode->Info.NumResources; i++ ) {
         langnode = WRESALLOC( sizeof( WResLangNode ) );
         if( langnode == NULL )
             return( WRES_ERROR( WRS_MALLOC_FAILED ) );
-        if( (numread = WRESREAD( fp, &(langnode->Info), sizeof( WResLangInfo ) )) != sizeof( WResLangInfo ) ) {
-            WRESFREE( langnode );
-            return( WRES_ERROR( WRESIOERR( fp, numread ) ? WRS_READ_FAILED : WRS_READ_INCOMPLETE ) );
-        }
+        if( readLangInfoLang( &(langnode->Info.lang), fp ) )
+            return( true );
+        if( readLangInfo( &(langnode->Info), fp ) )
+            return( true );
         langnode->data = NULL;
         langnode->fileInfo = fileinfo;
-        ResAddLLItemAtEnd( (void **)&(res->Head), (void **)&(res->Tail), langnode );
+        ResAddLLItemAtEnd( (void **)&(resnode->Head), (void **)&(resnode->Tail), langnode );
     }
     return( false );
 }
 
-static bool readResList( FILE *fp, WResTypeNode *currtype, uint_16 ver, void *fileinfo )
+static bool readResList( FILE *fp, WResTypeNode *typenode, uint_16 ver, void *fileinfo )
 {
-    WResResNode     *newnode = NULL;
-    WResResInfo     tmpresinfo;
-    WResResInfo1    tmpresinfo1;
+    WResResNode     *resnode;
     WResLangNode    *langnode;
     bool            error;
     int             resnum;
-    int             extrabytes;
+    WResLangInfo    v1_linfo;
+    uint_16         numres;
 
-    extrabytes = 0;
-    error = false;
+    memset( &v1_linfo, 0, sizeof( v1_linfo ) );
     /* loop through the list of resources of this type */
-    for( resnum = 0; resnum < currtype->Info.NumResources && !error; resnum++ ) {
-
+    for( resnum = 0; resnum < typenode->Info.NumResources; resnum++ ) {
         /* read a resource record from disk */
         if( ver < 2 ) {
-            error = WResReadFixedResRecord1( &tmpresinfo1, fp );
-            tmpresinfo.NumResources = 1;
-            tmpresinfo.ResName.IsName = tmpresinfo1.ResName.IsName;
-            if( tmpresinfo.ResName.IsName ) {
-                tmpresinfo.ResName.ID.Name.Name[0] = tmpresinfo1.ResName.ID.Name.Name[0];
-                tmpresinfo.ResName.ID.Name.NumChars = tmpresinfo1.ResName.ID.Name.NumChars;
-            } else {
-                tmpresinfo.ResName.ID.Num = tmpresinfo1.ResName.ID.Num;
+            numres = 1;
+            if( readLangInfo( &v1_linfo, fp ) ) {
+                return( true );
             }
-        } else if( ver == 2 ) {
-            error = WResReadFixedResRecord2( &tmpresinfo, fp );
         } else {
-            error = WResReadFixedResRecord( &tmpresinfo, fp );
-        }
-
-        if( !error ) {
-            /* allocate a new node */
-            extrabytes = WResIDExtraBytes( &tmpresinfo.ResName );
-            newnode = WRESALLOC( sizeof( WResResNode ) + extrabytes );
-            if( newnode == NULL ) {
-                error = WRES_ERROR( WRS_MALLOC_FAILED );
+            error = false;
+            numres = ResReadUint16( &error, fp );
+            if( error ) {
+                return( true );
             }
         }
-        if( !error ) {
-            newnode->Head = NULL;
-            newnode->Tail = NULL;
-            /* copy the new resource info into the new node */
-            memcpy( &(newnode->Info), &tmpresinfo, sizeof( WResResInfo ) );
-
-            /* read the extra bytes (if any) */
-            if( extrabytes > 0 ) {
-                error = WResReadExtraWResID( &(newnode->Info.ResName), fp );
-            }
-
-            if( ver < 2 ) {
-                langnode = WRESALLOC( sizeof( WResLangNode ) );
-                if( langnode == NULL )
-                    error = WRES_ERROR( WRS_MALLOC_FAILED );
-                if( !error ) {
-                    langnode->data = NULL;
-                    langnode->fileInfo = fileinfo;
-                    langnode->Info.MemoryFlags = tmpresinfo1.MemoryFlags;
-                    langnode->Info.Offset = tmpresinfo1.Offset;
-                    langnode->Info.Length = tmpresinfo1.Length;
-                    langnode->Info.lang.lang = DEF_LANG;
-                    langnode->Info.lang.sublang = DEF_SUBLANG;
-                    ResAddLLItemAtEnd( (void **)&(newnode->Head), (void **)&(newnode->Tail), langnode );
-                }
-            } else if( ver == 2 ) {
-                error = readLangInfoList( fp, newnode, fileinfo );
-            } else {
-                error = readLangInfoList( fp, newnode, fileinfo );
+        resnode = ResReadWResID( fp, offsetof( WResResNode, Info.ResName ), ver );
+        if( resnode == NULL )
+            return( true );
+        resnode->Info.NumResources = numres;
+        resnode->Head = NULL;
+        resnode->Tail = NULL;
+        if( ver < 2 ) {
+            langnode = WRESALLOC( sizeof( WResLangNode ) );
+            if( langnode == NULL )
+                return( WRES_ERROR( WRS_MALLOC_FAILED ) );
+            langnode->data = NULL;
+            langnode->fileInfo = fileinfo;
+            langnode->Info.res_flags = v1_linfo.res_flags;
+            langnode->Info.Offset = v1_linfo.Offset;
+            langnode->Info.Length = v1_linfo.Length;
+            langnode->Info.lang.lang = DEF_LANG;
+            langnode->Info.lang.sublang = DEF_SUBLANG;
+            ResAddLLItemAtEnd( (void **)&(resnode->Head), (void **)&(resnode->Tail), langnode );
+        } else {
+            if( readLangInfoList( fp, resnode, fileinfo ) ) {
+                return( true );
             }
         }
-        if( !error ) {
-            /* add the resource node to the linked list */
-            ResAddLLItemAtEnd( (void **)&(currtype->Head), (void **)&(currtype->Tail), newnode );
-        }
+        /* add the resource node to the linked list */
+        ResAddLLItemAtEnd( (void **)&(typenode->Head), (void **)&(typenode->Tail), resnode );
     }
-
-    return( error );
+    return( false );
 
 } /* readResList */
 
-static bool readTypeList( FILE *fp, WResDirHead *currdir,uint_16 ver, void *fileinfo )
+static bool readTypeList( FILE *fp, WResDir dir, uint_16 ver, void *fileinfo )
 {
-    WResTypeNode    *newnode;
-    WResTypeInfo    newtype;
+    WResTypeNode    *typenode;
     bool            error;
     int             typenum;
-    int             extrabytes;
+    uint_16         numres;
 
-    newnode = NULL;
-    extrabytes = 0;
-    error = false;
     /* loop through the list of types */
-    for( typenum = 0; typenum < currdir->NumTypes && !error; typenum++ ) {
+    for( typenum = 0; typenum < dir->NumTypes; typenum++ ) {
         /* read a type record from disk */
-        if( ver < 3 ) {
-            error = WResReadFixedTypeRecord1or2( &newtype, fp );
-        } else {
-            error = WResReadFixedTypeRecord( &newtype, fp );
-        }
-        if( !error ) {
-            /* allocate a new node */
-            extrabytes = WResIDExtraBytes( &(newtype.TypeName) );
-            newnode = WRESALLOC( sizeof( WResTypeNode ) + extrabytes );
-            if( newnode == NULL ) {
-                error = WRES_ERROR( WRS_MALLOC_FAILED );
-            }
-        }
-        if( !error ) {
-            /* initialize the linked list of resources */
-            newnode->Head = NULL;
-            newnode->Tail = NULL;
-            /* copy the new type info into the new node */
-            memcpy( &(newnode->Info), &newtype, sizeof( WResTypeInfo ) );
-
-            /* read the extra bytes (if any) */
-            if( extrabytes > 0 ) {
-                error = WResReadExtraWResID( &(newnode->Info.TypeName), fp );
-            }
-        }
-        if( !error ) {
-            /* add the type node to the linked list */
-            ResAddLLItemAtEnd( (void **)&(currdir->Head), (void **)&(currdir->Tail), newnode );
-            /* read in the list of resources of this type */
-            error = readResList( fp, newnode, ver, fileinfo );
+        error = false;
+        numres = ResReadUint16( &error, fp );
+        if( error )
+            return( true );
+        typenode = ResReadWResID( fp, offsetof( WResTypeNode, Info.TypeName ), ver );
+        if( typenode == NULL )
+            return( true );
+        /* initialize the linked list of resources */
+        typenode->Info.NumResources = numres;
+        typenode->Head = NULL;
+        typenode->Tail = NULL;
+        /* add the type node to the linked list */
+        ResAddLLItemAtEnd( (void **)&(dir->Head), (void **)&(dir->Tail), typenode );
+        /* read in the list of resources of this type */
+        if( readResList( fp, typenode, ver, fileinfo ) ) {
+            return( true );
         }
     }
-
-    return( error );
+    return( false );
 
 } /* readTypeList */
 
-static bool readWResDir( FILE *fp, WResDir currdir, void *fileinfo )
-{
-    WResHeader      head;
-    WResExtHeader   ext_head;
-    bool            error;
-
-    WResSetTargetOS( &ext_head, WRES_OS_WIN16 );
-    /* read the header and check that it is valid */
-    error = WResReadHeaderRecord( &head, fp );
-    if( !error ) {
-        if( head.Magic[0] != WRESMAGIC0 || head.Magic[1] != WRESMAGIC1 ) {
-            error = WRES_ERROR( WRS_BAD_SIG );
-        }
-    }
-    if( !error ) {
-        if( head.WResVer > WRESVERSION ) {
-            error = WRES_ERROR( WRS_BAD_VERSION );
-        }
-    }
-    if( !error ) {
-        if( head.WResVer >= 1 ) {
-            /*
-             * seek to the extended header and read it
-             */
-            if( WRESSEEK( fp, sizeof( head ), SEEK_CUR ) ) {
-                error = WRES_ERROR( WRS_SEEK_FAILED );
-            } else {
-                error = WResReadExtHeader( &ext_head, fp );
-            }
-        }
-    }
-
-    /* set up the initial info for the directory and seek to it's start */
-    if( !error ) {
-        currdir->NumResources = head.NumResources;
-        currdir->NumTypes = head.NumTypes;
-        WResSetTargetOS( currdir, WResGetTargetOS( &ext_head ) );
-        if( WRESSEEK( fp, head.DirOffset, SEEK_SET ) ) {
-            error = WRES_ERROR( WRS_SEEK_FAILED );
-        }
-    }
-    /* read in the list of types (and the resources) */
-    if( !error ) {
-        error = readTypeList( fp, currdir, head.WResVer, fileinfo );
-    }
-
-    return( error );
-
-} /* readWResDir */
-
-static bool readMResDir( FILE *fp, WResDir currdir, bool *dup_discarded,
+static bool readMResDir( FILE *fp, WResDir dir, bool *dup_discarded,
                         bool iswin32, void *fileinfo )
 /**********************************************************************/
 {
-    MResResourceHeader      *head = NULL;
-    M32ResResourceHeader    *head32 = NULL;
-    WResDirWindow           dup;
+    MResResourceHeader      *msheader;
+    WResDirWindow           wind_dup;
     bool                    error;
-    WResID                  *name;
-    WResID                  *type;
+    WResID                  *res_id;
+    WResID                  *type_id;
 
-    error = false;
+    if( WRESSEEK( fp, 0, SEEK_SET ) )
+        return( WRES_ERROR( WRS_SEEK_FAILED ) );
     if( iswin32 ) {
-        /* Read NULL header */
-        head32 = M32ResReadResourceHeader( fp );
-        if( head32 != NULL ) {
-            MResFreeResourceHeader( head32->head16 );
-            WRESFREE( head32 );
-        } else {
-            error = true;
-        }
-        if( !error ) {
-            head32 = M32ResReadResourceHeader( fp );
-            if( head32 != NULL ) {
-                head = head32->head16;
-            } else {
-                error = true;
-            }
-        }
-    } else {
-        head = MResReadResourceHeader( fp );
-        if( head == NULL ) error = true;
+        /* Read initial NULL header */
+        msheader = MResReadResourceHeader( fp, iswin32 );
+        if( msheader == NULL )
+            return( true );
+        MResFreeResourceHeader( msheader );
     }
     if( dup_discarded != NULL  ) {
         *dup_discarded = false;
     }
     if( iswin32 ) {
-        WResSetTargetOS( currdir, WRES_OS_WIN32 );
+        dir->TargetOS = WRES_OS_WIN32;
     } else {
-        WResSetTargetOS( currdir, WRES_OS_WIN16 );
+        dir->TargetOS = WRES_OS_WIN16;
     }
-    /* assume that a NULL head is the EOF which is the only way of detecting */
+    /* assume that a NULL msheader is the EOF which is the only way of detecting */
     /* the end of a MS .RES file */
-    while( head != NULL && !( iswin32 && head32 == NULL ) && !error ) {
-        name = WResIDFromNameOrOrdinal( head->Name );
-        type = WResIDFromNameOrOrdinal( head->Type );
-        error = (name == NULL || type == NULL);
+    error = false;
+    while( !error && (msheader = MResReadResourceHeader( fp, iswin32 )) != NULL ) {
+        res_id = WResIDFromNameOrOrdinal( msheader->Name );
+        type_id = WResIDFromNameOrOrdinal( msheader->Type );
+        error = (res_id == NULL || type_id == NULL);
 
-        /* MResReadResourceHeader leaves the file at the start of the resource*/
+        /* MResReadResourceHeader leaves the file at the start of the resource */
         if( !error ) {
-            if( !type->IsName && type->ID.Num == (uint_16)RESOURCE2INT( RT_NAMETABLE ) ) {
-                error = false;
-            } else {
-                error = WResAddResource2( type, name, head->MemoryFlags,
-                            WRESTELL( fp ), head->Size, currdir, NULL,
-                            &dup, fileinfo );
-                if( error && !WResIsEmptyWindow( dup ) ) {
+            if( type_id->IsName
+              || type_id->ID.Num != (uint_16)RESOURCE2INT( RT_NAMETABLE ) ) {
+                error = WResAddResource2( type_id, res_id, msheader->res_flags,
+                            WRESTELL( fp ), msheader->Size, dir, NULL,
+                            &wind_dup, fileinfo );
+                if( error
+                  && !WResIsEmptyWindow( wind_dup ) ) {
                     error = false;
                     if( dup_discarded != NULL  ) {
                         *dup_discarded = true;
@@ -305,53 +223,81 @@ static bool readMResDir( FILE *fp, WResDir currdir, bool *dup_discarded,
                 }
             }
         }
-
         if( !error ) {
-            if( WRESSEEK( fp, head->Size, SEEK_CUR ) ) {
+            if( WRESSEEK( fp, msheader->Size, SEEK_CUR ) ) {
                 error = WRES_ERROR( WRS_SEEK_FAILED );
             }
         }
 
-        if( name != NULL ) {
-            WRESFREE( name );
-            name = NULL;
+        if( res_id != NULL ) {
+            WRESFREE( res_id );
         }
-        if( type != NULL ) {
-            WRESFREE( type );
-            type = NULL;
+        if( type_id != NULL ) {
+            WRESFREE( type_id );
         }
-        MResFreeResourceHeader( head );
-        if( iswin32 ) {
-            WRESFREE( head32 );
-        }
-
-        if( !error ) {
-            if( iswin32 ) {
-                head32 = M32ResReadResourceHeader( fp );
-                if( head32 != NULL ) {
-                    head = head32->head16;
-                }
-            } else {
-                head = MResReadResourceHeader( fp );
-            }
-        }
+        MResFreeResourceHeader( msheader );
     }
 
     return( error );
 
 } /* readMResDir */
 
-bool WResReadDir( FILE *fp, WResDir currdir, bool *dup_discarded )
+static bool readResDir( FILE *fp, WResDir dir, void *fileinfo, bool *dup_discarded )
 {
-    return( WResReadDir2( fp, currdir, dup_discarded, NULL ) );
+    WResHeader      header;
+    WResExtHeader   extheader;
+    bool            iswin32;
+
+    /*
+     * OW header is shorter then Microsoft headers
+     * we can read it and use it for check file type
+     */
+    if( WResReadHeader( &header, fp ) )
+        return( true );
+    if( header.Magic[0] == WRESMAGIC0
+      && header.Magic[1] == WRESMAGIC1 ) {
+        /* RT_WATCOM */
+        if( header.WResVer > WRESVERSION ) {
+            return( WRES_ERROR( WRS_BAD_VERSION ) );
+        }
+        extheader.TargetOS = WRES_OS_WIN16;
+        if( header.WResVer >= 1 ) {
+            /*
+             * read the extended header
+             */
+            if( WResReadExtHeader( &extheader, fp ) ) {
+                return( true );
+            }
+        }
+        /* set up the initial info for the directory and seek to it's start */
+        dir->NumResources = header.NumResources;
+        dir->NumTypes = header.NumTypes;
+        dir->TargetOS = extheader.TargetOS;
+        if( WRESSEEK( fp, header.DirOffset, SEEK_SET ) ) {
+            return( WRES_ERROR( WRS_SEEK_FAILED ) );
+        }
+        /* read in the list of types (and the resources) */
+        return( readTypeList( fp, dir, header.WResVer, fileinfo ) );
+    } else {
+        /* RT_WIN16 or RT_WIN32 */
+        iswin32 = ( header.Magic[0] == 0 && header.Magic[1] == 0x20 );
+        return( readMResDir( fp, dir, dup_discarded, iswin32, fileinfo ) );
+    }
+
+} /* readResDir */
+
+bool WResReadDir( FILE *fp, WResDir *dir, bool *dup_discarded )
+{
+    return( WResReadDir2( fp, dir, dup_discarded, NULL ) );
 }
 
-bool WResReadDir2( FILE *fp, WResDir currdir, bool *dup_discarded, void *fileinfo )
+bool WResReadDir2( FILE *fp, WResDir *pdir, bool *dup_discarded, void *fileinfo )
 {
     bool            error;
-    ResTypeInfo     restype;
+    WResDir         dir;
 
-    /* var representing whether or not a duplicate dir entry was
+    /*
+     * var representing whether or not a duplicate dir entry was
      * discarded is set to false.
      * NOTE: duplicates are not discarded by calls to readWResDir.
      */
@@ -359,23 +305,17 @@ bool WResReadDir2( FILE *fp, WResDir currdir, bool *dup_discarded, void *fileinf
         *dup_discarded = false;
     }
 
-    /* get rid of any directory info that is already in memory */
-    if( currdir->Head != NULL ) {
-        __FreeTypeList( currdir );
-    }
-
-    /* seek to the start of the file */
-    if( WRESSEEK( fp, 0, SEEK_SET ) )
-        return( WRES_ERROR( WRS_SEEK_FAILED ) );
-
-    restype = WResFindResType( fp );
-    if( restype == RT_WATCOM ) {
-        error = readWResDir( fp, currdir, fileinfo );
-    } else if( restype == RT_WIN16 ) {
-        error = readMResDir( fp, currdir, dup_discarded, false, fileinfo );
+    dir = WResInitDir();
+    if( dir == NULL ) {
+        error = true;
     } else {
-        error = readMResDir( fp, currdir, dup_discarded, true, fileinfo );
+        error = readResDir( fp, dir, fileinfo, dup_discarded );
+        if( error ) {
+            WRESFREE( dir );
+            dir = NULL;
+        }
     }
+    *pdir = dir;
     return( error );
 
 } /* WResReadDir */

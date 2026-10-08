@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -72,37 +72,37 @@ overlay_ref GetOvlRef( void )
 }
 
 #ifdef DEVBUILD
-static void PrintAreas( OVL_AREA *ovlarea );
+static void PrintAreas( AREASECT *area );
 
 static void PrintSect( section *sect )
 /************************************/
 {
-    file_list   *list;
+    file_list   *file;
 
     OvlLevel++;
-    for( ; sect != NULL; sect = sect->next_sect ) {
+    for( ; sect != NULL; sect = sect->next ) {
         DEBUG(( DBG_OLD, "" ));
         DEBUG(( DBG_OLD, "OverLay #%d   Level %d", sect->ovlref, OvlLevel ));
         DEBUG(( DBG_OLD, "Files:" ));
         if( sect->files == NULL ) {
             DEBUG(( DBG_OLD, "\"Non-section\"" ));
         }
-        for( list = sect->files; list != NULL; list = list->next_file ) {
-            DEBUG(( DBG_OLD, "%s", list->infile->name ));
+        for( file = sect->files; file != NULL; file = file->next ) {
+            DEBUG(( DBG_OLD, "%s", file->infile->name ));
         }
         PrintAreas( sect->areas );
     }
     OvlLevel--;
 }
 
-static void PrintAreas( OVL_AREA *ovlarea )
-/*****************************************/
+static void PrintAreas( AREASECT *area )
+/**************************************/
 {
-    for( ; ovlarea != NULL; ovlarea = ovlarea->next_area ) {
+    for( ; area != NULL; area = area->next ) {
         DEBUG(( DBG_OLD, "" ));
         DEBUG(( DBG_OLD, "" ));
         DEBUG(( DBG_OLD, "Begin OverLay Area" ));
-        PrintSect( ovlarea->sections );
+        PrintSect( area->sections );
         DEBUG(( DBG_OLD, "" ));
         DEBUG(( DBG_OLD, "End OverLay Area" ));
     }
@@ -124,9 +124,9 @@ static void SetOvlClasses( void )
     list_of_names       *ovlmgr;
 
     if( OvlClasses != NULL ) {
-        _PermAlloc( ovlmgr, sizeof( list_of_names ) + OVL_MGR_CL_LEN );
+        ovlmgr = _PermAlloc( sizeof( list_of_names ) + OVL_MGR_CL_LEN );
         memcpy( ovlmgr->name, OvlMgrClass, OVL_MGR_CL_LEN+1 );
-        ovlmgr->next_name = OvlClasses;
+        ovlmgr->next = OvlClasses;
         OvlClasses = ovlmgr;
     }
 }
@@ -143,17 +143,16 @@ static void NewArea( section *sect )
  * allocate a new area including this section
  */
 {
-    ovl_area            *ovl;
-    ovl_area            **owner;
+    areasect            *area;
+    areasect            **owner;
 
-    _PermAlloc( ovl, sizeof( ovl_area ) );
-    ovl->next_area = NULL;
-    ovl->sections = sect;
+    area = _PermAlloc( sizeof( *area ) );
+    area->next = NULL;
+    area->sections = sect;
     sect->parent = CurrSect;
-    for( owner = &CurrSect->areas; *owner != NULL; ) {
-        owner = &(*owner)->next_area;
-    }
-    *owner = ovl;
+    for( owner = &CurrSect->areas; *owner != NULL; owner = &(*owner)->next )
+        /* nothing */;
+    *owner = area;
 }
 
 static void MakeNonArea( void )
@@ -170,12 +169,13 @@ void CmdOvlFini( void )
 {
     if( OvlLevel != 0 ) {
         Ignite();
-        LnkMsg( LOC+LINE+FTL+MSG_EXPECTING_END, NULL );
+        LnkMsg( FTL+LOC+LINE+MSG_EXPECTING_END, NULL );
     }
-    if( FmtData.u.dos.dynamic &&
-        ( ( Root->areas == NULL ) || ( Root->areas->next_area != NULL ) ) ) {
+    if( FmtData.u.dos.dynamic
+      && ( ( Root->areas == NULL )
+      || ( Root->areas->next != NULL ) ) ) {
         Ignite();
-        LnkMsg( LOC+LINE+FTL+MSG_INCORRECT_NUM_AREAS, NULL );
+        LnkMsg( FTL+LOC+LINE+MSG_INCORRECT_NUM_AREAS, NULL );
     }
     SetOvlClasses();
     MakeNonArea();
@@ -198,7 +198,7 @@ void MakeNewSection( void )
             sect->outfile = CurrSect->outfile;
         }
         sect->parent = CurrSect->parent;
-        CurrSect->next_sect = sect;
+        CurrSect->next = sect;
         CurrSect = sect;
         CurrFList = &sect->files;
     } else {
@@ -303,10 +303,10 @@ static bool AddClass( void )
 {
     list_of_names       *ovlclass;
 
-    _PermAlloc( ovlclass, sizeof( list_of_names ) + Token.len );
+    ovlclass = _PermAlloc( sizeof( list_of_names ) + Token.len );
     memcpy( ovlclass->name, Token.this, Token.len );
     ovlclass->name[Token.len] = '\0';
-    ovlclass->next_name = OvlClasses;
+    ovlclass->next = OvlClasses;
     OvlClasses = ovlclass;
     return( true );
 }
@@ -347,7 +347,7 @@ static bool ProcInto( void )
         CurrSect->outfile = NewOutFile( FileName( Token.this, Token.len, E_OVL, false ) );
         return( true );
     }
-    LnkMsg( LOC+LINE+WRN+MSG_DIRECTIVE_ERR, "s", "into" );
+    LnkMsg( WRN+LOC+LINE+MSG_DIRECTIVE_ERR, "s", "into" );
     return( false );
 }
 
@@ -362,7 +362,7 @@ static bool ProcSection( void )
  */
 {
     if( OvlLevel == 0 ) {
-        LnkMsg( LOC+LINE+WRN+MSG_NO_SECTION_IN_ROOT, NULL );
+        LnkMsg( WRN+LOC+LINE+MSG_NO_SECTION_IN_ROOT, NULL );
     } else {
         MakeNewSection();
         ProcOne( SectOptions, SEP_NO );      // check for INTO
@@ -377,13 +377,13 @@ static bool ProcAutoSection( void )
 /*********************************/
 {
     if( OvlLevel == 0 ) {
-        LnkMsg( LOC+LINE+WRN+MSG_NO_SECTION_IN_ROOT, NULL );
+        LnkMsg( WRN+LOC+LINE+MSG_NO_SECTION_IN_ROOT, NULL );
     } else {
         MakeNewSection();
         ProcOne( SectOptions, SEP_NO );      // check for INTO
         CmdFlags |= CF_AUTOSECTION | CF_SECTION_THERE;
-        while( DoParseDirective() ) {
-        }
+        while( DoParseDirective() )
+            /* nothing */;
         CmdFlags &= ~CF_AUTOSECTION;
     }
     return( true );
@@ -420,7 +420,8 @@ bool ProcBegin( void )
     section         *sect;
 
     LinkState |= LS_FMT_SPECIFIED;      // she must want DOS mode.
-    if( ( OvlLevel > 0 ) && FmtData.u.dos.dynamic ) {
+    if( ( OvlLevel > 0 )
+      && FmtData.u.dos.dynamic ) {
         oldsect = NULL;
         oldflist = NULL;
         CmdFlags &= ~CF_AUTOSECTION;    // merge old area with this.
@@ -437,10 +438,10 @@ bool ProcBegin( void )
         CurrFList = &sect->files;
     }
     OvlLevel++;
-    while( ProcOne( Sections, SEP_NO ) ) {
-        // NULL LOOP
-    }
-    if( ( OvlLevel == 0 ) || !FmtData.u.dos.dynamic ) {
+    while( ProcOne( Sections, SEP_NO ) )
+        /* nothing */;
+    if( ( OvlLevel == 0 )
+      || !FmtData.u.dos.dynamic ) {
         CurrFList = oldflist;
         CurrSect = oldsect;
     }

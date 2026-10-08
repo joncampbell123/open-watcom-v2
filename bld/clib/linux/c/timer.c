@@ -32,12 +32,12 @@
 
 
 #include "variety.h"
+#include "seterrno.h"
 #include <string.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stddef.h>
 #include <time.h>
-#include "seterrno.h"
 #include "linuxsys.h"
 
 
@@ -58,7 +58,7 @@ _WCRTLINK int timer_create( clockid_t __clk, struct sigevent *__sevp, timer_t *_
     timer_t id;
 
     if( __tmr == NULL ) {
-        return( __set_EINVAL() );
+        return( lib_set_EINVAL() );
     }
 
     memset( &ksev, 0, sizeof( struct ksigevent ) );

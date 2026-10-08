@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -36,7 +36,9 @@
 #include "cmacadd.h"
 
 
-#define macroSizeAlign(x)   _RoundUp( (x), sizeof( int ) )
+#define MACRO_ALIGN         sizeof( void * )
+
+#define macroSizeAlign(x)   _RoundUp( (x), MACRO_ALIGN )
 
 typedef char        *MACADDR_T;         /* contains actual pointer to block of memory */
 
@@ -186,7 +188,7 @@ bool MacroCompare( MEPTR m1, MEPTR m2 )
 {
     if( m1->macro_len == m2->macro_len
       && m1->macro_defn == m2->macro_defn
-      && m1->parm_count == m2->parm_count
+      && m1->u.parm_count == m2->u.parm_count
       && memcmp( m1->macro_name, m2->macro_name, m1->macro_len - offsetof( MEDEFN, macro_name ) ) == 0 )
         return( false );
     return( true );
@@ -216,9 +218,9 @@ void MacroSegmentAddToken(          // MacroSegment: ADD A TOKEN
     size_t  clen;
 
     clen = *mlen;
-    MacroReallocOverflow( clen + sizeof( TOKEN ), clen );
-    *(TOKEN *)( MacroOffset + clen ) = token;
-    *mlen = clen + sizeof( TOKEN );
+    MacroReallocOverflow( clen + SIZE_MTOKEN, clen );
+    SET_MTOKEN( MacroOffset + clen, token );
+    *mlen = clen + SIZE_MTOKEN;
 }
 
 
@@ -250,7 +252,7 @@ MEPTR CreateMEntry( const char *name, size_t len )
     mentry->macro_name[len] = '\0';
     mentry->macro_len = size;
     mentry->macro_defn = 0;
-    mentry->parm_count = 0;
+    mentry->u.parm_count = 0;
     mentry->src_loc.fno = 0;
     mentry->src_loc.line = 0;
     mentry->src_loc.column = 0;

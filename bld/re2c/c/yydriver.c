@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include "globals.h"
 #include "parser.h"
-#include "re.h"
+#include "scanner.h"
 
 
 static unsigned int accept;
@@ -31,7 +31,9 @@ static Scanner *in;
 #define YYPLHSTYPE      YYTABTYPE
 #endif
 
-#ifndef YYFAR
+#if defined( _M_I86 )
+#define YYFAR           __far
+#else
 #define YYFAR
 #endif
 
@@ -61,7 +63,7 @@ static void yyerror( const char *s )
     Scanner_fatal( in, s );
 }
 
-static int yylex( void )
+static YYTOKENTYPE yylex( void )
 {
     return( Scanner_scan( in ) );
 }
@@ -71,7 +73,9 @@ static YYACTTYPE find_action( YYACTTYPE yyk, YYTOKENTYPE yytoken )
     int     yyi;
 
     while( (yyi = yyk + yytoken) < 0 || yyi >= YYUSED || yychktab[yyi] != yytoken ) {
-        if( (yyi = yyk + YYPARTOKEN) < 0 || yyi >= YYUSED || yychktab[yyi] != YYPARTOKEN ) {
+        if( (yyi = yyk + YYPARTOKEN) < 0
+          || yyi >= YYUSED
+          || yychktab[yyi] != YYPARTOKEN ) {
             return( YYNOACTION );
         }
         yyk = yyacttab[yyi];
@@ -114,7 +118,8 @@ yyerrlab:
                     yyerrflag = 3;
                     while( yysp >= yys ) {
                         yyaction = find_action( *yysp, YYERRTOKEN );
-                        if( yyaction != YYNOACTION && yyaction < YYUSED ) {
+                        if( yyaction != YYNOACTION
+                          && yyaction < YYUSED ) {
                             *++yysp = yyaction;
                             ++yyvp;
                             goto yynewact;
@@ -192,10 +197,12 @@ void parse( FILE *i, FILE *o )
     while( Scanner_echo( in, o ) ) {
         yyparse();
         if( spec != NULL )
-            genCode( o, spec );
+            GenCode( o, spec );
         if( !iFlag ) {
             fprintf( o, "#line %u\n", in->cline );
             oline++;
         }
     }
+
+    Scanner_delete( in );
 }

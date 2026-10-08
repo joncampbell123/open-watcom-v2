@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -42,7 +42,9 @@
 #include "wctl3d.h"
 #include "wstrdup.h"
 #include "wgetfn.h"
-#include "wclbproc.h"
+#ifdef __WINDOWS__
+    #include "wclbproc.h"
+#endif
 #include "pathgrp2.h"
 
 #include "clibext.h"
@@ -187,7 +189,7 @@ char *WGetFileName( WGetFileStruct *gf, HWND owner, DWORD flags, WGetFileAction 
         WFileFilter = 1;
     }
 
-#if !defined( __NT__ )
+#if defined( __WINDOWS__ )
     // CTL3D no longer requires this
     flags |= OFN_ENABLEHOOK;
 #endif
@@ -210,7 +212,7 @@ char *WGetFileName( WGetFileStruct *gf, HWND owner, DWORD flags, WGetFileAction 
     wofn.lpstrInitialDir = WInitialDir;
     wofn.lpstrTitle = WFnTitle;
     wofn.Flags = flags;
-#if !defined( __NT__ )
+#ifdef __WINDOWS__
     wofn.lpfnHook = MakeProcInstance_OFNHOOK( WOpenOFNHookProc, app_inst );
 #endif
 
@@ -231,7 +233,7 @@ char *WGetFileName( WGetFileStruct *gf, HWND owner, DWORD flags, WGetFileAction 
         return( NULL );
     }
 
-#ifndef __NT__
+#ifdef __WINDOWS__
     FreeProcInstance_OFNHOOK( wofn.lpfnHook );
 #endif
 
@@ -261,10 +263,10 @@ char *WGetFileName( WGetFileStruct *gf, HWND owner, DWORD flags, WGetFileAction 
 
     UpdateWindow( owner );
 
-    return( WStrDup( WFn ) );
+    return( WStrdup( WFn ) );
 }
 
-#ifndef __NT__
+#ifdef __WINDOWS__
 WINEXPORT UINT_PTR CALLBACK WOpenOFNHookProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam )
 {
     char    *title;

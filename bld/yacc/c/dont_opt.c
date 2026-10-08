@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2023      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2023-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -36,23 +36,23 @@
 #include "yaccins.h"
 #include "alloc.h"
 
-static int hasReduceByPro( a_state *state, a_pro *unit_pro )
+
+static bool hasReduceByPro( a_state *state, a_pro *pro )
 {
     a_reduce_action *raction;
-    a_pro *pro;
 
     if( IsDead( state ) ) {
-        return( 0 );
+        return( false );
     }
     /*
      * iterate over all reductions in state
      */
-    for( raction = state->redun; (pro = raction->pro) != NULL; ++raction ) {
-        if( pro->unit && pro == unit_pro ) {
-            return( 1 );
+    for( raction = state->redun; raction->pro != NULL; ++raction ) {
+        if( raction->pro == pro && pro->unit ) {
+            return( true );
         }
     }
-    return( 0 );
+    return( false );
 }
 
 static void dontOptimizeUnitGOTOStates( a_state *ambig_state, a_pro *pro )
@@ -61,13 +61,13 @@ static void dontOptimizeUnitGOTOStates( a_state *ambig_state, a_pro *pro )
  * that results in a GOTO into an ambiguous state.
  */
 {
-    a_sym *unit_rhs;
-    a_parent *parent;
-    a_state *parent_state;
-    a_state *shift_state;
-    a_shift_action *saction;
+    a_sym           *unit_rhs;
+    a_parent        *parent;
+    a_state         *parent_state;
+    a_state         *shift_state;
+    a_shift_action  *saction;
 
-    unit_rhs = pro->items[0].p.sym;
+    unit_rhs = pro->items[0].u.sym;
     for( parent = ambig_state->parents; parent != NULL; parent = parent->next ) {
         parent_state = parent->state;
         for( saction = parent_state->trans; saction->sym != NULL; ++saction ) {
@@ -83,10 +83,10 @@ static void dontOptimizeUnitGOTOStates( a_state *ambig_state, a_pro *pro )
 
 static a_sym *findEntrySym( a_state *state )
 {
-    a_state *parent_state;
-    a_parent *parent;
-    a_state *shift_state;
-    a_shift_action *saction;
+    a_state         *parent_state;
+    a_parent        *parent;
+    a_state         *shift_state;
+    a_shift_action  *saction;
 
     parent = state->parents;
     if( parent == NULL ) {
@@ -104,13 +104,13 @@ static a_sym *findEntrySym( a_state *state )
 
 void MarkNoUnitRuleOptimizationStates( void )
 {
-    int i;
-    a_sym *entry_sym;
-    a_state *state;
-    a_pro *pro;
+    action_n        sidx;
+    a_sym           *entry_sym;
+    a_state         *state;
+    a_pro           *pro;
 
-    for( i = 0; i < nstate; ++i ) {
-        state = statetab[i];
+    for( sidx = 0; sidx < nstate; ++sidx ) {
+        state = statetab[sidx];
 //        if( IsDead( *state ) )
 //            continue;
         if( !IsAmbiguous( state ) )

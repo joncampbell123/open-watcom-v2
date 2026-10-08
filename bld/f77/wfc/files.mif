@@ -184,7 +184,6 @@ tdovl1 += &
     mainline.obj &
     wf77prag.obj &
     wf77aux.obj &
-    asmalloc.obj &
     asmmsg.obj &
     $(cli_asminline_objs)
 
@@ -215,7 +214,6 @@ comovl2 += &
     fcdbg.obj &
     fcdo.obj &
     fcflow.obj &
-    fcformat.obj &
     fcio.obj &
     fcjmptab.obj &
     fclogic.obj &

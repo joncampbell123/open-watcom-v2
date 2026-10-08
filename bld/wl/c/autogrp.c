@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -57,7 +57,7 @@ static offset GetSegGroupPackLimit( seg_leader *seg )
 {
     offset      limit;
 
-    if( seg->info & SEG_CODE ) {
+    if( seg->info & SEGINF_CODE ) {
         if( LinkFlags & LF_PACKCODE_FLAG ) {
             return( PackCodeLimit );
         }
@@ -66,7 +66,7 @@ static offset GetSegGroupPackLimit( seg_leader *seg )
             return( PackDataLimit );
         }
     }
-    if( seg->info & USE_32 ) {
+    if( seg->info & SEGINF_USE_32 ) {
         limit = 0xFFFFFFFF;
     } else if( FmtData.type & MK_WIN_NE ) { /* windows doesn't like */
         limit = 0xFFF0;                     /* large code segments */
@@ -76,8 +76,8 @@ static offset GetSegGroupPackLimit( seg_leader *seg )
     return( limit );
 }
 
-static seg_leader *GetNextSeg( section *sec, seg_leader *seg )
-/************************************************************/
+static seg_leader *GetNextSeg( section *sect, seg_leader *seg )
+/*************************************************************/
 /*
  * if seg == NULL then get first segment in section
  * if seg != NULL then get next segment after seg
@@ -94,7 +94,7 @@ static seg_leader *GetNextSeg( section *sec, seg_leader *seg )
     class_entry *class;
 
     if( seg == NULL ) {
-        for( class = sec->classlist; class != NULL; class = class->next_class ) {
+        for( class = sect->classes; class != NULL; class = class->next ) {
             if( (class->flags & CLASS_DEBUG_INFO) == 0 ) {
                 break;
             }
@@ -106,7 +106,7 @@ static seg_leader *GetNextSeg( section *sec, seg_leader *seg )
         class = seg->class;
     }
     while( (seg = RingStep( class->segs, seg )) == NULL ) {
-        for( class = class->next_class; class != NULL; class = class->next_class ) {
+        for( class = class->next; class != NULL; class = class->next ) {
             if( (class->flags & CLASS_DEBUG_INFO) == 0 ) {
                 break;
             }
@@ -118,25 +118,27 @@ static seg_leader *GetNextSeg( section *sec, seg_leader *seg )
     return( seg );
 }
 
-static bool CanPack( seg_leader *one, seg_leader *two )
-/*****************************************************/
+static bool CanPack( seg_leader *seg1, seg_leader *seg2 )
+/*******************************************************/
 {
-    if( one->info & SEG_CODE ) {
-        if( two->combine == COMBINE_INVALID ) {
+    if( seg1->info & SEGINF_CODE ) {
+        if( seg2->combine == COMBINE_INVALID ) {
             return( false );
         }
     } else {
-        if( one->align != two->align ) {
+        if( seg1->align != seg2->align ) {
             return( false );
         }
     }
-    if( (one->info & (USE_32 | SEG_CODE)) != (two->info & (USE_32 | SEG_CODE)) )
+    if( (seg1->info & (SEGINF_USE_32 | SEGINF_CODE)) != (seg2->info & (SEGINF_USE_32 | SEGINF_CODE)) )
         return( false );
-    if( one->segflags != two->segflags || (two->segflags & SEG_FIXED) )
+    if( seg1->segflags != seg2->segflags
+      || (seg2->info & SEGINF_FIXED) )
         return( false );
-    if( one->class != two->class && (two->class->flags & CLASS_FIXED) )
+    if( seg1->class != seg2->class
+      && (seg2->class->flags & CLASS_FIXED) )
         return( false );
-    if( one->group != two->group )
+    if( seg1->group != seg2->group )
         return( false );
     return( true );
 }
@@ -170,12 +172,13 @@ static void PackSegs( seg_leader *seg, unsigned num_segs )
     if( seg->group != NULL ) {
         group = seg->group;
     } else {
-        group = GetAutoGroup( seg->info & SEG_ABSOLUTE );
+        group = GetAutoGroup( seg->info & SEGINF_ABSOLUTE );
     }
     group->section = seg->class->section;
     while( num_segs != 0 ) {
-        if( seg->group == NULL || seg->group == group ) {
-            if( (seg->info & SEG_CODE) == 0 ) {
+        if( seg->group == NULL
+          || seg->group == group ) {
+            if( (seg->info & SEGINF_CODE) == 0 ) {
                 group->segflags |= SEG_DATA;
             }
             if( (seg->class->flags & CLASS_READ_ONLY) == 0 ) {
@@ -194,8 +197,8 @@ static void PackSegs( seg_leader *seg, unsigned num_segs )
     }
 }
 
-static void AutoGroupSect( section *sec )
-/***************************************/
+static void AutoGroupSect( section *sect )
+/****************************************/
 {
     seg_leader      *seg;
     seg_leader      *packstart;
@@ -210,8 +213,8 @@ static void AutoGroupSect( section *sec )
     size = 0;
     num_segs = 0;
     packstart = NULL;
-    for( seg = NULL; (seg = GetNextSeg( sec, seg )) != NULL; ) {
-        if( seg->info & SEG_ABSOLUTE ) {
+    for( seg = NULL; (seg = GetNextSeg( sect, seg )) != NULL; ) {
+        if( seg->info & SEGINF_ABSOLUTE ) {
             PackSegs( seg, 1 );
         } else {
             if( packstart == NULL ) {
@@ -221,9 +224,9 @@ static void AutoGroupSect( section *sec )
             align_size = CAlign( size, seg->align );
             new_size = align_size + seg->size;
             if( ( new_size >= limit )      // group overflow 16/32-bit
-                || ( new_size < size )     // group overflow 32-bit
-                || lastseg
-                || !CanPack( packstart, seg ) ) {
+              || ( new_size < size )     // group overflow 32-bit
+              || lastseg
+              || !CanPack( packstart, seg ) ) {
                 PackSegs( packstart, num_segs );
                 packstart = seg;
                 num_segs = 1;
@@ -238,7 +241,7 @@ static void AutoGroupSect( section *sec )
                 size = new_size;
                 ++num_segs;
             }
-            if( seg->info & LAST_SEGMENT ) {
+            if( seg->info & SEGINF_LAST_SEGMENT ) {
                 lastseg = true;
             }
         }
@@ -249,35 +252,36 @@ static void AutoGroupSect( section *sec )
 static void InitGroup( group_entry *group )
 /*****************************************/
 {
-    SET_ADDR_UNDEFINED( group->grp_addr );
+    SET_ADDR_UNDEFINED( group->addr );
     group->totalsize = 0;
     group->size = 0;
-    group->segflags = DEFAULT_GRP_FLAGS;
+    group->segflags = SEG_READ_ONLY;
+    SET_SEG_PMODE_DPL( group->segflags, 3 );
     group->u.os2flags = 0;
     group->isfree = false;
     group->isautogrp = false;
     group->isdup = false;
-    group->g.grp_relocs = NULL;
+    group->g.reloclist = NULL;
 }
 
-group_entry *AllocGroup( const char *name, group_entry ** grp_list )
-/******************************************************************/
+group_entry *AllocGroup( const char *name, group_entry **grp_list )
+/*****************************************************************/
 {
     group_entry *group;
     symbol      *sym;
 
     group = CarveAlloc( CarveGroup );
     group->leaders = NULL;
-    _PermAlloc( sym, sizeof( *sym ) ); // second class slave citizen
+    sym = _PermAlloc( sizeof( *sym ) ); // second class slave citizen
     BasicInitSym( sym );
     sym->namelen_cmp = strlen( name );
     sym->name.u.ptr = AddBufferStringTable( &PermStrings, name, sym->namelen_cmp + 1 );
     SET_SYM_TYPE( sym, SYM_GROUP );
     sym->info |= SYM_STATIC;
-    group->next_group = NULL;
+    group->next = NULL;
     InitGroup( group );
     group->sym = sym;
-    LinkList( grp_list, group );
+    AppendList( (void **)grp_list, group );
     if( stricmp( name, DataGrpName ) == 0 ) {
         DataGroup = group;
     } else if( name == AutoGrpName ) {
@@ -292,19 +296,19 @@ static void SortGroup( seg_leader *seg )
 {
     if( seg->group == NULL )
         return;
-    if( seg->info & SEG_ABSOLUTE )
+    if( seg->info & SEGINF_ABSOLUTE )
         return;
     Ring2Append( &seg->group->leaders, seg );
-    if( seg->group->next_group == NULL ) { // not in the list yet
+    if( seg->group->next == NULL ) { // not in the list yet
         if( CurrGroup == NULL ) {
             Groups = CurrGroup = seg->group;
         } else {
-            CurrGroup->next_group = seg->group;
-            CurrGroup = CurrGroup->next_group;
+            CurrGroup->next = seg->group;
+            CurrGroup = CurrGroup->next;
         }
         // Make the list circular so we have an easy way of telling if a node
         // is in the list.
-        CurrGroup->next_group = Groups;
+        CurrGroup->next = Groups;
         NumGroups--;
         DbgAssert( NumGroups >= 0 );
     }
@@ -323,15 +327,15 @@ static void SortGroupList( void )
 
     // first, set all of the links in the group list to NULL
     while( (group = Groups) != NULL ) {
-        Groups = Groups->next_group;  // Take group out of original ring
-        group->next_group = NULL;
+        Groups = Groups->next;  // Take group out of original ring
+        group->next = NULL;
         group->leaders = NULL;
         NumGroups++;
     }
     number = NumGroups;
     CurrGroup = NULL;
     WalkLeaders( SortGroup );
-    CurrGroup->next_group = NULL;  // break the circular list.
+    CurrGroup->next = NULL;  // break the circular list.
     NumGroups = number;            // save # of groups.
 }
 
@@ -351,7 +355,7 @@ static void FindSplitGroups( void )
     group_entry     *group;
 
     if( FmtData.type & MK_OVERLAYS ) {
-        for( group = Groups; group != NULL; group = group->next_group ) {
+        for( group = Groups; group != NULL; group = group->next ) {
             if( Ring2Lookup( group->leaders, CheckGroupSplit, group->section ) ) {
                 LnkMsg( ERR+MSG_OVL_GROUP_SPLIT, "s", group->sym->name );
             }
@@ -367,7 +371,7 @@ static void NumberNonAutos( void )
     unsigned            num;
 
     num = 0;
-    for( group = Groups; group != NULL; group = group->next_group ) {
+    for( group = Groups; group != NULL; group = group->next ) {
         if( group->isautogrp ) {
             group->num = 0;
         } else {

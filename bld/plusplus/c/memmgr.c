@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -40,14 +40,40 @@
 #include "initdefs.h"
 #include "pragdefn.h"
 #include "codegen.h"
+#include "roundmac.h"
+#include "trmem.h"
 #ifdef DEVBUILD
     #include "togglesd.h"
 #endif
 
-#ifdef TRMEM
-    #include "trmem.h"
+
+#if defined( TRMEM ) && !defined( USE_CG_MEMMGT ) && defined( _M_IX86 )
+    #define alloc_mem(s,n)  _trmem_alloc( s, who, TrHdl )
+    #define _doFree(p,n)    _trmem_free( p, _trmem_guess_who(), TrHdl )
+    #define _MemAlloc(p,n)  _CMemAlloc( p, _trmem_guess_who() )
+    #define _MemAllocW(p)   _CMemAlloc( p, who )
+    #define _addPerm(p,n)   addPerm( p, _trmem_guess_who() )
+#else
+  #ifdef USE_CG_MEMMGT
+    #define alloc_mem(s,n)  BEMemAlloc( s )
+    #define _doFree(p,n)    BEMemFree( p )
+  #elif defined( TRMEM )
+    #define alloc_mem(s,n)  _trmem_alloc( s, _TRMEM_ROUTINE(n), TrHdl )
+    #define _doFree(p,n)    _trmem_free( p, _TRMEM_ROUTINE(n), TrHdl )
+  #else
+    #define alloc_mem(s,n)  malloc( s )
+    #define _doFree(p,n)    free( p )
+  #endif
+    #define _MemAlloc(p,n)  CMemAlloc( p )
+    #define _MemAllocW(p)   CMemAlloc( p )
+    #define _addPerm(p,n)   addPerm( p )
 #endif
 
+#define PERM_ALIGN      sizeof( void * )
+
+#define PERM_HDR_SIZE   __ROUND_UP_SIZE( sizeof( perm_blk ), PERM_ALIGN )
+#define PERM_SIZE(x)    (PERM_HDR_SIZE + (x))
+#define PERM_DATA(p,x)  ((char *)(p) + PERM_HDR_SIZE + (x))
 
 typedef struct cleanup *CLEANPTR;
 struct cleanup {
@@ -60,7 +86,7 @@ typedef struct perm_blk {
     PERMPTR             next;
     size_t              amt_left;
     size_t              size;
-    char                mem[1];
+//    char                mem[1];
 } perm_blk;
 #define PERM_MAX_ALLOC  (1024)
 #define PERM_MIN_ALLOC  (128)
@@ -74,7 +100,7 @@ static void *deferredFreeList;
 
 #ifdef TRMEM
 
-static _trmem_hdl   trackerHdl;
+static _trmem_hdl   TrHdl = _TRMEM_HDL_NONE;
 
 static void printLine( void *dummy, const char *buf, size_t len )
 /***************************************************************/
@@ -84,35 +110,7 @@ static void printLine( void *dummy, const char *buf, size_t len )
     fprintf( stdout, "%s\n", buf );
 }
 
-#define alloc_mem( size ) _trmem_alloc( size, _trmem_guess_who(), trackerHdl )
-
-#else
-
-  #ifdef USE_CG_MEMMGT
-    #define alloc_mem( size ) BEMemAlloc( size )
-  #else
-    #define alloc_mem( size ) malloc( size )
-  #endif
-
-#endif
-
-
-
-static void *alloc_from_cleanup( size_t amt )
-/*******************************************/
-{
-    PERMPTR p;
-    CLEANPTR curr;
-
-    RingIterBeg( cleanupList, curr ) {
-        curr->rtn();
-        p = alloc_mem( amt );
-        if( p != NULL ) {
-            return( p );
-        }
-    } RingIterEnd( curr )
-    return( NULL );
-}
+#endif /* TRMEM */
 
 void CMemRegisterCleanup( void (*cleanup)( void ) )
 /*************************************************/
@@ -123,17 +121,21 @@ void CMemRegisterCleanup( void (*cleanup)( void ) )
     new_cleanup->rtn = cleanup;
 }
 
+#if defined( TRMEM ) && !defined( USE_CG_MEMMGT ) && defined( _M_IX86 )
+static void *_CMemAlloc( size_t size, pointer who )
+#else
 void *CMemAlloc( size_t size )
-/****************************/
+#endif
+/*************************************************/
 {
-    void *p;
+    PERMPTR p;
+    CLEANPTR curr;
 
     if( size == 0 ) {
         return( NULL );
     }
 #ifdef DEVBUILD
     if( !TOGGLEDBG( no_mem_cleanup ) ) {
-        CLEANPTR curr;
         static unsigned test_cleanup;
         static unsigned test_inc = 1;
 
@@ -146,44 +148,52 @@ void *CMemAlloc( size_t size )
         }
     }
 #endif
-    p = alloc_mem( size );
+    p = alloc_mem( size, 1 );
     if( p != NULL ) {
         return( p );
     }
-    p = alloc_from_cleanup( size );
-    if( p == NULL ) {
-        CErr1( ERR_OUT_OF_MEMORY );
-        CSuicide();
-    }
-    return( p );
-}
-
-char *CMemStrDup( const char *str )
-/*********************************/
-{
-    if( str != NULL )
-        return( strcpy( CMemAlloc( strlen( str ) + 1 ), str ) );
+    RingIterBeg( cleanupList, curr ) {
+        curr->rtn();
+        p = alloc_mem( size, 1 );
+        if( p != NULL ) {
+            return( p );
+        }
+    } RingIterEnd( curr )
+    CErr1( ERR_OUT_OF_MEMORY );
+    CSuicide();
     return( NULL );
 }
 
-#ifdef TRMEM
-    #define _doFree( p )    _trmem_free( p, _trmem_guess_who(), trackerHdl );
-#else
-  #ifdef USE_CG_MEMMGT
-    #define _doFree( p )    BEMemFree( p );
-  #else
-    #define _doFree( p )    free( p );
-  #endif
+
+#if defined( TRMEM ) && !defined( USE_CG_MEMMGT ) && defined( _M_IX86 )
+TRMEMAPI( CMemAlloc )
+void *CMemAlloc( size_t size )
+/****************************/
+{
+    return( _CMemAlloc( size, _trmem_guess_who() ) );
+}
 #endif
 
+TRMEMAPI( CMemStrdup )
+char *CMemStrdup( const char *str )
+/*********************************/
+{
+    if( str != NULL ) {
+        return( strcpy( _MemAlloc( strlen( str ) + 1, 7 ), str ) );
+    }
+    return( NULL );
+}
+
+TRMEMAPI( CMemFree )
 void CMemFree( void *p )
 /**********************/
 {
     if( p != NULL ) {
-        _doFree( p );
+        _doFree( p, 3 );
     }
 }
 
+TRMEMAPI( CMemFreePtr )
 void CMemFreePtr( void *pp )
 /**************************/
 {
@@ -191,7 +201,7 @@ void CMemFreePtr( void *pp )
 
     p = *(void **)pp;
     if( p != NULL ) {
-        _doFree( p );
+        _doFree( p, 4 );
         *(void **)pp = NULL;
     }
 }
@@ -213,31 +223,40 @@ static void linkPerm( PERMPTR p, size_t amt )
     RingPush( &permList, p );
 }
 
+#if defined( TRMEM ) && !defined( USE_CG_MEMMGT ) && defined( _M_IX86 )
+static void addPerm( size_t size, pointer who )
+#else
 static void addPerm( size_t size )
+#endif
 {
     PERMPTR p;
+    CLEANPTR curr;
     size_t amt;
 
     if( size > PERM_MAX_ALLOC ) {
-        p = CMemAlloc( offsetof( perm_blk, mem ) + size );
+        p = _MemAllocW( PERM_SIZE( size ) );
         linkPerm( p, size );
         return;
     }
-    amt = PERM_MAX_ALLOC;
+    size = PERM_MAX_ALLOC;
     for(;;) {
-        p = alloc_mem( offsetof( perm_blk, mem ) + amt );
+        amt = PERM_SIZE( size );
+        p = alloc_mem( amt, 2 );
         if( p != NULL ) {
-            linkPerm( p, amt );
+            linkPerm( p, size );
             return;
         }
-        p = alloc_from_cleanup( offsetof( perm_blk, mem ) + amt );
-        if( p != NULL ) {
-            linkPerm( p, amt );
-            return;
-        }
-        if( amt == PERM_MIN_ALLOC )
+        RingIterBeg( cleanupList, curr ) {
+            curr->rtn();
+            p = alloc_mem( amt, 2 );
+            if( p != NULL ) {
+                linkPerm( p, size );
+                return;
+            }
+        } RingIterEnd( curr )
+        if( size == PERM_MIN_ALLOC )
             break;
-        amt >>= 1;
+        size >>= 1;
     }
 }
 
@@ -246,27 +265,28 @@ static void *cutPerm( PERMPTR find, size_t size )
     void *p;
 
     if( size <= find->amt_left ) {
-        p = &(find->mem[find->size - find->amt_left]);
+        p = PERM_DATA( find, find->size - find->amt_left );
         find->amt_left -= size;
         return( p );
     }
     return( NULL );
 }
 
+TRMEMAPI( CPermAlloc )
 void *CPermAlloc( size_t size )
 /*****************************/
 {
     void *p;
     PERMPTR find;
 
-    size = _RoundUp( size, sizeof( int ) );
+    size = _RoundUp( size, PERM_ALIGN );
     RingIterBeg( permList, find ) {
         p = cutPerm( find, size );
         if( p != NULL ) {
             return( p );
         }
     } RingIterEnd( find )
-    addPerm( size );
+    _addPerm( size, 5 );
     RingIterBeg( permList, find ) {
         p = cutPerm( find, size );
         if( p != NULL ) {
@@ -279,30 +299,36 @@ void *CPermAlloc( size_t size )
 }
 
 
+TRMEMAPI( cmemInit )
 static void cmemInit(           // INITIALIZATION
     INITFINI* defn )            // - definition
 {
-    /* unused parameters */ (void)defn;
-
 #ifdef TRMEM
-    {
-        unsigned trmem_flags;
+    unsigned trmem_flags;
+#endif
 
-        trmem_flags = _TRMEM_ALLOC_SIZE_0 | _TRMEM_OUT_OF_MEMORY;
-        if( CppGetEnv( "TRQUIET" ) == NULL ) {
-            trmem_flags |= _TRMEM_CLOSE_CHECK_FREE;
-        }
-        trackerHdl = _trmem_open( malloc, free, NULL, NULL, NULL, printLine, trmem_flags );
+    /* unused parameters */ (void)defn;
+#ifdef TRMEM
+    trmem_flags = _TRMEM_ALLOC_SIZE_0 | _TRMEM_OUT_OF_MEMORY;
+    if( CppGetEnv( "TRQUIET" ) == NULL ) {
+        trmem_flags |= _TRMEM_CLOSE_CHECK_FREE;
     }
-#elif defined( USE_CG_MEMMGT )
-    BEMemInit();
+    TrHdl = _trmem_open( malloc, free, _TRMEM_NO_REALLOC, _TRMEM_NO_STRDUP,
+                                NULL, printLine, trmem_flags );
+#endif
+#if defined( USE_CG_MEMMGT )
+  #ifdef TRMEM
+    BEMemInit( TrHdl );
+  #else
+    BEMemInit( NULL );
+  #endif
 #endif
 #ifdef DEVBUILD
     deferredFreeList = NULL;
 #endif
     cleanupList = NULL;
     permList = NULL;
-    addPerm( 0 );
+    _addPerm( 0, 6 );
 }
 
 static void cmemFini(           // COMPLETION
@@ -314,20 +340,19 @@ static void cmemFini(           // COMPLETION
 #ifdef DEVBUILD
     RingFree( &deferredFreeList );
 #endif
+#if defined( USE_CG_MEMMGT )
+    BEMemFini();
+#endif
 #ifdef TRMEM
- #ifdef DEVBUILD
     if( TOGGLEDBG( dump_memory ) ) {
-        _trmem_prt_list( trackerHdl );
+        _trmem_prt_list_ex( TrHdl, 100 );
     }
-    if( _trmem_close( trackerHdl ) != 0 && !CompFlags.compile_failed ) {
+    if( _trmem_close( TrHdl ) != 0 && !CompFlags.compile_failed ) {
         // we can't print an error message since we have no more memory
-  #if defined( __WWATCOMC__ )
+  #if defined( __WATCOMC__ )
         EnterDebugger();
   #endif
     }
- #endif
-#elif defined( USE_CG_MEMMGT )
-    BEMemFini();
 #endif
 }
 

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,6 +35,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <stdlib.h>
+#include <ctype.h>
 #include <time.h>
 #include "wio.h"
 #include "bool.h"
@@ -45,7 +46,9 @@
 #endif
 #include "ldstr.h"
 #include "uistr.grh"
-#include "wclbproc.h"
+#ifdef __WINDOWS__
+    #include "wclbproc.h"
+#endif
 
 
 typedef struct loginfo {
@@ -118,11 +121,17 @@ static bool getLogName( char *buf, HWND hwnd )
     of.Flags = OFN_HIDEREADONLY;
 #ifndef NOUSE3D
     of.Flags |= OFN_ENABLEHOOK;
+  #ifdef __WINDOWS__
     of.lpfnHook = MakeProcInstance_OFNHOOK( LogSaveOFNHookProc, LogCurInfo.instance );
+  #else
+    of.lpfnHook = LogSaveOFNHookProc;
+  #endif
 #endif
     rc = GetSaveFileName( &of );
 #ifndef NOUSE3D
+  #ifdef __WINDOWS__
     FreeProcInstance_OFNHOOK( of.lpfnHook );
+  #endif
 #endif
     FreeRCString( (char *)of.lpstrTitle );
     if( !rc ) {
@@ -152,7 +161,7 @@ static void flushLog( bool free )
     fclose( f );
     if( free ) {
         for( i = 0; i < LinesUsed; i++ ) {
-            CUIMemFree( BufLines[i] );
+            MemFree( BufLines[i] );
         }
     }
     LinesUsed = 0;
@@ -221,12 +230,19 @@ INT_PTR CALLBACK ConfigLogDlgProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
     case WM_COMMAND:
         switch( wparam ) {
         case LOG_CFG_BROWSE:
-            buf = CUIMemAlloc( LOG_MAX_FNAME );
+            buf = MemAlloc( LOG_MAX_FNAME );
             if( getLogName( buf, hwnd ) ) {
-                strlwr( buf );
+                int c;
+                char *p;
+
+                /* change to lower-case */
+                p = buf;
+                while( (c = *(unsigned char *)p) != '\0' ) {
+                    *p++ = (char)tolower( c );
+                }
                 SetDlgItemText( hwnd, LOG_CFG_NAME_EDIT, buf );
             }
-            CUIMemFree( buf );
+            MemFree( buf );
             break;
         case LOG_CFG_OK:
             if( IsDlgButtonChecked( hwnd, LOG_CFG_QUERY_NAME ) ) {
@@ -269,17 +285,21 @@ INT_PTR CALLBACK ConfigLogDlgProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lp
  */
 void LogConfigure( void )
 {
-    DLGPROC     dlgproc;
-
     if( !LogCurInfo.init ) {
         LogSetDef();
     }
     if( LogCurInfo.config.type == LOG_TYPE_BUFFER ) {
         flushLog( true );
     }
-    dlgproc = MakeProcInstance_DLG( ConfigLogDlgProc, LogCurInfo.instance );
-    DialogBox( LogCurInfo.instance, "LOG_CFG_DLG", LogCurInfo.hwnd, dlgproc );
-    FreeProcInstance_DLG( dlgproc );
+#ifdef __WINDOWS__
+    {
+        DLGPROC dlgproc = MakeProcInstance_DLG( ConfigLogDlgProc, LogCurInfo.instance );
+        DialogBox( LogCurInfo.instance, "LOG_CFG_DLG", LogCurInfo.hwnd, dlgproc );
+        FreeProcInstance_DLG( dlgproc );
+    }
+#else
+    DialogBox( LogCurInfo.instance, "LOG_CFG_DLG", LogCurInfo.hwnd, ConfigLogDlgProc );
+#endif
 
 } /* LogConfigure */
 
@@ -365,20 +385,14 @@ void LogLoadConfig( char *fname, char *section )
  */
 void LogOut( char *res )
 {
-    size_t  len;
-
     if( !LogCurInfo.config.logging || LogCurInfo.config.paused ) {
         return;
     }
     if( LogCurInfo.config.type == LOG_TYPE_CONTINUOUS ) {
-        BufLines[LinesUsed] = res;
-        LinesUsed++;
+        BufLines[LinesUsed++] = res;
         flushLog( false );
     } else {
-        len = strlen( res ) + 1;
-        BufLines[LinesUsed] = CUIMemAlloc( len );
-        strcpy( BufLines[LinesUsed], res );
-        LinesUsed++;
+        BufLines[LinesUsed++] = MemStrdupSafe( res );
         if( LinesUsed == NO_BUF_LINES ) {
             flushLog( true );
         }
@@ -392,7 +406,6 @@ void LogOut( char *res )
 static bool LogOpen( void )
 {
     FILE        *f;
-    DLGPROC     dlgproc;
     INT_PTR     ret;
     char        *msgtitle;
     char        *fmode = "wt";
@@ -414,9 +427,15 @@ static bool LogOpen( void )
         break;
     case LOG_ACTION_QUERY:
         if( !access( LogCurInfo.config.curname, F_OK ) ) {
-            dlgproc = MakeProcInstance_DLG( LogExistsDlgProc, LogCurInfo.instance );
-            ret = DialogBox( LogCurInfo.instance, "LOG_EXISTS_DLG", LogCurInfo.hwnd, dlgproc );
-            FreeProcInstance_DLG( dlgproc );
+#ifdef __WINDOWS__
+            {
+                DLGPROC dlgproc = MakeProcInstance_DLG( LogExistsDlgProc, LogCurInfo.instance );
+                ret = DialogBox( LogCurInfo.instance, "LOG_EXISTS_DLG", LogCurInfo.hwnd, dlgproc );
+                FreeProcInstance_DLG( dlgproc );
+            }
+#else
+            ret = DialogBox( LogCurInfo.instance, "LOG_EXISTS_DLG", LogCurInfo.hwnd, LogExistsDlgProc );
+#endif
             switch( ret ) {
             case LOG_APPEND:
                 fmode = "at";

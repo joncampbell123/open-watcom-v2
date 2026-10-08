@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2019 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -33,7 +33,13 @@
 
 #include "wdeglbl.h"
 #include "wrdll.h"
-#include "wresmem.h"
+#include "wdestken.h"
+#include "wdedebug.h"
+#include "memfuncs.h"
+#include "jmpbuf.h"
+
+//#include "clibext.h"
+
 
 /****************************************************************************/
 /* macro definitions                                                        */
@@ -55,38 +61,70 @@
 /* static variables                                                         */
 /****************************************************************************/
 
+static jmp_buf Env;
+
 /* function to replace this in mem.c in commonui */
 
+static void outOfMemory( void )
+/*****************************/
+{
+    if( WdePopEnv( JMPBUF_PTR( Env ) ) ) {
+        longjmp( Env, 1 );
+    } else {
+        WdeWriteTrail( "Wde Fatal error - no memory!" );
+        exit( -1 );
+    }
+}
+
+TRMEMAPI( MemAlloc )
 void *MemAlloc( size_t size )
 {
     void *p;
 
-    p = WRMemAlloc( size );
-
+    p = WRMemAlloc( size, _TRMEM_WHO( 1 ) );
     if( p != NULL ) {
         memset( p, 0, size );
     }
-
     return( p );
 }
 
-/* function for wres.lib */
-
-void *wres_alloc( size_t size )
+TRMEMAPI( MemAllocSafe )
+void *MemAllocSafe( size_t size )
 {
-    return( WRMemAlloc( size ) );
+    void *p;
+
+    p = WRMemAlloc( size, _TRMEM_WHO( 1 ) );
+    if( p == NULL ) {
+        outOfMemory();
+    }
+    memset( p, 0, size );
+    return( p );
+}
+
+TRMEMAPI( MemStrdup )
+char *MemStrdup( const char *str )
+/********************************/
+{
+    return( WRMemStrdup( str, _TRMEM_WHO( 3 ) ) );
+}
+
+TRMEMAPI( MemStrdupSafe )
+char *MemStrdupSafe( const char *str )
+/************************************/
+{
+    return( WRMemStrdupSafe( str, _TRMEM_WHO( 3 ) ) );
 }
 
 /* function to replace this in mem.c in commonui */
 
-void MemFree( void *ptr )
+TRMEMAPI( MemRealloc )
+void *MemRealloc( void *old, size_t size )
 {
-    WRMemFree( ptr );
+    return( WRMemRealloc( old, size, _TRMEM_WHO( 2 ) ) );
 }
 
-/* function for wres.lib */
-
-void wres_free( void *ptr )
+TRMEMAPI( MemFree )
+void MemFree( void *ptr )
 {
-    WRMemFree( ptr );
+    WRMemFree( ptr, _TRMEM_WHO( 3 ) );
 }

@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -48,59 +49,60 @@ static char *u32tostr( char *buf, uint_32 num )
     return( buf );
 }
 
-char *WResIDToStr( const WResID *name )
-/*************************************/
-/* return the value in an ID if it is a string, NULL otherwise */
+char *WResIDToStr( const WResID *id )
+/************************************
+ * return the value in an ID if it is a string, NULL otherwise
+ */
 {
-    char *      string;
+    char            *str;
 
-    if( name->IsName ) {
+    if( id->IsName ) {
         /* alloc space for the string and a \0 char at the end */
-        string = WRESALLOC( name->ID.Name.NumChars + 1 );
-        if( string == NULL ) {
+        str = WRESALLOC( id->ID.Name.NumChars + 1 );
+        if( str == NULL ) {
             WRES_ERROR( WRS_MALLOC_FAILED );
         } else {
             /* copy the string */
-            memcpy( string, name->ID.Name.Name, name->ID.Name.NumChars );
-            string[name->ID.Name.NumChars] = '\0';
+            memcpy( str, id->ID.Name.Name, id->ID.Name.NumChars );
+            str[id->ID.Name.NumChars] = '\0';
         }
     } else {
-        string = WRESALLOC( UINT16_MAXDIGITS + 1 );
-        if( string == NULL ) {
+        str = WRESALLOC( UINT16_MAXDIGITS + 1 );
+        if( str == NULL ) {
             WRES_ERROR( WRS_MALLOC_FAILED );
         } else {
-            *u32tostr( string, name->ID.Num ) = '\0';
+            *u32tostr( str, id->ID.Num ) = '\0';
         }
     }
 
-    return( string );
+    return( str );
 } /* WResIDToStr */
 
 
-char *WResHelpIDToStr( const WResHelpID *name )
-/*********************************************/
-/* return the value in a Help ID if it is a string, NULL otherwise */
+char *WResHelpIDToStr( const WResHelpID *help_id )
+/*************************************************
+ * return the value in a Help ID if it is a string, NULL otherwise
+ */
 {
-    char *string;
+    char            *str;
 
-    if( name->IsName ) {
+    if( help_id->IsName ) {
         /* alloc space for the string and a \0 char at the end */
-        string = WRESALLOC( name->ID.Name.NumChars + 1 );
-        if( string == NULL ) {
+        str = WRESALLOC( help_id->ID.Name.NumChars + 1 );
+        if( str == NULL ) {
             WRES_ERROR( WRS_MALLOC_FAILED );
         } else {
             /* copy the string */
-            memcpy( string, name->ID.Name.Name, name->ID.Name.NumChars );
-            string[name->ID.Name.NumChars] = '\0';
+            memcpy( str, help_id->ID.Name.Name, help_id->ID.Name.NumChars );
+            str[help_id->ID.Name.NumChars] = '\0';
         }
     } else {
-        string = WRESALLOC( UINT32_MAXDIGITS + 1 );
-        if( string == NULL ) {
+        str = WRESALLOC( UINT32_MAXDIGITS + 1 );
+        if( str == NULL ) {
             WRES_ERROR( WRS_MALLOC_FAILED );
         } else {
-            *u32tostr( string, name->ID.Num ) = '\0';
+            *u32tostr( str, help_id->ID.Num ) = '\0';
         }
     }
-
-    return( string );
+    return( str );
 } /* WResHelpIDToStr */

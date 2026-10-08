@@ -1,6 +1,6 @@
 %{  /* include files */
-    #include <stdio.h>  // printf debugging
-    #include <assert.h>
+    #include <cstdio>  // printf debugging
+    #include <cassert>
 
     #include "bind.h"
 
@@ -30,6 +30,13 @@
 %token '('
 %token ')'
 %token '@'
+
+%type <idx>   T_Ident
+%type <idx>   T_String
+%type <coord> T_Number
+
+%type <coord> absrel
+%type <idx>   absrel_rect
 
 %%
 
@@ -81,7 +88,7 @@ binding
 absrel_rect
         : '(' absrel ',' absrel ',' absrel ',' absrel ')'
           {
-            $$ = (YYSTYPE)CurrBinding->addAbsRelRect( Rect( $2, $4, $6, $8 ) );
+            $$ = CurrBinding->addAbsRelRect( Rect( $2, $4, $6, $8 ) );
           }
         ;
 
@@ -98,4 +105,4 @@ const TokenStruct xtokens[] = {
     { "class",  T_Class },
 };
 
-const int   xtokcnt = sizeof( xtokens ) / sizeof( xtokens[0] );
+const idx_type xtokcnt = sizeof( xtokens ) / sizeof( xtokens[0] );

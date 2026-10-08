@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -77,9 +77,9 @@ bool    IsFunctionDefn( void ) {
 
 // Check to see if type declaration is a function definition.
 
-    if( !RecName() )
+    if( !RecNameOpn() )
         return( false );
-    if( memcmp( StmtKeywords[ PR_FUNC ], CITNode->opnd, 8 ) )
+    if( memcmp( StmtKeywords[PR_FUNC], CITNode->opnd, 8 ) )
         return( false );
     // allow INTEGER FUNCTION(10)
     if( CITNode->opnd_size == 8 )
@@ -236,9 +236,9 @@ static  void    TypeDecl( TYPE typ ) {
 
     size = SIZE_UNDEF;
     default_size = StorageSize( typ );
-    if( RecNOpn() ) {
+    if( RecNoOpn() ) {
         AdvanceITPtr();
-        ReqMul();
+        ReqMulOpr();
     }
     len_spec = LenSpec( typ, &size );
     if( IsFunctionDefn() ) {
@@ -247,13 +247,13 @@ static  void    TypeDecl( TYPE typ ) {
         MustBeTypeDecl();
         if( len_spec ) { // if TYPE*LEN
             default_size = size;
-            if( !RecNOpr() && !RecCloseParen() ) {
-                ReqComma();
+            if( !RecNoOpr() && !RecCloseParenOpr() ) {
+                ReqCommaOpr();
             }
         }
         for( ;; ) {
             size = SIZE_UNDEF;
-            if( ReqName( NAME_VAR_OR_ARR ) ) {
+            if( ReqNameOpn( NAME_VAR_OR_ARR ) ) {
                 var_node = CITNode;
                 if( SgmtSw & SG_DEFINING_STRUCTURE ) {
                     sym = FieldDecl();
@@ -261,7 +261,7 @@ static  void    TypeDecl( TYPE typ ) {
                     sym = VarDecl( MapTypes( typ, default_size ) );
                 }
                 len_spec = LenSpec( typ, &size );
-                if( RecOpenParen() ) {
+                if( RecOpenParenOpr() ) {
                     if( len_spec && ( typ == FT_CHAR ) ) {
                         Extension( TY_CHAR_BEFORE_PAREN );
                     }
@@ -277,7 +277,7 @@ static  void    TypeDecl( TYPE typ ) {
                     sym->u.fd.typ = MapTypes( typ, size );
                     sym->u.fd.xt.size = size;
                     if( sym->u.fd.dim_ext != NULL ) {
-                        size *= sym->u.fd.dim_ext->num_elts;
+                        size *= sym->u.fd.dim_ext->num_elems;
                     }
                     if( (typ == FT_CHAR) && (size == 0) ) {
                         NameErr( CV_CHARSTAR_ILLEGAL, sym );
@@ -285,7 +285,7 @@ static  void    TypeDecl( TYPE typ ) {
                 } else {
                     sym->u.ns.u1.s.typ = MapTypes( typ, size );
                     sym->u.ns.xt.size = size;
-                    if( RecDiv() || RecCat() ) {
+                    if( RecDivOpr() || RecCatOpr() ) {
                         StmtExtension( DA_IN_TYPE_STMT );
                         DataInit( var_node );
                     }
@@ -293,11 +293,11 @@ static  void    TypeDecl( TYPE typ ) {
             } else {
                 AdvanceITPtr();
             }
-            if( !RecComma() ) {
+            if( !RecCommaOpr() ) {
                 break;
             }
         }
-        ReqEOS();
+        ReqEOSOpr();
     }
 }
 
@@ -392,20 +392,20 @@ void    CpDimension( void ) {
     sym_id    sym;
 
     for( ;; ) {
-        if( ReqName( NAME_ARRAY ) ) {
+        if( ReqNameOpn( NAME_ARRAY ) ) {
             sym = LkSym();
             AdvanceITPtr();
-            if( ReqOpenParen() ) {
+            if( ReqOpenParenOpr() ) {
                 ArrayDecl( sym );
             }
         } else {
             AdvanceITPtr();
         }
-        if( !RecComma() ) {
+        if( !RecCommaOpr() ) {
             break;
         }
     }
-    ReqEOS();
+    ReqEOSOpr();
 }
 
 
@@ -417,8 +417,8 @@ void    ArrayDecl( sym_id sym ) {
     intstar4            *bounds;
     intstar4            lo_bound;
     intstar4            hi_bound;
-    signed_32           num_elts;
-    unsigned_32         dim_elts;
+    signed_32           num_elems;
+    unsigned_32         dim_elems;
     int                 ss;
     bool                var_dim;
     subscript_type      const_lo;
@@ -427,10 +427,10 @@ void    ArrayDecl( sym_id sym ) {
     bool                allocatable;
     act_dim_list        dim_list;
 
-    dim_list.num_elts = 0;
+    dim_list.num_elems = 0;
     dim_list.dim_flags = 0;
     dim_list.l.init_label = 0;
-    allocatable = RecNOpn() && RecNextOpr( OPR_COL );
+    allocatable = RecNoOpn() && RecNextOpr( OPR_COL );
     if( (SgmtSw & SG_DEFINING_STRUCTURE) == 0 ) {
         if( (sym->u.ns.flags & ERR_MASK) != SY_VARIABLE ) {
             IllName( sym );
@@ -448,7 +448,7 @@ void    ArrayDecl( sym_id sym ) {
         }
     }
     bounds = &dim_list.subs_1_lo;
-    num_elts = 1;
+    num_elems = 1;
     assumed = false;
     var_dim = false;
     for( ss = 0; ss < MAX_DIM; ) {
@@ -456,12 +456,12 @@ void    ArrayDecl( sym_id sym ) {
         pvd_ok = false;
         hi_bound = 0;
         lo_bound = 1;
-        assumed = RecNOpn() && RecNextOpr( OPR_MUL );
+        assumed = RecNoOpn() && RecNextOpr( OPR_MUL );
         if( allocatable ) {
-            ReqNOpn();
+            ReqNoOpn();
             AdvanceITPtr();
-            ReqColon();
-            ReqNOpn();
+            ReqColonOpr();
+            ReqNoOpn();
         } else if( !assumed ) {
             DimExpr();
             if( AError ) {
@@ -481,10 +481,10 @@ void    ArrayDecl( sym_id sym ) {
                     var_dim = true;
                 }
                 AdvanceITPtr();
-                assumed = RecNOpn() && RecNextOpr( OPR_MUL );
+                assumed = RecNoOpn() && RecNextOpr( OPR_MUL );
                 if( assumed ) {
                     AdvanceITPtr();
-                    ReqNOpn();
+                    ReqNoOpn();
                 } else {
                     DimExpr();
                     if( !AError ) {
@@ -495,14 +495,14 @@ void    ArrayDecl( sym_id sym ) {
                                 GForceHiBound( ss, sym );
                             } else if( const_lo == SSB_CONSTANT ) {
                                 if( lo_bound <= hi_bound ) {
-                                    dim_elts = hi_bound - lo_bound + 1;
+                                    dim_elems = hi_bound - lo_bound + 1;
 #if _CPU == 8086
-                                    if( dim_elts > 65535 ) {
+                                    if( dim_elems > 65535 ) {
                                         Error( SV_DIMENSION_LIMIT );
                                     }
 #endif
-                                    num_elts *= dim_elts;
-                                    if( num_elts <= 0 ) {
+                                    num_elems *= dim_elems;
+                                    if( num_elems <= 0 ) {
                                         Error( SV_BAD_SSCR );
                                     }
                                 } else {
@@ -533,8 +533,8 @@ void    ArrayDecl( sym_id sym ) {
                             Error( SV_DIMENSION_LIMIT );
                         }
 #endif
-                        num_elts *= hi_bound;
-                        if( num_elts <= 0 ) {
+                        num_elems *= hi_bound;
+                        if( num_elems <= 0 ) {
                             Error( SV_BAD_SSCR );
                         }
                     } else {
@@ -545,18 +545,18 @@ void    ArrayDecl( sym_id sym ) {
         } else {
             _SetLoConstBound( dim_list.dim_flags, ss );
             AdvanceITPtr();
-            ReqNOpn();
+            ReqNoOpn();
         }
         *bounds++ = lo_bound;
         *bounds++ = hi_bound;
         AdvanceITPtr();
-        if( !RecComma() || assumed ) {
+        if( !RecCommaOpr() || assumed ) {
             break;
         }
     }
     _SetDimCount( dim_list.dim_flags, ss );
-    ReqCloseParen();
-    ReqNOpn();
+    ReqCloseParenOpr();
+    ReqNoOpn();
     AdvanceITPtr();
     if( SgmtSw & SG_DEFINING_STRUCTURE ) {
         if( var_dim || assumed ) {
@@ -564,12 +564,12 @@ void    ArrayDecl( sym_id sym ) {
         } else if( allocatable ) {
             Error( SP_ALLOC_NOT_IN_STRUCT );
         } else {
-            dim_list.num_elts = num_elts;
+            dim_list.num_elems = num_elems;
             sym->u.fd.dim_ext = STSubsList( &dim_list );
         }
     } else {
         if( (ProgSw & PS_IN_SUBPROGRAM) && (ProgSw & PS_BLOCK_DATA) == 0 && pvd_ok ) {
-            dim_list.num_elts = num_elts;
+            dim_list.num_elems = num_elems;
             // for Psuedo-Variable Dimensioning ( WATFIVish )
             dim_list.dim_flags |= DIM_PVD;
             if( sym->u.ns.flags & SY_SUB_PARM ) {
@@ -590,7 +590,7 @@ void    ArrayDecl( sym_id sym ) {
             dim_list.dim_flags |= DIM_ALLOCATABLE;
             sym->u.ns.u1.s.xflags |= SY_ALLOCATABLE;
         } else {
-            dim_list.num_elts = num_elts;
+            dim_list.num_elems = num_elems;
             if( sym->u.ns.flags & SY_SUB_PARM ) {
                 // we don't want an ADV generated in the following case:
                 //      SUBROUTINE SAM( A )

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -39,7 +39,7 @@
 #else
 #include "rfxdata.h"
 #endif
-#include "dbgmem.h"
+#include "memfuncs.h"
 #include "trpld.h"
 #include "trpcore.h"
 #include "dbgio.h"
@@ -70,6 +70,7 @@ static void TrapFailed( void )
 {
     UnLoadTrap();
     StartupErr( LIT_ENG( ERR_REMOTE_LINK_BROKEN ) );
+    /* never return */
 }
 
 void InitSuppServices( void )
@@ -139,6 +140,7 @@ void InitTrap( const char *parms )
         strcpy( buff, error );
         InitTrapError = true;
         StartupErr( buff );
+        /* never return */
     }
     acc.req = REQ_CONNECT;
     acc.ver.major = TRAP_VERSION_MAJOR;
@@ -157,6 +159,7 @@ void InitTrap( const char *parms )
         UnLoadTrap();
         InitTrapError = true;
         StartupErr( err_msg );
+        /* never return */
     }
 #if !defined( BUILD_RFX )
     if( !InitTrapError ) {

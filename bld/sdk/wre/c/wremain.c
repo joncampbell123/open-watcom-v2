@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -72,7 +72,9 @@
 #include "aboutdlg.h"
 #include "ldstr.h"
 #include "wresdefn.h"
-#include "wclbproc.h"
+#ifdef __WINDOWS__
+    #include "wclbproc.h"
+#endif
 
 #include "clibint.h"
 
@@ -215,6 +217,11 @@ static void startEditors( void )
 
 bool WREIsResInfoWinMsg( LPMSG pmsg );
 
+static void nomemcb( void )
+{
+    // handle no memory state
+}
+
 int PASCAL WinMain( HINSTANCE hinstCurrent, HINSTANCE hinstPrevious,
                     LPSTR lpszCmdLine, int nCmdShow )
 {
@@ -231,7 +238,7 @@ int PASCAL WinMain( HINSTANCE hinstCurrent, HINSTANCE hinstPrevious,
     /* unused parameters */ (void)hinstPrevious;
 #endif
 
-    WRInit();
+    WRInit( false, nomemcb );
     WAccelInit();
     WMenuInit();
     WStringInit();
@@ -1025,11 +1032,13 @@ bool WREProcessArgs( char **argv, int argc )
 
 void WREDisplaySplashScreen( HINSTANCE inst, HWND parent, UINT msecs )
 {
-    DLGPROC     dlgproc;
-
-    dlgproc = MakeProcInstance_DLG( WRESplashDlgProc, WREInst );
+#ifdef __WINDOWS__
+    DLGPROC dlgproc = MakeProcInstance_DLG( WRESplashDlgProc, WREInst );
     JDialogBoxParam( inst, "WRESplashScreen", parent, dlgproc, (LPARAM)&msecs );
     FreeProcInstance_DLG( dlgproc );
+#else
+    JDialogBoxParam( inst, "WRESplashScreen", parent, WRESplashDlgProc, (LPARAM)&msecs );
+#endif
 }
 
 INT_PTR CALLBACK WRESplashDlgProc( HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam )

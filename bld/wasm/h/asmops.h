@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2024      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2024-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -86,6 +86,10 @@ typedef enum tok_class {
     TC_ID,
     TC_REG,
     TC_STRING,
+    TC_STRING_SQUOTE,
+    TC_STRING_DQUOTE,
+    TC_STRING_ANGLE,
+    TC_STRING_BRACE,
     TC_DIRECTIVE,
     TC_DIRECT_EXPR,
     TC_NUM,
@@ -109,6 +113,7 @@ typedef enum tok_class {
     TC_CL_BRACE,         // '}'
     TC_COMMA,            // ',',
     TC_COLON,            // ':',
+    TC_COLON_EQU,        // ':=',
     TC_SEMI_COLON,       // ';',
     TC_PLUS,             // '+',
     TC_MINUS,            // '-',
@@ -127,5 +132,13 @@ typedef struct asm_tok {
         asm_token       token;
     } u;
 } asm_tok;
+
+#define IS_STRING_TOKEN( cls )      ((cls) == TC_STRING || (cls) == TC_STRING_SQUOTE \
+                                  || (cls) == TC_STRING_DQUOTE || (cls) == TC_STRING_ANGLE \
+                                  || (cls) == TC_STRING_BRACE)
+
+#define IS_QUOTED_STRING_TOKEN( cls )   ((cls) == TC_STRING_SQUOTE || (cls) == TC_STRING_DQUOTE)
+#define STRING_TOKEN_DELIM( cls )       ((cls) == TC_STRING_SQUOTE ? '\'' \
+                                      : ((cls) == TC_STRING_DQUOTE ? '"' : 0))
 
 #endif

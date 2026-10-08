@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -647,18 +647,17 @@ hw_reg_set      Low64Reg( hw_reg_set regs )
 
     if( HW_CEqual( regs, HW_EMPTY ) )
         return( HW_EMPTY );
-    order = Reg64Order;
-    for( ;; ) {
-        if( HW_Ovlap( *order, regs ) )
-            break;
-        ++order;
+    for( order = Reg64Order; !HW_CEqual( *order, HW_EMPTY ); ++order ) {
+        if( HW_Ovlap( *order, regs ) ) {
+            low = regs;
+            HW_OnlyOn( low, *order );
+            if( HW_Equal( low, regs ) ) {
+                low = HW_EMPTY;
+            }
+            return( low );
+        }
     }
-    low = regs;
-    HW_OnlyOn( low, *order );
-    if( HW_Equal( low, regs ) ) {
-        low = HW_EMPTY;
-    }
-    return( low );
+    return( HW_EMPTY );
 }
 
 
@@ -848,48 +847,41 @@ void        InitRegTbl( void )
 {
 }
 
+static int findArchRegInfo( hw_reg_set regs )
+/********************************************/
+{
+    int         i;
+
+    for( i = ARCH_IDX_START; i < ARCH_IDX_END; i++ ) {
+        if( HW_Ovlap( regs, RegsTab[i].hw_reg ) ) {
+            return( i );
+        }
+    }
+    _Zoiks( ZOIKS_031 );
+    return( ARCH_IDX_START );
+}
+
+
 reg_idx     RegTrans( hw_reg_set regs )
 /**************************************
  * Translate reg to register index
  */
 {
-    int         i;
-
-    for( i = ARCH_IDX_START; i < ARCH_IDX_END; i++ ) {
-        if( HW_Equal( regs, RegsTab[i].hw_reg ) ) {
-            return( RegsTab[i].idx );
-        }
-    }
-    return( 0 );
+    return( RegsTab[findArchRegInfo( regs )].idx );
 }
 
 int GetArchIndex( hw_reg_set regs )
 /*********************************/
 {
-    int         i;
-
-    for( i = ARCH_IDX_START; i < ARCH_IDX_END; i++ ) {
-        if( HW_Equal( regs, RegsTab[i].hw_reg ) ) {
-            return( RegsTab[i].idx );
-        }
-    }
-    return( 0 );
+    return( RegsTab[findArchRegInfo( regs )].idx );
 }
 
-dw_regs   RegTransDW( hw_reg_set reg )
+dw_regs   RegTransDW( hw_reg_set regs )
 /*************************************
  * Translate reg to Dwarf enum name
  */
 {
-    int         i;
-
-    for( i = ARCH_IDX_START; i < ARCH_IDX_END; i++ ) {
-        if( HW_Equal( reg, RegsTab[i].hw_reg ) ) {
-            return( RegsTab[i].dw_idx );
-        }
-    }
-    _Zoiks( ZOIKS_031 );
-    return( DW_REG_END );
+    return( RegsTab[findArchRegInfo( regs )].dw_idx );
 }
 
 hw_reg_set ParmRegConflicts( hw_reg_set r )

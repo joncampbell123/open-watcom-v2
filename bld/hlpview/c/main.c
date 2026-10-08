@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -33,12 +33,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include "wdirent.h"
 #include "help.h"
-#include "helpmem.h"
+#include "helpmemu.h"
 #include "filelist.h"
 #include "initmode.h"
 #include "pathgrp2.h"
+#include "memfuncs.h"
 
 #include "clibext.h"
 
@@ -66,7 +68,7 @@ static void showCmdlHelp( const char *name )
     printf( "\n" );
     printf( "               %s help_file [topic_name]\n", pg.fname );
     printf( "\n" );
-    printf( "- if help_file is specified without an extension \"%s\" is assumed\n", "." DEF_EXT );
+    printf( "- if help_file is specified without an extension \"%s\" is assumed\n", "." FEXT_DEF );
     printf( "- the topic_name parameter is optional\n" );
     printf( "- if topic_name is not specifed the default topic used.\n" );
     printf( "- if topic_name contains spaces then it must be enclosed in quotes\n" );
@@ -82,11 +84,11 @@ static HelpSrchPathItem *checkFileName( const char *name, char *buf )
 
     _splitpath2( name, pg.buffer, &pg.drive, &pg.dir, &pg.fname, &pg.ext );
     if( pg.ext[0] == '\0' )
-        pg.ext = DEF_EXT;
+        pg.ext = FEXT_DEF;
     _makepath( buf, NULL, NULL, pg.fname, pg.ext );
     if( pg.drive[0] != '\0' || pg.dir[0] != '\0' ) {
         _makepath( path, pg.drive, pg.dir, NULL, NULL );
-        searchList[0].info = HelpDupStr( path );
+        searchList[0].info = MemStrdupSafe( path );
     }
     return( searchList );
 }
@@ -94,7 +96,7 @@ static HelpSrchPathItem *checkFileName( const char *name, char *buf )
 static void freeSrchList( void )
 {
     if( strcmp( searchList[0].info, FIRST_SRCH_PATH ) ) {
-        HelpMemFree( searchList[0].info );
+        MemFree( searchList[0].info );
     }
 }
 
@@ -106,6 +108,8 @@ int main( int argc, char *argv[] )
     HelpSrchPathItem    *srchlist;
     int                 rc;
     int                 err;
+    char                *p;
+    int                 c;
 
     rc = EXIT_SUCCESS;
     HelpMemOpen();
@@ -118,7 +122,11 @@ int main( int argc, char *argv[] )
         rc = EXIT_FAILURE;
     } else {
         srchlist = checkFileName( argv[1], filename );
-        strlwr( filename );
+        /* change to lower-case */
+        p = filename;
+        while( (c = *(unsigned char *)p) != '\0' ) {
+            *p++ = (char)tolower( c );
+        }
         helpfiles[0] = filename;
         if( argc == 3 ) {
             topic = argv[2];
@@ -168,7 +176,6 @@ int main( int argc, char *argv[] )
         }
         freeSrchList();
     }
-    HelpMemPrtList();
     HelpMemClose();
     return( rc );
 }

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -45,14 +45,6 @@
     #include "dbg.h"
 #endif
 
-
-#if defined(__DOS__) || defined(__OS2__) || defined(__NT__)
-    #define SYS_EOF_CHAR    0x1A
-#elif defined(__UNIX__) || defined(__RDOS__)
-    #undef SYS_EOF_CHAR
-#else
-    #error SYS_EOF_CHAR is not set for this system
-#endif
 
 #define prt_char( x )           if( CompFlags.cpp_output ) { PrtChar( x ); }
 
@@ -115,14 +107,6 @@ static uint_8 InitClassTable[] = {
     'L',        SCAN_WIDE,
     '\0',       0
 };
-
-#if TARGET_INT == 2
-static unsigned_64 intMax   = Init64Val( 0x00000000, 0x00007fff );
-static unsigned_64 uintMax  = Init64Val( 0x00000000, 0x0000ffff );
-#else
-static unsigned_64 intMax   = Init64Val( 0x00000000, 0x7fffffff );
-static unsigned_64 uintMax  = Init64Val( 0x00000000, 0xffffffff );
-#endif
 
 void ReScanInit( const char *ptr )
 /********************************/
@@ -331,7 +315,7 @@ static int doESCChar( int c, bool expanding, type_id char_type )
         }
     } else if( classification == ESCAPE_HEX ) {
         WriteBufferChar( c );
-        U64Clear( Constant64 );
+        Set64ValZero( Constant64 );
         if( doScanHex( expanding ) ) {
             n = U32FetchTrunc( Constant64 );
             if( n > 0x0ff && char_type != TYP_WCHAR ) {
@@ -365,6 +349,65 @@ int EncodeWchar( int c )
         c = UniCode[c];
     }
     return( c );
+}
+
+int IndexLower( int c )
+{
+    switch( c ) {
+    case 'z':
+        return( 25 );
+    case 'y':
+        return( 24 );
+    case 'x':
+        return( 23 );
+    case 'w':
+        return( 22 );
+    case 'v':
+        return( 21 );
+    case 'u':
+        return( 20 );
+    case 't':
+        return( 19 );
+    case 's':
+        return( 18 );
+    case 'r':
+        return( 17 );
+    case 'q':
+        return( 16 );
+    case 'p':
+        return( 15 );
+    case 'o':
+        return( 14 );
+    case 'n':
+        return( 13 );
+    case 'm':
+        return( 12 );
+    case 'l':
+        return( 11 );
+    case 'k':
+        return( 10 );
+    case 'j':
+        return( 9 );
+    case 'i':
+        return( 8 );
+    case 'h':
+        return( 7 );
+    case 'g':
+        return( 6 );
+    case 'f':
+        return( 5 );
+    case 'e':
+        return( 4 );
+    case 'd':
+        return( 3 );
+    case 'c':
+        return( 2 );
+    case 'b':
+        return( 1 );
+    case 'a':
+        return( 0 );
+    }
+    return( -1 );
 }
 
 static TOKEN doScanCharConst( type_id char_type, bool expanding )
@@ -468,7 +511,7 @@ static TOKEN doScanCharConst( type_id char_type, bool expanding )
             }
         }
     }
-    I32ToI64( value, &Constant64 );
+    Set64ValI32( Constant64, value );
     return( token );
 }
 
@@ -777,7 +820,7 @@ static TOKEN scanWide( bool expanding )  // scan something that starts with L
     return( token );
 }
 
-static void msIntSuffix( uint_32 signed_max, type_id sid, type_id uid, unsigned_64 *max_value )
+static void msIntSuffix( uint_32 signed_max, type_id sid, type_id uid, uint_32 max_value )
 {
     if( U64IsU32( Constant64 ) ) {
         uint_32 v = U32Fetch( Constant64 );
@@ -789,14 +832,14 @@ static void msIntSuffix( uint_32 signed_max, type_id sid, type_id uid, unsigned_
             if( v <= unsigned_max ) {
                 ConstType = uid;
             } else {
-                if( U64Cmp( &Constant64, max_value ) > 0 ) {
+                if( U64CmpU32( Constant64, max_value ) > 0 ) {
                     if( U64IsI32( Constant64 ) ) {
                         ConstType = TYP_SLONG;
                     } else {
                         ConstType = TYP_ULONG;
                     }
                 } else {
-                    if( U64Cmp( &Constant64, &intMax ) > 0 ) {
+                    if( U64CmpU32( Constant64, TARGET_INT_MAX ) > 0 ) {
                         ConstType = TYP_UINT;
                     } else {
                         ConstType = TYP_SINT;
@@ -816,11 +859,11 @@ static void msIntSuffix( uint_32 signed_max, type_id sid, type_id uid, unsigned_
 static TOKEN doScanNum( bool expanding )
 {
     int c;
-    unsigned_64 *max_value;
+    uint_32 max_value;
     char too_big;
     char max_digit;
 
-    U64Clear( Constant64 );
+    Set64ValZero( Constant64 );
     too_big = 0;
     if( CurrChar == '0' ) {
         c = NextChar();
@@ -868,10 +911,10 @@ static TOKEN doScanNum( bool expanding )
                 return( doScanFloat() );
             }
         }
-        max_value = &uintMax;
+        max_value = TARGET_INT_MAX;
     } else {                /* scan decimal number */
         // we know 'CurrChar' is a digit
-        U32ToU64( CurrChar - '0', &Constant64 );
+        Set64ValU32( Constant64, CurrChar - '0' );
         c = NextChar();
         while( CharSet[c] & C_DI ) {
             if( U64Cnv10( &Constant64, c - '0' ) ) {
@@ -882,10 +925,10 @@ static TOKEN doScanNum( bool expanding )
         if( c == '.' || ONE_CASE_EQUAL( c, 'E' ) ) {
             return( doScanFloat() );
         }
-        max_value = &intMax;
+        max_value = TARGET_UINT_MAX;
     }
     switch( ONE_CASE( c ) ) {
-    case ONE_CASE( 'i' ):
+    case ONE_CASE( 'I' ):
         ConstType = TYP_SINT;
         c = WriteBufferCharNextChar( c );
         switch( c ) {
@@ -941,12 +984,12 @@ static TOKEN doScanNum( bool expanding )
     case ONE_CASE( 'L' ):
         ConstType = TYP_SLONG;
         c = WriteBufferCharNextChar( c );
-        if( ONE_CASE_EQUAL( c, 'u' ) ) {
+        if( ONE_CASE_EQUAL( c, 'U' ) ) {
             ConstType = TYP_ULONG;
             c = WriteBufferCharNextChar( c );
         } else if( ONE_CASE_EQUAL( c, 'L' ) ) {
             c = WriteBufferCharNextChar( c );
-            if( ONE_CASE_EQUAL( c, 'u' ) ) {
+            if( ONE_CASE_EQUAL( c, 'U' ) ) {
                 ConstType = TYP_ULONG64;
                 c = WriteBufferCharNextChar( c );
             } else {
@@ -963,10 +1006,10 @@ static TOKEN doScanNum( bool expanding )
             }
         }
         break;
-    case ONE_CASE( 'u' ):
+    case ONE_CASE( 'U' ):
         c = WriteBufferCharNextChar( c );
         switch( ONE_CASE( c ) ) {
-        case ONE_CASE( 'i' ):
+        case ONE_CASE( 'I' ):
             ConstType = TYP_ULONG64;
             c = WriteBufferCharNextChar( c );
             switch( c ) {
@@ -985,7 +1028,7 @@ static TOKEN doScanNum( bool expanding )
                 c = WriteBufferCharNextChar( c );
                 if( c == '6' ) {
                     c = WriteBufferCharNextChar( c );
-                    msIntSuffix( 0x00007fff, TYP_USHORT, TYP_USHORT, &uintMax );
+                    msIntSuffix( 0x00007fff, TYP_USHORT, TYP_USHORT, TARGET_UINT_MAX );
                 } else {
                     if( diagnose_lex_error( expanding ) ) {
                         CErr1( ERR_INVALID_CONSTANT_SUFFIX );
@@ -997,7 +1040,7 @@ static TOKEN doScanNum( bool expanding )
                 c = WriteBufferCharNextChar( c );
                 if( c == '2' ) {
                     c = WriteBufferCharNextChar( c );
-                    msIntSuffix( 0x7fffffff, TYP_ULONG, TYP_ULONG, &uintMax );
+                    msIntSuffix( 0x7fffffff, TYP_ULONG, TYP_ULONG, TARGET_UINT_MAX );
                 } else {
                     if( diagnose_lex_error( expanding ) ) {
                         CErr1( ERR_INVALID_CONSTANT_SUFFIX );
@@ -1007,7 +1050,7 @@ static TOKEN doScanNum( bool expanding )
                 break;
             case '8':
                 c = WriteBufferCharNextChar( c );
-                msIntSuffix( 0x0000007f, TYP_UCHAR, TYP_UCHAR, &uintMax );
+                msIntSuffix( 0x0000007f, TYP_UCHAR, TYP_UCHAR, TARGET_UINT_MAX );
                 break;
             default:
                 if( diagnose_lex_error( expanding ) ) {
@@ -1027,7 +1070,7 @@ static TOKEN doScanNum( bool expanding )
             break;
         default:
             ConstType = TYP_UINT;
-            if( U64Cmp( &Constant64, &uintMax ) > 0 ) { // Constant > TARGET_UINT_MAX
+            if( U64CmpU32( Constant64, TARGET_UINT_MAX ) > 0 ) { // Constant > TARGET_UINT_MAX
                 ConstType = TYP_ULONG;
             }
         }
@@ -1037,7 +1080,7 @@ static TOKEN doScanNum( bool expanding )
         break;
     default:
         ConstType = TYP_SINT;
-        if( U64Cmp( &Constant64, max_value ) > 0 ) {
+        if( U64CmpU32( Constant64, max_value ) > 0 ) {
             if( U64IsU32( Constant64 ) ) {
                 if( U64IsI32( Constant64 ) ) {
                     ConstType = TYP_SLONG;
@@ -1053,7 +1096,7 @@ static TOKEN doScanNum( bool expanding )
             }
         } else {
             DbgAssert( U64IsU32( Constant64 ) );
-            if( U64Cmp( &Constant64, &intMax ) > 0 ) { // Constant > TARGET_INT_MAX
+            if( U64CmpU32( Constant64, TARGET_INT_MAX ) > 0 ) { // Constant > TARGET_INT_MAX
                 ConstType = TYP_UINT;
             }
         }
@@ -1378,7 +1421,7 @@ static TOKEN doScanPPNumber( void )
         c = NextChar();
         if( c == '.' || (CharSet[c] & (C_AL | C_DI)) ) {
             WriteBufferChar( c );
-        } else if( ONE_CASE_EQUAL( prevc, 'e' ) && ( c == '+' || c == '-' ) ) {
+        } else if( ONE_CASE_EQUAL( prevc, 'E' ) && ( c == '+' || c == '-' ) ) {
             WriteBufferChar( c );
             if( CompFlags.extensions_enabled ) {
                 /* concession to existing practice...
@@ -1474,14 +1517,6 @@ static TOKEN scanInvalid( bool expanding )
     Buffer[0] = CurrChar;
     Buffer[1] = '\0';
     TokenLen = 1;
-#if defined( SYS_EOF_CHAR )
-    if( CurrChar == SYS_EOF_CHAR ) {
-        if( SrcFileClose( false ) ) {
-            return( ScanToken( expanding ) );
-        }
-        return( T_EOF );
-    }
-#endif
     if( diagnose_lex_error( expanding ) ) {
         CErr2( WARN_WEIRD_CHARACTER, CurrChar );
     }

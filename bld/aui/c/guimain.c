@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -87,7 +87,7 @@ static void Rescale( void )
     WndMax = scale;
 }
 
-static bool WndInitBody( char *title, res_name_or_id resource_menu )
+static bool WndInitBody( const char *title, res_name_or_id resource_menu )
 {
     wnd_create_struct   info;
 
@@ -115,12 +115,12 @@ static bool WndInitBody( char *title, res_name_or_id resource_menu )
     return( true );
 }
 
-bool WndInit( char *title )
+bool WndInit( const char *title )
 {
     return( WndInitBody( title, NULL ) );
 }
 
-bool WndInitWithMenuRes( char *title, res_name_or_id resource_menu )
+bool WndInitWithMenuRes( const char *title, res_name_or_id resource_menu )
 {
     return( WndInitBody( title, resource_menu ) );
 }
@@ -136,7 +136,7 @@ bool WndFini( void )
         return( false );
     GUIDestroyWnd( NULL );
     if( BusyString != NULL ) {
-        WndFree( BusyString );
+        MemFree( BusyString );
         BusyString = NULL;
     }
     return( true );

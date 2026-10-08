@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -37,6 +37,7 @@
 #if defined( __WINDOWS__ )
     #include "setevent.h"
 #endif
+#include "wnoret.h"
 
 #if defined( __WINDOWS__ )
     #define     TRAPENTRY   __far __pascal
@@ -52,7 +53,7 @@
 #define TRAP_VERSION_MINOR      0
 #define OLD_TRAP_VERSION_MINOR  0
 
-#define REQUEST_FAILED ((trap_retval)-1)
+#define TRAP_REQUEST_FAILED     ((trap_retval)-1)
 
 #if OLD_TRAP_VERSION_MINOR > 0
     #define TrapVersionOK( ver )  (((ver).major == TRAP_VERSION_MAJOR) && \

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -46,6 +46,7 @@
 #include "caux.h"
 #include "dwarfid.h"
 #include "felang.h"
+#include "scan.h"
 
 
 #define TRUNC_SYMBOL_HASH_LEN        4
@@ -171,6 +172,8 @@ bool VarFunc( SYMPTR sym )
     unsigned    hash;
     size_t      len;
     char        *p;
+    int         c1;
+    int         c2;
 
     if( sym == NULL )
         return( false );
@@ -178,12 +181,16 @@ bool VarFunc( SYMPTR sym )
     if( sym->flags & SYM_FUNCTION ) {
         p = sym->name;
         len = strlen( p );
-        hash = (len + VarFuncWeights[p[0] - 'a'] + VarFuncWeights[p[len - 1] -'a']) & 31;
-
-        if( strcmp( p, VarParmFuncs[hash] ) == 0
-          && ( CompFlags.extensions_enabled || (( 1 << hash ) & VAR_PARM_FUNCS_ANSI) ) )
-            return( true );
-
+        c1 = IndexLower( ((unsigned char *)p)[0] );
+        c2 = IndexLower( ((unsigned char *)p)[len - 1] );
+        if( c1 >= 0 && c2 >= 0 ) {
+            hash = (len + VarFuncWeights[c1] + VarFuncWeights[c2]) & 0x1f;
+            if( strcmp( p, VarParmFuncs[hash] ) == 0
+              && ( CompFlags.extensions_enabled
+              || (( 1 << hash ) & VAR_PARM_FUNCS_ANSI) ) ) {
+                return( true );
+            }
+        }
         return( VarParm( sym ) );
     }
     return( false );

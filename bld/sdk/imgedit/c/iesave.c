@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -53,7 +53,6 @@
 #include "clibext.h"
 
 
-#define DEF_MEMFLAGS    (MEMFLAG_MOVEABLE | MEMFLAG_PURE)
 #define SCANLINE_SIZE   32
 #define MAX_CHUNK       32768
 
@@ -250,14 +249,14 @@ static bool getSaveFName( char *fname, image_type img_type )
     of.nMaxFileTitle = sizeof( szFileTitle );
     of.lpstrTitle = IESaveImageTitle;
     of.lpstrInitialDir = initialDir;
-#if !defined( __NT__ )
+#ifdef __WINDOWS__
     /* Important! Do not use hook in WIN32, you will not get the nice dialog! */
     of.lpfnHook = MakeProcInstance_OFNHOOK( SaveOFNHookProc, Instance );
     of.Flags = OFN_ENABLEHOOK;
 #endif
     of.Flags |= OFN_OVERWRITEPROMPT | OFN_HIDEREADONLY;
     ok = ( GetSaveFileName( &of ) != 0 );
-#ifndef __NT__
+#ifdef __WINDOWS__
     FreeProcInstance_OFNHOOK( of.lpfnHook );
 #endif
 
@@ -431,7 +430,7 @@ static bool saveImgFile( img_node *node )
     bool                ok;
 
     count = node->num_of_images;                // Will be 1 for cursors
-    imgfile_size = sizeof( an_img_file ) + sizeof( an_img_resource ) * ( count - 1 );
+    imgfile_size = sizeof( *img_file ) + sizeof( *img_file->resources ) * ( count - 1 );
     img_file = MemAlloc( imgfile_size );
 
     img_file->count = count;
@@ -442,7 +441,7 @@ static bool saveImgFile( img_node *node )
         img_file->type = 2;
     }
 
-    imginfo = MemAlloc( sizeof( BITMAPINFOHEADER ) * img_file->count );
+    imginfo = MemAlloc( sizeof( *imginfo ) * img_file->count );
 
     currentimage = node;
     for( i = 0; i < img_file->count; i++ ) {
@@ -639,7 +638,7 @@ bool SaveImgToData( img_node *node, char **data, size_t *size )
         img_file->type = 2;
     }
 
-    imginfo = MemAlloc( sizeof( BITMAPINFOHEADER ) * img_file->count );
+    imginfo = MemAlloc( sizeof( *imginfo ) * img_file->count );
 
     currentimage = node;
     for( i = 0; i < img_file->count; i++ ) {
@@ -791,7 +790,7 @@ static bool createNewImageLNODE( img_node *node, uint_16 type )
     }
 
     if( ok ) {
-        ok = !WResAddResource( tname, rname, DEF_MEMFLAGS, 0, 0,
+        ok = !WResAddResource( tname, rname, DEFAULT_FLAGS_MP, 0, 0,
                                node->wrinfo->dir, &lang, &dup ) && !dup;
     }
 
@@ -825,7 +824,6 @@ static bool saveResourceFile( img_node *node )
     bool            was32bit;
     bool            is32bit;
     bool            ok;
-    HELPFUNC        hcb;
 
     info_created = false;
     data = NULL;
@@ -869,9 +867,13 @@ static bool saveResourceFile( img_node *node )
     if( ok ) {
         was32bit = WRIs32Bit( node->wrinfo->file_type );
         for( ;; ) {
-            hcb = MakeProcInstance_HELP( IEHelpCallBack, Instance );
+#ifdef __WINDOWS__
+            HELPFUNC hcb = MakeProcInstance_HELP( IEHelpCallBack, Instance );
             save_type = WRSelectFileType( HMainWindow, node->fname, was32bit, true, hcb );
             FreeProcInstance_HELP( hcb );
+#else
+            save_type = WRSelectFileType( HMainWindow, node->fname, was32bit, true, IEHelpCallBack );
+#endif
             is32bit = WRIs32Bit( save_type );
             if( was32bit ) {
                 if( is32bit ) {
@@ -1059,12 +1061,12 @@ static bool getSavePalName( char *fname )
     of.lpstrTitle = IESavePaletteTitle;
     of.lpstrInitialDir = initialDir;
     of.Flags = OFN_SHOWHELP | OFN_OVERWRITEPROMPT;
-#ifndef __NT__
+#ifdef __WINDOWS__
     of.Flags |= OFN_ENABLEHOOK;
     of.lpfnHook = MakeProcInstance_OFNHOOK( SaveOFNHookProc, Instance );
 #endif
     ok = ( GetSaveFileName( &of ) != 0 );
-#ifndef __NT__
+#ifdef __WINDOWS__
     FreeProcInstance_OFNHOOK( of.lpfnHook );
 #endif
     return( ok );

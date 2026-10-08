@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -148,7 +148,7 @@ bool res_ioerr( FILE *fp, size_t rc )
 }
 
 /* set the WRES library to use compatible functions */
-WResSetRtns(res_open,res_close,res_read,res_write,res_seek,res_tell,res_ioerr,RESALLOC,RESFREE);
+WResSetRtns(res_open,res_close,res_read,res_write,res_seek,res_tell,res_ioerr,MemAlloc,MemFree);
 
 #ifdef __NT__
 
@@ -201,12 +201,12 @@ HINSTANCE WRGetInstance( void )
     return( WRInstance );
 }
 
-void WRAPI WRInit( void )
+void WRAPI WRInit( bool trace, wr_nomem_cb *nomemcb )
 {
     if( ref_count == 0 ) {
         WRDialogMsgInit();
         WRCtl3DInit( WRInstance );
-        WRMemOpen();
+        WRMemOpen( trace, nomemcb );
         WRInitDisplayError( WRInstance );
         JDialogInit();
     }
@@ -248,7 +248,7 @@ WRInfo * WRAPI WRLoadResource( const char *name, WRFileType type )
 #endif
 
     info->file_type = type;
-    if( (info->file_name = WRStrDup( name )) == NULL ) {
+    if( (info->file_name = WRStrdup( name )) == NULL ) {
         WRFreeWRInfo( info );
         return( NULL );
     }
@@ -702,7 +702,7 @@ bool WREDoSaveObjectAs( WRInfo *info, WRSaveIntoData *idata )
           idata->name != NULL && idata->data != NULL);
 
     if( ok ) {
-        ok = !WResAddResource( idata->type, idata->name, idata->MemFlags, 0,
+        ok = !WResAddResource( idata->type, idata->name, idata->res_flags, 0,
                                idata->size, info->dir, &idata->lang, NULL );
     }
 
@@ -741,7 +741,7 @@ bool WREDoSaveImageAs( WRInfo *info, WRSaveIntoData *idata, bool is_icon )
     }
 
     if( ok ) {
-        ok = !WResAddResource( idata->type, idata->name, idata->MemFlags, 0,
+        ok = !WResAddResource( idata->type, idata->name, idata->res_flags, 0,
                                idata->size, info->dir, &idata->lang, NULL );
     }
 
@@ -781,7 +781,7 @@ bool WREDoSaveObjectInto( WRInfo *info, WRSaveIntoData *idata, bool *dup )
     }
 
     if( ok ) {
-        ok = !WResAddResource( idata->type, idata->name, idata->MemFlags, 0,
+        ok = !WResAddResource( idata->type, idata->name, idata->res_flags, 0,
                                idata->size, info->dir, &idata->lang, dup );
         ok = ok && !*dup;
     }
@@ -832,7 +832,7 @@ bool WREDoSaveImageInto( WRInfo *info, WRSaveIntoData *idata, bool *dup, bool is
     }
 
     if( ok ) {
-        ok = !WResAddResource( idata->type, idata->name, idata->MemFlags, 0,
+        ok = !WResAddResource( idata->type, idata->name, idata->res_flags, 0,
                                idata->size, info->dir, &idata->lang, dup );
         ok = ok && !*dup;
     }
@@ -905,7 +905,7 @@ bool WQueryMergeStrings( WResID *rname )
     text = WRAllocRCString( WR_REPLACESTR );
 
     if( text != NULL ) {
-        str = (char *)MemAlloc( strlen( text ) + 1 + 10 ); // space for 10 digits
+        str = MemAlloc( strlen( text ) + 1 + 10 ); // space for 10 digits
         if( str != NULL ) {
             sprintf( str, text, rname->ID.Num );
             ret = MessageBox( HWND_DESKTOP, str, title, style );

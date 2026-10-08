@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -43,6 +43,7 @@
 #include "exeobj.h"
 #include "exeutil.h"
 #include "exerespe.h"
+#include "memfuncs.h"
 
 #include "clibext.h"
 
@@ -64,7 +65,7 @@
 
 typedef struct QueueNode {
     struct QueueNode    *next;
-    PEResDirEntry       *entry;
+    PEResDirEntry       *direntry;
 } QueueNode;
 
 typedef struct DirEntryQueue {
@@ -87,7 +88,7 @@ static void QueueEmpty( DirEntryQueue *queue )
 
     for( curr = queue->front; curr != NULL; curr = next ) {
         next = curr->next;
-        RESFREE( curr );
+        MemFree( curr );
     }
 
     QueueInit( queue );
@@ -99,13 +100,13 @@ static bool QueueIsEmpty( DirEntryQueue *queue )
     return( queue->front == NULL );
 }
 
-static void QueueAdd( DirEntryQueue *queue, PEResDirEntry *entry )
-/****************************************************************/
+static void QueueAdd( DirEntryQueue *queue, PEResDirEntry *direntry )
+/*******************************************************************/
 {
     QueueNode       *new;
 
-    new = RESALLOC( sizeof( QueueNode ) );
-    new->entry = entry;
+    new = MemAllocSafe( sizeof( QueueNode ) );
+    new->direntry = direntry;
     new->next = NULL;
     if( queue->front == NULL ) {
         queue->front = new;
@@ -120,7 +121,7 @@ static PEResDirEntry *QueueRemove( DirEntryQueue *queue )
 /*******************************************************/
 {
     QueueNode       *old;
-    PEResDirEntry   *entry;
+    PEResDirEntry   *direntry;
 
     old = queue->front;
     if( old == NULL ) {
@@ -132,115 +133,114 @@ static PEResDirEntry *QueueRemove( DirEntryQueue *queue )
         queue->back = NULL;
     }
 
-    entry = old->entry;
-    RESFREE( old );
-    return( entry );
+    direntry = old->direntry;
+    MemFree( old );
+    return( direntry );
 } /* QueueRemove */
 
-static void PEResDirEntryInit( PEResDirEntry *entry, int num_entries )
-/********************************************************************/
+static void PEResDirEntryInit( PEResDirEntry *direntry, int num_entries )
+/***********************************************************************/
 {
-    entry->Head.flags = 0;
-    entry->Head.time_stamp = (unsigned_32)time( NULL );
-    entry->Head.major = 0;
-    entry->Head.minor = 0;
-    entry->Head.num_name_entries = 0;
-    entry->Head.num_id_entries = 0;
-    entry->NumUnused = num_entries;
-    entry->Children = RESALLOC( num_entries * sizeof( PEResEntry ) );
+    direntry->Head.flags = 0;
+    direntry->Head.time_stamp = (unsigned_32)time( NULL );
+    direntry->Head.major = 0;
+    direntry->Head.minor = 0;
+    direntry->Head.num_name_entries = 0;
+    direntry->Head.num_id_entries = 0;
+    direntry->NumUnused = num_entries;
+    direntry->Children = MemAllocSafe( num_entries * sizeof( PEResEntry ) );
 }
 
-static void PEResDirAdd( PEResDirEntry *entry, WResID *name,
-                    StringsBlock *strings )
-/**********************************************************/
+static void PEResDirAdd( PEResDirEntry *direntry, WResID *res_id, StringsBlock *strings )
+/***************************************************************************************/
 {
     int             entry_num;
     int_32          name_off;
-    PEResEntry      *curr;
+    PEResEntry      *entry;
 
 
-    entry_num = entry->Head.num_name_entries + entry->Head.num_id_entries;
-    curr = entry->Children + entry_num;
-    if( name->IsName ) {
-        name_off = StringBlockFind( strings, &name->ID.Name );
+    entry_num = direntry->Head.num_name_entries + direntry->Head.num_id_entries;
+    entry = direntry->Children + entry_num;
+    if( res_id->IsName ) {
+        name_off = StringBlockFind( strings, &res_id->ID.Name );
         if( name_off == -1 ) {
             /*
              * this case should not happen
              */
-            curr->Entry.id_name = PE_RESOURCE_MASK_ON | 0;
-            curr->Name = NULL;
+            entry->Entry.id_name = PE_RESOURCE_MASK_ON | 0;
+            entry->Name = NULL;
         } else {
             /*
              * This value will be changed later when we know the size of the
              * the resource directory
              */
-            curr->Entry.id_name = PE_RESOURCE_MASK_ON | name_off;
-            curr->Name = (char *)strings->StringBlock + name_off;
+            entry->Entry.id_name = PE_RESOURCE_MASK_ON | name_off;
+            entry->Name = strings->StringBlock + name_off;
         }
-        entry->Head.num_name_entries++;
+        direntry->Head.num_name_entries++;
     } else {
-        curr->Entry.id_name = name->ID.Num;
-        curr->Name = NULL;
-        entry->Head.num_id_entries++;
+        entry->Entry.id_name = res_id->ID.Num;
+        entry->Name = NULL;
+        direntry->Head.num_id_entries++;
     }
-    entry->NumUnused--;
+    direntry->NumUnused--;
 }
 
 
-static bool PEResDirAddDir( PEResDirEntry *entry, WResID *name,
+static bool PEResDirAddDir( PEResDirEntry *direntry, WResID *res_id,
                     int num_sub_entries, StringsBlock *strings )
 /**************************************************************/
 {
     int             entry_num;
-    PEResEntry      *curr;
+    PEResEntry      *entry;
 
-    if( entry->NumUnused <= 0 )
+    if( direntry->NumUnused <= 0 )
         return( true );
 
-    PEResDirAdd( entry, name, strings );
+    PEResDirAdd( direntry, res_id, strings );
 
-    entry_num = entry->Head.num_name_entries + entry->Head.num_id_entries - 1;
-    curr = entry->Children + entry_num;
-    curr->IsDirEntry = true;
-    PEResDirEntryInit( &curr->u.Dir, num_sub_entries );
+    entry_num = direntry->Head.num_name_entries + direntry->Head.num_id_entries - 1;
+    entry = direntry->Children + entry_num;
+    entry->IsDirEntry = true;
+    PEResDirEntryInit( &entry->u.Dir, num_sub_entries );
 
     return( false );
 }
 
-static bool PEResDirAddData( PEResDirEntry *entry, WResID *name,
+static bool PEResDirAddData( PEResDirEntry *direntry, WResID *res_id,
                     WResDirWindow wind, StringsBlock *strings )
 /***************************************************************/
 {
     int             entry_num;
-    PEResEntry      *curr;
+    PEResEntry      *entry;
 
-    if( entry->NumUnused <= 0 )
+    if( direntry->NumUnused <= 0 )
         return( true );
 
-    PEResDirAdd( entry, name, strings );
+    PEResDirAdd( direntry, res_id, strings );
 
-    entry_num = entry->Head.num_name_entries + entry->Head.num_id_entries - 1;
-    curr = entry->Children + entry_num;
-    curr->IsDirEntry = false;
-    curr->u.Data.Wind = wind;
+    entry_num = direntry->Head.num_name_entries + direntry->Head.num_id_entries - 1;
+    entry = direntry->Children + entry_num;
+    entry->IsDirEntry = false;
+    entry->u.Data.Wind = wind;
     /*
      * The Data.Entry field will be filled in as the resource is writen
      */
     return( false );
 }
 
-static bool AddType( PEResDir *res, WResTypeInfo *typeinfo )
-/**********************************************************/
+static bool AddType( PEResDir *pedir, WResTypeInfo *typeinfo )
+/************************************************************/
 {
-    return( PEResDirAddDir( &res->Root, &typeinfo->TypeName, typeinfo->NumResources, &res->String ) );
+    return( PEResDirAddDir( &pedir->Root, &typeinfo->TypeName, typeinfo->NumResources, &pedir->String ) );
 }
 
-static bool AddLang( PEResDir *res, WResDirWindow wind )
-/******************************************************/
+static bool AddLang( PEResDir *pedir, WResDirWindow wind )
+/********************************************************/
 {
     int                 entry_num;
-    PEResEntry          *currres;
-    PEResEntry          *currtype;
+    PEResEntry          *entry_res;
+    PEResEntry          *entry_type;
     WResLangInfo        *langinfo;
     WResID              lang_id;
 
@@ -248,41 +248,41 @@ static bool AddLang( PEResDir *res, WResDirWindow wind )
     /*
      * find the current type
      */
-    entry_num = res->Root.Head.num_name_entries
-                + res->Root.Head.num_id_entries - 1;
-    currtype = res->Root.Children + entry_num;
+    entry_num = pedir->Root.Head.num_name_entries
+                + pedir->Root.Head.num_id_entries - 1;
+    entry_type = pedir->Root.Children + entry_num;
     /*
      * find the current resource
      */
-    entry_num = currtype->u.Dir.Head.num_name_entries
-                        + currtype->u.Dir.Head.num_id_entries - 1;
-    currres = currtype->u.Dir.Children + entry_num;
+    entry_num = entry_type->u.Dir.Head.num_name_entries
+                        + entry_type->u.Dir.Head.num_id_entries - 1;
+    entry_res = entry_type->u.Dir.Children + entry_num;
 
     lang_id.IsName = false;
     lang_id.ID.Num = MAKELANGID( langinfo->lang.lang, langinfo->lang.sublang );
-    if( PEResDirAddData( &currres->u.Dir, &lang_id, wind, &res->String ) ) {
+    if( PEResDirAddData( &entry_res->u.Dir, &lang_id, wind, &pedir->String ) ) {
         return( true );
     }
     return( false );
 }
 
-static bool AddRes( PEResDir *res, WResDirWindow wind )
-/*****************************************************/
+static bool AddRes( PEResDir *pedir, WResDirWindow wind )
+/*******************************************************/
 {
     int             entry_num;
-    PEResEntry      *currtype;
+    PEResEntry      *entry_type;
     WResResInfo     *resinfo;
 
     resinfo = WResGetResInfo( wind );
     /*
      * find the current type
      */
-    entry_num = res->Root.Head.num_name_entries + res->Root.Head.num_id_entries;
-    currtype = res->Root.Children + entry_num - 1;
+    entry_num = pedir->Root.Head.num_name_entries + pedir->Root.Head.num_id_entries;
+    entry_type = pedir->Root.Children + entry_num - 1;
     /*
      * Add a directory level for the languages
      */
-    if( PEResDirAddDir( &currtype->u.Dir, &resinfo->ResName, resinfo->NumResources, &res->String ) ) {
+    if( PEResDirAddDir( &entry_type->u.Dir, &resinfo->ResName, resinfo->NumResources, &pedir->String ) ) {
         return( true );
     }
 
@@ -290,42 +290,42 @@ static bool AddRes( PEResDir *res, WResDirWindow wind )
 }
 
 
-static bool PEResDirBuild( PEResDir *res, WResDir dir )
-/*****************************************************/
+static bool PEResDirBuild( PEResDir *pedir, WResDir dir )
+/*******************************************************/
 {
     WResDirWindow   wind;
 
     if( WResIsEmpty( dir ) ) {
-        res->Root.Head.num_name_entries = 0;
-        res->Root.Head.num_id_entries = 0;
-        res->Root.Children = NULL;
-        res->ResRVA = 0;
-        res->ResOffset = 0;
-        res->ResSize = 0;
+        pedir->Root.Head.num_name_entries = 0;
+        pedir->Root.Head.num_id_entries = 0;
+        pedir->Root.Children = NULL;
+        pedir->ResRVA = 0;
+        pedir->ResOffset = 0;
+        pedir->ResSize = 0;
     } else {
-        StringBlockBuild( &res->String, dir, true );
-        res->DirSize = sizeof( resource_dir_header );
-        PEResDirEntryInit( &res->Root, WResGetNumTypes( dir ) );
+        StringIDNamesBlockBuild( &pedir->String, dir, true );
+        pedir->DirSize = sizeof( resource_dir_header );
+        PEResDirEntryInit( &pedir->Root, dir->NumTypes );
         for( wind = WResFirstResource( dir ); !WResIsEmptyWindow( wind ); wind = WResNextResource( wind, dir ) ) {
             if( WResIsFirstResOfType( wind ) ) {
-                if( AddType( res, WResGetTypeInfo( wind ) ) ) {
+                if( AddType( pedir, WResGetTypeInfo( wind ) ) ) {
                     return( true );
                 }
             }
             if( WResIsFirstLangOfRes( wind ) ) {
-                if( AddRes( res, wind ) ) {
+                if( AddRes( pedir, wind ) ) {
                     return( true );
                 }
             }
-            AddLang( res, wind );
+            AddLang( pedir, wind );
         }
     }
     return( false );
 }
 
-static RcStatus traverseTree( PEResDir *dir, void *visit_data,
-                    RcStatus (*visit)( PEResEntry *, void *visit_data ) )
-/************************************************************************
+static RcStatus traverseTree( PEResDir *pedir, void *visit_data,
+                    RcStatus (*visit)( PEResEntry *entry, void *visit_data ) )
+/*****************************************************************************
  * NB when a visit function returns an error this function MUST return
  *    without altering errno
  *
@@ -333,25 +333,25 @@ static RcStatus traverseTree( PEResDir *dir, void *visit_data,
  * each entry
  */
 {
-    PEResEntry      *curr_entry;
-    PEResEntry      *last_child;
-    PEResDirEntry   *curr_dir;
+    PEResEntry      *entry;
+    PEResEntry      *entry_last;
+    PEResDirEntry   *direntry;
     DirEntryQueue   queue;
     RcStatus        ret;
 
     QueueInit( &queue );
 
-    QueueAdd( &queue, &dir->Root );
+    QueueAdd( &queue, &pedir->Root );
 
     while( !QueueIsEmpty( &queue ) ) {
-        curr_dir = QueueRemove( &queue );
-        last_child = curr_dir->Children + curr_dir->Head.num_name_entries + curr_dir->Head.num_id_entries;
-        for( curr_entry = curr_dir->Children; curr_entry < last_child; curr_entry++ ) {
-            ret = visit( curr_entry, visit_data );
+        direntry = QueueRemove( &queue );
+        entry_last = direntry->Children + direntry->Head.num_name_entries + direntry->Head.num_id_entries;
+        for( entry = direntry->Children; entry < entry_last; entry++ ) {
+            ret = visit( entry, visit_data );
             if( ret != RS_OK )
                 return( ret );
-            if( curr_entry->IsDirEntry ) {
-                QueueAdd( &queue, &curr_entry->u.Dir );
+            if( entry->IsDirEntry ) {
+                QueueAdd( &queue, &entry->u.Dir );
             }
         }
     }
@@ -436,27 +436,27 @@ static RcStatus SortDirEntry( PEResEntry *entry, void *dummy )
     return( RS_OK );
 } /* SortDirEntry */
 
-static void CompleteTree( PEResDir *dir )
-/***************************************/
+static void CompleteTree( PEResDir *pedir )
+/*****************************************/
 {
     uint_32     curr_offset;
     int         num_entries;
 
-    num_entries = dir->Root.Head.num_name_entries + dir->Root.Head.num_id_entries;
+    num_entries = pedir->Root.Head.num_name_entries + pedir->Root.Head.num_id_entries;
     /*
      * sort the entries at each level
      */
-    qsort( dir->Root.Children, num_entries, sizeof( PEResEntry ), ComparePEResIdName );
-    traverseTree( dir, NULL, SortDirEntry );
+    qsort( pedir->Root.Children, num_entries, sizeof( PEResEntry ), ComparePEResIdName );
+    traverseTree( pedir, NULL, SortDirEntry );
     /*
      * Set curr_offset to the size of the root entry
      */
     curr_offset = sizeof( resource_dir_header ) + num_entries * sizeof( resource_dir_entry );
 
-    traverseTree( dir, &curr_offset, SetEntryOffset );
-    dir->DirSize = curr_offset;
+    traverseTree( pedir, &curr_offset, SetEntryOffset );
+    pedir->DirSize = curr_offset;
 
-    traverseTree( dir, &curr_offset, AdjustNameEntry );
+    traverseTree( pedir, &curr_offset, AdjustNameEntry );
 } /* CompleteTree */
 
 typedef struct CopyResInfo {
@@ -556,18 +556,18 @@ static RcStatus copyPEResources( ExeFileInfo *dst, ResFileInfo *resfiles,
     return( ret );
 } /* copyPEResources */
 
-static RcStatus writeDirEntry( PEResDirEntry *entry, FILE *fp )
-/**************************************************************
+static RcStatus writeDirEntry( PEResDirEntry *direntry, FILE *fp )
+/*****************************************************************
  * NB when an error occurs this function MUST return without altering errno
  */
 {
     int     child_num;
 
-    if( RESWRITE( fp, &entry->Head, sizeof( resource_dir_header ) ) != sizeof( resource_dir_header ) )
+    if( RESWRITE( fp, &direntry->Head, sizeof( resource_dir_header ) ) != sizeof( resource_dir_header ) )
         return( RS_WRITE_ERROR );
 
-    for( child_num = 0; child_num < entry->Head.num_name_entries + entry->Head.num_id_entries; child_num++ ) {
-        if( RESWRITE( fp, entry->Children + child_num, sizeof( resource_dir_entry ) ) != sizeof( resource_dir_entry ) ) {
+    for( child_num = 0; child_num < direntry->Head.num_name_entries + direntry->Head.num_id_entries; child_num++ ) {
+        if( RESWRITE( fp, direntry->Children + child_num, sizeof( resource_dir_entry ) ) != sizeof( resource_dir_entry ) ) {
             return( RS_WRITE_ERROR );
         }
     }
@@ -624,28 +624,28 @@ static RcStatus writeEntry( PEResEntry *entry, void *fp )
     }
 } /* writeEntry */
 
-static RcStatus writeDirectory( PEResDir *dir, FILE *fp )
-/********************************************************
+static RcStatus writeDirectory( PEResDir *pedir, FILE *fp )
+/**********************************************************
  * NB when an error occurs this function MUST return without altering errno
  */
 {
     RcStatus    ret;
 
-    if( RESSEEK( fp, dir->ResOffset, SEEK_SET ) )
+    if( RESSEEK( fp, pedir->ResOffset, SEEK_SET ) )
         return( RS_WRITE_ERROR );
     /*
      * write the root entry header
      */
-    ret = writeDirEntry( &dir->Root, fp );
+    ret = writeDirEntry( &pedir->Root, fp );
     if( ret != RS_OK )
         return( ret );
 
-    ret = traverseTree( dir, &fp, writeEntry );
+    ret = traverseTree( pedir, &fp, writeEntry );
     if( ret != RS_OK )
         return( ret );
 
-    if( dir->String.StringBlock != 0 ) {
-        if( RESWRITE( fp, dir->String.StringBlock, dir->String.StringBlockSize ) != dir->String.StringBlockSize ) {
+    if( pedir->String.StringBlock != NULL ) {
+        if( RESWRITE( fp, pedir->String.StringBlock, pedir->String.StringBlockSize ) != pedir->String.StringBlockSize ) {
             return( RS_WRITE_ERROR );
         }
     }
@@ -653,32 +653,32 @@ static RcStatus writeDirectory( PEResDir *dir, FILE *fp )
     return( RS_OK );
 } /* writeDirectory */
 
-static void FreeSubDir( PEResDirEntry *subdir )
-/*********************************************/
+static void FreeSubDir( PEResDirEntry *direntry )
+/***********************************************/
 {
     int             num_children;
-    PEResEntry      *last_child;
-    PEResEntry      *curr;
+    PEResEntry      *entry_last;
+    PEResEntry      *entry;
 
-    num_children = subdir->Head.num_id_entries + subdir->Head.num_name_entries;
-    last_child = subdir->Children + num_children;
-    for( curr = subdir->Children; curr < last_child; ++curr ) {
-        if( curr->IsDirEntry ) {
-            FreeSubDir( &curr->u.Dir );
+    num_children = direntry->Head.num_id_entries + direntry->Head.num_name_entries;
+    entry_last = direntry->Children + num_children;
+    for( entry = direntry->Children; entry < entry_last; ++entry ) {
+        if( entry->IsDirEntry ) {
+            FreeSubDir( &entry->u.Dir );
         }
     }
 
-    RESFREE( subdir->Children );
+    MemFree( direntry->Children );
 }
 
-static void FreePEResDir( PEResDir *dir )
-/***************************************/
+static void FreePEResDir( PEResDir *pedir )
+/*****************************************/
 {
-    FreeSubDir( &dir->Root );
-    if( dir->String.StringBlock != NULL )
-        RESFREE( dir->String.StringBlock );
-    if( dir->String.StringList != NULL ) {
-        RESFREE( dir->String.StringList );
+    FreeSubDir( &pedir->Root );
+    if( pedir->String.StringBlock != NULL )
+        MemFree( pedir->String.StringBlock );
+    if( pedir->String.StringList != NULL ) {
+        MemFree( pedir->String.StringList );
     }
 }
 
@@ -700,8 +700,8 @@ bool RcPadFile( FILE *fp, size_t pad )
 }
 #endif
 
-static bool padObject( PEResDir *dir, ExeFileInfo *dst, long size )
-/******************************************************************
+static bool padObject( PEResDir *pedir, ExeFileInfo *dst, long size )
+/********************************************************************
  * NB when an error occurs this function MUST return without altering errno
  */
 {
@@ -711,7 +711,7 @@ static bool padObject( PEResDir *dir, ExeFileInfo *dst, long size )
     pos = RESTELL( dst->fp );
     if( pos == -1 )
         return( true );
-    pad = dir->ResOffset + size - pos;
+    pad = pedir->ResOffset + size - pos;
     if( pad > 0 ) {
         RcPadFile( dst->fp, (size_t)pad );
     }
@@ -720,7 +720,7 @@ static bool padObject( PEResDir *dir, ExeFileInfo *dst, long size )
 #if( 0)
     char        zero=0;
 
-    if( RESSEEK( dst->fp, dir->ResOffset, SEEK_SET ) )
+    if( RESSEEK( dst->fp, pedir->ResOffset, SEEK_SET ) )
         return( true );
     if( RESSEEK( dst->fp, size - 1, SEEK_CUR ) )
         return( true );
@@ -731,15 +731,15 @@ static bool padObject( PEResDir *dir, ExeFileInfo *dst, long size )
 #endif
 }
 
-static void fillResourceObj( pe_object *res_obj, PEResDir *dir,
+static void fillResourceObj( pe_object *res_obj, PEResDir *pedir,
                              uint_32 alignment )
 /****************************************************************/
 {
     strncpy( res_obj->name, RESOURCE_OBJECT_NAME, PE_OBJ_NAME_LEN );
     res_obj->virtual_size = 0;
-    res_obj->rva = dir->ResRVA;
-    res_obj->physical_size = ALIGN_VALUE( dir->ResSize, alignment );
-    res_obj->physical_offset = dir->ResOffset;
+    res_obj->rva = pedir->ResRVA;
+    res_obj->physical_size = ALIGN_VALUE( pedir->ResSize, alignment );
+    res_obj->physical_offset = pedir->ResOffset;
     res_obj->relocs_rva = 0;
     res_obj->linnum_rva = 0;
     res_obj->num_relocs = 0;
@@ -747,7 +747,7 @@ static void fillResourceObj( pe_object *res_obj, PEResDir *dir,
     res_obj->flags = PE_OBJ_INIT_DATA | PE_OBJ_READABLE;
 }
 
-static void setDataOffsets( PEResDir *dir, unsigned_32 *curr_rva,
+static void setDataOffsets( PEResDir *pedir, unsigned_32 *curr_rva,
                                 ResFileInfo *resfiles, bool writebyfile )
 /****************************************************************/
 {
@@ -757,11 +757,11 @@ static void setDataOffsets( PEResDir *dir, unsigned_32 *curr_rva,
     if( writebyfile ) {
         for( ; resfiles != NULL; resfiles = resfiles->next ) {
             cookie.curfile = resfiles;
-            traverseTree( dir, &cookie, setDataEntry );
+            traverseTree( pedir, &cookie, setDataEntry );
         }
     } else {
         cookie.curfile = NULL;
-        traverseTree( dir, &cookie, setDataEntry );
+        traverseTree( pedir, &cookie, setDataEntry );
     }
 }
 
@@ -787,16 +787,19 @@ static void reportDuplicateResources( WResMergeError *errs )
 bool BuildPEResourceObject( ExeFileInfo *dst, ResFileInfo *resfiles,
                                 pe_object *res_obj, unsigned_32 rva,
                                 unsigned_32 offset, bool writebyfile )
-/********************************************************************/
+/*********************************************************************
+ * here is linker entry point for building resources in executable
+ * image
+ */
 {
-    PEResDir            *dir;
+    PEResDir            *pedir;
     RcStatus            ret;
     unsigned_32         curr_rva;
     WResMergeError      *errs;
     ResFileInfo         *errres;
     pe_exe_header       *pehdr;
 
-    dir = &dst->u.PEInfo.Res;
+    pedir = &dst->u.PEInfo.Res;
 
     MergeDirectory( resfiles, &errs );
     if( errs != NULL ) {
@@ -804,52 +807,39 @@ bool BuildPEResourceObject( ExeFileInfo *dst, ResFileInfo *resfiles,
         WResFreeMergeErrors( errs );
         return( true );
     }
-    if( PEResDirBuild( dir, resfiles->Dir ) ) {
+    if( PEResDirBuild( pedir, resfiles->Dir ) ) {
         RcError( ERR_INTERNAL, INTERR_ERR_BUILDING_RES_DIR );
         return( true );
     }
-    CompleteTree( dir );
+    CompleteTree( pedir );
     dst->u.PEInfo.Res.ResOffset = offset;
     dst->u.PEInfo.Res.ResRVA = rva;
     curr_rva = rva + dst->u.PEInfo.Res.DirSize + dst->u.PEInfo.Res.String.StringBlockSize;
     curr_rva = ALIGN_VALUE( curr_rva, sizeof( uint_32 ) );
-    setDataOffsets( dir, &curr_rva, resfiles, writebyfile );
-    ret = writeDirectory( dir, dst->fp );
+    setDataOffsets( pedir, &curr_rva, resfiles, writebyfile );
+    ret = writeDirectory( pedir, dst->fp );
     if( ret != RS_OK ) {
         RcError( ERR_WRITTING_FILE, dst->name, strerror( errno ) );
         return( true );
     }
-
+    errres = NULL;
     ret = copyPEResources( dst, resfiles, dst->fp, writebyfile, &errres );
     /*
      * warning - the file names output in these messages could be
      *          incorrect if the -fr switch is in use
      */
     if( ret != RS_OK  ) {
-        switch( ret ) {
-        case RS_WRITE_ERROR:
-            RcError( ERR_WRITTING_FILE, dst->name, strerror( errno ) );
-            break;
-        case RS_READ_ERROR:
-            RcError( ERR_READING_RES, errres->name, strerror( errno )  );
-            break;
-        case RS_OPEN_ERROR:
-            RcError( ERR_CANT_OPEN_FILE, errres->name, strerror( errno ) );
-            break;
-        case RS_READ_INCMPLT:
-            RcError( ERR_UNEXPECTED_EOF, errres->name );
-            break;
-        default:
-            RcError( ERR_INTERNAL, INTERR_UNKNOWN_RCSTATUS );
-            break;
+        if( ret == RS_READ_ERROR ) {
+            ret = RS_READ_ERROR_RES;
         }
+        RcIOError( ret, errres->name, dst->name, errno );
         return( true );
     }
     dst->u.PEInfo.Res.ResSize = curr_rva - rva;
 
     pehdr = dst->u.PEInfo.WinHead;
-    fillResourceObj( res_obj, dir, PE( *pehdr, file_align ) );
-    if( padObject( dir, dst, res_obj->physical_size ) ) {
+    fillResourceObj( res_obj, pedir, PE( *pehdr, file_align ) );
+    if( padObject( pedir, dst, res_obj->physical_size ) ) {
         RcError( ERR_WRITTING_FILE, dst->name, strerror( errno ) );
         return( true );
     }
@@ -859,7 +849,7 @@ bool BuildPEResourceObject( ExeFileInfo *dst, ResFileInfo *resfiles,
     PE_DIRECTORY( *pehdr, PE_TBL_RESOURCE ).rva = res_obj->rva;
     PE_DIRECTORY( *pehdr, PE_TBL_RESOURCE ).size = res_obj->physical_size;
 
-    FreePEResDir( dir );
+    FreePEResDir( pedir );
 
     return( false );
 } /* BuildPEResourceObject */
@@ -895,6 +885,6 @@ bool RcBuildPEResourceObject( ExeFileInfo *dst, ResFileInfo *resfiles )
     }
     return( error );
 }
-#endif
+#endif  /* !defined( INSIDE_WLINK ) */
 
-#endif
+#endif  /* !defined( INSIDE_WLINK ) || defined( _OS2 ) */

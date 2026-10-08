@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -51,7 +51,7 @@
 #include "wndsys.h"
 #include "remcore.h"
 #include "dipimp.h"
-#include "dipinter.h"
+#include "wvdipcli.h"
 #include "dbgwass.h"
 #include "dbgwdisp.h"
 #include "dbgwfil.h"
@@ -457,7 +457,7 @@ void FiniGadget( void )
     int                 i;
 
     for( i = 0; i < WndGadgetHintSize; ++i ) {
-        WndFree( WndGadgetHint[i] );
+        MemFree( WndGadgetHint[i] );
         WndGadgetHint[i] = NULL;
     }
 }
@@ -473,8 +473,10 @@ void InitGadget( void )
         WndGadgetHint[i] = WndLoadString( (gui_res_id)(pointer_uint)WndGadgetHint[i] );
     }
     for( i = 1; i <= WndGadgetArraySize - 1; ++i ) {
-        if( GUIGetHotSpotSize( i, &size ) && size.x > MaxGadgetLength ) {
-            MaxGadgetLength = size.x;
+        if( GUIGetHotSpotSize( i, &size ) ) {
+            if( MaxGadgetLength < size.x ) {
+                MaxGadgetLength = size.x;
+            }
         }
     }
 }
@@ -610,7 +612,7 @@ a_window DbgWndCreate( const char *title, wnd_info *info,
     return( DbgWndCreateTitle( title, info, wndclass, extra, icon, 0, true ) );
 }
 
-static char **RXErrTxt[] = {
+static const char **RXErrTxt[] = {
     LITREF_DUI( ERR_RX_1 ),
     LITREF_DUI( ERR_RX_2 ),
     LITREF_DUI( ERR_RX_3 ),
@@ -674,7 +676,7 @@ void RestoreMainScreen( char *name )
 
 void WndSetWndMainSize( wnd_create_struct *info )
 {
-#ifdef __NT__
+  #ifdef __NT__
     RECT        workarea;
     gui_rect    screen;
     int         sx;
@@ -687,15 +689,15 @@ void WndSetWndMainSize( wnd_create_struct *info )
     sy = screen.height / GetSystemMetrics( SM_CYSCREEN );
     w = sx * (workarea.right - workarea.left);
     h = sy * (workarea.bottom - workarea.top);
-#endif
+  #endif
     info->rect = WndMainRect;
-#ifdef __NT__
+  #ifdef __NT__
     if( info->rect.width == 0 || info->rect.width > w ) {
         info->rect.width = w;
     }
     if( info->rect.height == 0 || info->rect.height > h ) {
         info->rect.height = h;
     }
-#endif
+  #endif
 }
 #endif

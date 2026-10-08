@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -100,7 +100,7 @@ bool WdeSaveObject( WdeResInfo *rinfo, WdeDialogBoxInfo *dbi, char **fname, WRes
     }
 
     if( rdata != NULL ) {
-        WRMemFree( rdata );
+        MemFree( rdata );
     }
 
     WdeSetWaitCursor( false );
@@ -136,7 +136,7 @@ bool WdeSaveObjectAs( WdeResInfo *rinfo, WdeDialogBoxInfo *dbi,
             gf.filter = WdeResSaveFilter;
             fname = WdeGetSaveFileName( &gf );
         } else {
-            fname = WdeStrDup( *file_name );
+            fname = WdeStrdup( *file_name );
         }
         ok = (fname != NULL && *fname != '\0');
     }
@@ -177,7 +177,7 @@ bool WdeSaveObjectAs( WdeResInfo *rinfo, WdeDialogBoxInfo *dbi,
         idata.data = rdata;
         idata.lang = *lang;
         idata.size = size;
-        idata.MemFlags = dbi->MemoryFlags;
+        idata.res_flags = dbi->res_flags;
         ok = WRSaveObjectAs( fname, ftype, &idata );
     }
 
@@ -188,13 +188,13 @@ bool WdeSaveObjectAs( WdeResInfo *rinfo, WdeDialogBoxInfo *dbi,
     if( ok ) {
         if( fname != NULL ) {
             if( *file_name != NULL ) {
-                WRMemFree( *file_name );
+                MemFree( *file_name );
             }
             *file_name = fname;
         }
     } else {
         if( fname != NULL ) {
-            WRMemFree( fname );
+            MemFree( fname );
         }
     }
 
@@ -246,7 +246,7 @@ bool WdeSaveObjectInto( WdeResInfo *rinfo, WdeDialogBoxInfo *dbi,
             idata.data = data;
             idata.lang = *lang;
             idata.size = size;
-            idata.MemFlags = dbi->MemoryFlags;
+            idata.res_flags = dbi->res_flags;
             ok = WRSaveObjectInto( fname, &idata, &dup ) && !dup;
         }
     }
@@ -256,7 +256,7 @@ bool WdeSaveObjectInto( WdeResInfo *rinfo, WdeDialogBoxInfo *dbi,
     }
 
     if( fname != NULL ) {
-        WRMemFree( fname );
+        MemFree( fname );
     }
 
     if( idata.type != NULL ) {

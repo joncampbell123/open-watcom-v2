@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -32,9 +32,10 @@
 
 
 #ifndef __CHFILE_H__
+#define __CHFILE_H__
 
 #include <sys/types.h>
-#include <time.h>
+#include <ctime>
 #include <string>
 #include <vector>
 #include "wio.h"
@@ -101,9 +102,9 @@ public:
                         return( this == &other );
                     }
 
-            int     fstat( struct stat * buf );
-            time_t  get_st_mtime();
-            off_t   get_st_size();
+            int         fstat( struct stat * buf );
+            std::time_t get_st_mtime();
+            off_t       get_st_size();
 
     const   char *  getFileName() const { return _fileName; }
             void    setFileName( const char * fn );
@@ -131,6 +132,5 @@ private:
 
 extern const char * BadWhenceMessage;
 
-#define __CHFILE_H__
 #endif
 

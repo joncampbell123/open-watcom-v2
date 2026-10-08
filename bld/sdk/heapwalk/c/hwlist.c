@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,12 +35,14 @@
 #include <stdarg.h>
 #include <ctype.h>
 #include <dos.h>
+#include "dpmi.h"
 
-typedef struct glb_state{
+
+typedef struct glb_state {
     heap_list           sel;
     heap_list           top;
     BOOL                sel_valid;
-}GlobStateStruct;
+} GlobStateStruct;
 
 static const char       *gbl_types[ 11 ];
 static const char       *res_types[ 15 ];
@@ -306,8 +308,8 @@ static BOOL SaveGlobalListState( HWND boxhwnd, GlobStateStruct *state ) {
 
     if( HeapList == NULL )
         return( FALSE );
-    top = (int)SendMessage( boxhwnd, LB_GETTOPINDEX, 0, 0L );
-    sel = (int)SendMessage( boxhwnd, LB_GETCURSEL, 0, 0L );
+    top = (int)SendMessage( boxhwnd, LB_GETTOPINDEX, 0, 0 );
+    sel = (int)SendMessage( boxhwnd, LB_GETCURSEL, 0, 0 );
     if( sel != LB_ERR && sel < HeapListSize ) {
         state->sel = *HeapList[sel];
         state->sel_valid = TRUE;
@@ -417,7 +419,7 @@ static BOOL AddAllSelectors( WORD sel )
     hl.is_dpmi = TRUE;
     hl.is_added = FALSE;
     while( 1 ) {
-        if( IsValidSelector( sel ) ) {
+        if( PMIsReadSelector( sel ) ) {
             hl.info.mem.sel = sel;
             GetADescriptor( sel, &hl.info.mem.desc );
             ret = AddToHeapList( &hl );
@@ -525,7 +527,7 @@ void InitHeapList( HWND boxhwnd, BOOL keeppos )
     if( !ret ) {
         ErrorBox( HeapWalkMainWindow, STR_CANT_CONSTRUCT_GBL_LIST,
                     MB_OK | MB_ICONINFORMATION );
-        SendMessage( boxhwnd, LB_RESETCONTENT, 0, 0L );
+        SendMessage( boxhwnd, LB_RESETCONTENT, 0, 0 );
     } else {
         SortHeapList();
         ReDisplayHeapList( boxhwnd, keeppos ? &state : NULL );

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -43,7 +43,9 @@
 #include "wdectl3d.h"
 #include "wdegetfn.h"
 #include "wrdll.h"
-#include "wclbproc.h"
+#ifdef __WINDOWS__
+    #include "wclbproc.h"
+#endif
 #include "pathgrp2.h"
 
 #include "clibext.h"
@@ -136,14 +138,14 @@ char *WdeGetFileFilter( void )
 void WdeFreeFileFilter( void )
 {
     if( WdeFileFilter != NULL ) {
-        WRMemFree( WdeFileFilter );
+        MemFree( WdeFileFilter );
     }
 }
 
 void WdeSetFileFilter( char *filter )
 {
     WdeFreeFileFilter();
-    WdeFileFilter = WdeStrDup( filter );
+    WdeFileFilter = WdeStrdup( filter );
 }
 
 char *WdeGetInitialDir( void )
@@ -267,7 +269,7 @@ char *WdeGetFileName( WdeGetFileStruct *gf, DWORD flags, WdeGetFileNameAction ac
     wdeofn.lpstrInitialDir = wde_initial_dir;
     wdeofn.lpstrTitle = wdefntitle;
     wdeofn.Flags = flags;
-#if !defined( __NT__ )
+#ifdef __WINDOWS__
     wdeofn.lpfnHook = MakeProcInstance_OFNHOOK( WdeOpenOFNHookProc, app_inst );
 #endif
 
@@ -325,7 +327,7 @@ char *WdeGetFileName( WdeGetFileStruct *gf, DWORD flags, WdeGetFileNameAction ac
 
     UpdateWindow( WdeGetMainWindowHandle() );
 
-    return( WdeStrDup( wde_file_name ) );
+    return( WdeStrdup( wde_file_name ) );
 }
 
 UINT_PTR CALLBACK WdeOpenOFNHookProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam )

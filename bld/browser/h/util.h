@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -56,10 +57,6 @@ void IdentifyAssassin( CauseOfDeath );
 // a cover for regcomp which checks return values, throws exceptions
 
 void * WBRRegComp( const char * );
-
-// a strdup that uses our memory allocator.
-
-char * WBRStrDup( const char * );
 
 #define __UTIL_H__
 #endif

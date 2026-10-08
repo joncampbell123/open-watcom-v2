@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -30,7 +31,7 @@
 ****************************************************************************/
 
 
-#include <stdio.h>
+#include <cstdio>
 
 #include "chfile.h"
 #include "dialog.h"
@@ -39,31 +40,30 @@
 Dialog * CurrDialog = NULL;
 Binding * CurrBinding = NULL;
 
-int main( int argc, char * argv[] ) {
-
+int main( int argc, char * argv[] )
+{
     try {
-    
+
         if( argc != 5 ) {
-            printf( "Usage: prsdlg <dlg file> <bnd file> <output header> <output source>\n" );
+            std::printf( "Usage: prsdlg <dlg file> <bnd file> <output header> <output source>\n" );
             return 0;
         }
-    
+
         DialogParser dlgparse( argv[1] );
         dlgparse.yyparse();
-    
+
         if( CurrDialog != NULL ) {
             BindingParser bndparse( argv[2] );
             bndparse.yyparse();
+            if( CurrBinding != NULL ) {
+                CurrBinding->bind( CurrDialog, argv[3], argv[4] );
+            }
         }
-    
-        if( CurrDialog != NULL && CurrBinding != NULL ) {
-            CurrBinding->bind( CurrDialog, argv[3], argv[4] );
-        }
-    
+
     } catch( FileExcept oops ) {
         static const char * act[] = { "open", "close", "read", "write", "seek", "tell", "stat" };
-    
-        printf( "Error %sing %s: %d -- %s\n", act[ oops._action ], oops._fileName, oops._error, oops._message );
+
+        std::printf( "Error %sing %s: %d -- %s\n", act[ oops._action ], oops._fileName, oops._error, oops._message );
     }
     return 0;
 }

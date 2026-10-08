@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -48,7 +48,7 @@
 #include "clibext.h"
 
 
-token           CurrToken;
+ssl_token       CurrToken;
 char            TokenBuff[MAX_TOKEN_LEN];
 unsigned        TokenLen;
 FILE            *TblFile;
@@ -66,7 +66,7 @@ void OutByte( unsigned char byte )
     static char Digs[] = "0123456789abcdef";
 
     if( Language ) {
-        if( Offset > 70 ) {
+        if( Offset > 90 ) {
             fputc( '\n', PrsFile );
             Offset = 0;
         }
@@ -80,15 +80,17 @@ void OutByte( unsigned char byte )
     }
 }
 
-void OutWord( unsigned short word )
-/*********************************/
+void OutWord( unsigned word )
+/***************************/
 {
-
-    OutByte( word & 0xff );
-    OutByte( word >> 8 );
+    /*
+     * numbers are output in little-endian format
+     */
+    OutByte( (unsigned char)word );
+    OutByte( (unsigned char)( word >> 8 ) );
 }
 
-void OutStartSect( char *name, unsigned short len )
+void OutStartSect( const char *name, unsigned len )
 /*************************************************/
 {
     if( Language ) {
@@ -110,8 +112,8 @@ void OutEndSect( void )
 }
 
 
-void Dump( char *fmt, ... )
-/*************************/
+void Dump( const char *fmt, ... )
+/*******************************/
 {
     va_list     args;
 
@@ -123,8 +125,8 @@ void Dump( char *fmt, ... )
 }
 
 
-void Error( char *fmt, ... )
-/**************************/
+void Error( const char *fmt, ... )
+/********************************/
 {
     va_list     args;
 
@@ -138,12 +140,6 @@ void Error( char *fmt, ... )
     exit( 1 );
 }
 
-
-static void Usage( void )
-/***********************/
-{
-    Error( "Usage: ssl {-(v|c)} filename[.ssl] [out_file]" );
-}
 
 static void UngetChar( int c )
 /****************************/
@@ -165,8 +161,8 @@ static int NextChar( void )
     return( next );
 }
 
-unsigned short SrcLine( void )
-/****************************/
+unsigned SrcLine( void )
+/**********************/
 {
     return( LineNum );
 }
@@ -179,8 +175,8 @@ int PP_MBCharLen( const char *p )
     return( 1 );
 }
 
-static void OpenFiles( bool verbose, char *path, char *out_file )
-/***************************************************************/
+static void OpenFiles( bool verbose, const char *path, const char *out_file )
+/***************************************************************************/
 {
     pgroup2     pg;
     char        file_name[_MAX_PATH];
@@ -231,11 +227,11 @@ static void CloseFiles( void )
 }
 
 
-unsigned short GetNum( void )
-/***************************/
+int GetNum( void )
+/****************/
 {
     char        *end;
-    unsigned    value;
+    int         value;
 
     if( CurrToken != T_NAME )
         Error( "expecting number" );
@@ -249,18 +245,27 @@ unsigned short GetNum( void )
 void Scan( void )
 /***************/
 {
-    static char Delims[] =
-    {';',':','?','.','#','{','}','[',']','(',')','>','|','*','@',',','=','\0'};
-    static char *Keywords[] =
-    {"input","output","error","type","mechanism","rules",NULL};
+    static const char Delims[] = {
+        #define DELIMS_DEF(a,b) a,
+            DELIMS_DEFS
+        #undef DELIMS_DEF
+        '\0'
+    };
+    static const char *Keywords[] = {
+        #define KEYWORDS_DEF(a,b,c) a,
+            KEYWORDS_DEFS
+        #undef KEYWORDS_DEF
+        NULL
+    };
     int         ch;
     int         term;
-    char        *delim;
-    char        **key;
+    const char  *delim;
+    const char  **key;
 
 
     CurrToken = T_BAD_CHAR;
     TokenLen = 0;
+    TokenBuff[0] = '\0';
     for( ;; ) {
         /* eat white space */
         for( ;; ) {
@@ -290,9 +295,9 @@ void Scan( void )
                 ch = NextChar();
                 if( *delim == ch ) {
                     CurrToken = T_GT_GT;
-                    return;
+                } else {
+                    UngetChar( ch );
                 }
-                UngetChar( ch );
             }
             return;
         }
@@ -310,7 +315,7 @@ void Scan( void )
             if( ch == '\n' || ch == EOF ) {
                 Error( "missing closing quote" );
             }
-            TokenBuff[TokenLen++] = ch;
+            TokenBuff[TokenLen++] = (char)ch;
         }
         TokenBuff[TokenLen] = '\0';
         return;
@@ -318,7 +323,7 @@ void Scan( void )
     /* normal name, maybe keyword */
     CurrToken = T_NAME;
     do {
-        TokenBuff[TokenLen++] = ch;
+        TokenBuff[TokenLen++] = (char)ch;
         ch = NextChar();
     } while( ch == '_' || isalnum( ch ) );
     UngetChar( ch );
@@ -341,7 +346,7 @@ void Scan( void )
             ch = NextChar();
             if( ch == '\n' || ch == EOF )
                 break;
-            TokenBuff[TokenLen++] = ch;
+            TokenBuff[TokenLen++] = (char)ch;
         }
         TokenBuff[TokenLen] = '\0';
         Error( TokenBuff );
@@ -374,43 +379,60 @@ int main( int argc, char *argv[] )
 {
     char        *file;
     bool        verbose;
+    int         rc;
 
-    if( argc < 2 )
-        Usage();
-    file = argv[1];
-    if( strcmp( file, "?" ) == 0 )
-        Usage();
     verbose = false;
     Language = false;
-    for( ;; ) {
-        file = *++argv;
-        if( file == NULL )
-            Usage();
-        if( file[0] != '-' )
-            break;
-        switch( file[1] ) {
-        case 'v':
-            verbose = true;
-            break;
-        case 'c':
-            Language = true;
-            break;
-        default:
-            Usage();
-            break;
+    file = NULL;
+    PP_MemInit();
+    if( argc < 2 ) {
+        rc = 1;
+    } else {
+        file = argv[1];
+        if( strcmp( file, "?" ) == 0 ) {
+            rc = 1;
+        } else {
+            rc = 0;
+            for( ; rc == 0; ) {
+                file = *++argv;
+                if( file == NULL ) {
+                    rc = 1;
+                    break;
+                }
+                if( file[0] != '-' )
+                    break;
+                switch( file[1] ) {
+                case 'v':
+                    verbose = true;
+                    break;
+                case 'c':
+                    Language = true;
+                    break;
+                default:
+                    rc = 1;
+                    break;
+                }
+            }
         }
     }
-    PP_Init( '!', PPSPEC_SSL );
-    PP_IncludePathAdd( PPINCLUDE_SYS, PP_GetEnv( "INCLUDE" ) );
-    OpenFiles( verbose, file, argv[1] );
-    Scan();
-    Parse();
-    GenCode();
-    Dump( " #### CODE ####\n\n" );
-    DumpGenCode();
-    Dump( "\n\n #### DECLS ####\n\n" );
-    DumpSymTbl();
-    CloseFiles();
-    PP_Fini();
-    return( 0 );
+    if( rc == 0 ) {
+        PP_Init( '!', PPSPEC_SSL );
+        PP_IncludePathAdd( PPINCLUDE_SYS, PP_GetEnv( "INCLUDE" ) );
+        OpenFiles( verbose, file, argv[1] );
+        Scan();
+        Parse();
+        GenCode();
+        Dump( " #### CODE ####\n\n" );
+        DumpGenCode();
+        Dump( "\n\n #### DECLS ####\n\n" );
+        DumpSymTbl();
+        FreeGenCode();
+        FreeSymTbl();
+        CloseFiles();
+        PP_Fini();
+    } else {
+        fprintf( stderr, "Usage: ssl {-(v|c)} filename[.ssl] [out_file]\n" );
+    }
+    PP_MemFini();
+    return( rc );
 }

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -95,7 +95,9 @@ static bool     WdeLViewDefineHook( HWND, UINT, WPARAM, LPARAM, DialogStyle );
 /* static variables                                                         */
 /****************************************************************************/
 static HINSTANCE                WdeApplicationInstance;
+#ifdef __WINDOWS__
 static DISPATCH_FN              *WdeLViewDispatch;
+#endif
 static WdeDialogBoxControl      *WdeDefaultLView = NULL;
 static int                      WdeLViewWndExtra;
 static WNDPROC                  WdeOriginalLViewProc;
@@ -134,7 +136,7 @@ OBJPTR WdeMakeLView( OBJPTR parent, RECT *obj_rect, OBJPTR handle, DialogStyle s
 
     new = WdeLVCreate( parent, obj_rect, handle, id, WdeDefaultLView );
 
-    WRMemFree( GETCTL_TEXT( WdeDefaultLView ) );
+    MemFree( GETCTL_TEXT( WdeDefaultLView ) );
     SETCTL_TEXT( WdeDefaultLView, NULL );
 
     return( new );
@@ -152,13 +154,17 @@ OBJPTR WdeLVCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle,
         return( NULL );
     }
 
-    new = (WdeLViewObject *)WRMemAlloc( sizeof( WdeLViewObject ) );
+    new = MemAlloc( sizeof( WdeLViewObject ) );
     if( new == NULL ) {
         WdeWriteTrail( "WdeLViewCreate: Object malloc failed" );
         return( NULL );
     }
 
+#ifdef __WINDOWS__
     OBJ_DISPATCHER_SET( new, WdeLViewDispatch );
+#else
+    OBJ_DISPATCHER_SET( new, WdeLViewDispatcher );
+#endif
 
     new->object_id = id;
 
@@ -172,21 +178,21 @@ OBJPTR WdeLVCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle,
 
     if( new->control == NULL ) {
         WdeWriteTrail( "WdeLViewCreate: CONTROL_OBJ not created!" );
-        WRMemFree( new );
+        MemFree( new );
         return( NULL );
     }
 
     if( !Forward( new->object_handle, SET_OBJECT_INFO, info, NULL ) ) {
         WdeWriteTrail( "WdeLViewCreate: SET_OBJECT_INFO failed!" );
         Destroy( new->control, false );
-        WRMemFree( new );
+        MemFree( new );
         return( NULL );
     }
 
     if( !Forward( new->object_handle, CREATE_WINDOW, NULL, NULL ) ) {
         WdeWriteTrail( "WdeLViewCreate: CREATE_WINDOW failed!" );
         Destroy( new->control, false );
-        WRMemFree( new );
+        MemFree( new );
         return( NULL );
     }
 
@@ -253,14 +259,18 @@ bool WdeLViewInit( bool first )
     SETCTL_TEXT( WdeDefaultLView, NULL );
     SETCTL_CLASSID( WdeDefaultLView, WdeStrToControlClass( WWC_LISTVIEW ) );
 
+#ifdef __WINDOWS__
     WdeLViewDispatch = MakeProcInstance_DISPATCHER( WdeLViewDispatcher, WdeGetAppInstance() );
+#endif
     return( true );
 }
 
 void WdeLViewFini( void )
 {
     WdeFreeDialogBoxControl( &WdeDefaultLView );
+#ifdef __WINDOWS__
     FreeProcInstance_DISPATCHER( WdeLViewDispatch );
+#endif
 }
 
 bool WdeLViewDestroy( WdeLViewObject *obj, bool *flag, bool *p2 )
@@ -272,7 +282,7 @@ bool WdeLViewDestroy( WdeLViewObject *obj, bool *flag, bool *p2 )
         return( false );
     }
 
-    WRMemFree( obj );
+    MemFree( obj );
 
     return( true );
 }
@@ -299,7 +309,7 @@ bool WdeLViewCopyObject( WdeLViewObject *obj, WdeLViewObject **new, OBJPTR handl
         return( false );
     }
 
-    *new = (WdeLViewObject *)WRMemAlloc( sizeof( WdeLViewObject ) );
+    *new = MemAlloc( sizeof( WdeLViewObject ) );
 
     if( *new == NULL ) {
         WdeWriteTrail( "WdeLViewCopyObject: Object malloc failed" );
@@ -317,7 +327,7 @@ bool WdeLViewCopyObject( WdeLViewObject *obj, WdeLViewObject **new, OBJPTR handl
 
     if( !CopyObject( obj->control, &(*new)->control, (*new)->object_handle ) ) {
         WdeWriteTrail( "WdeLViewCopyObject: Control not created!" );
-        WRMemFree( *new );
+        MemFree( *new );
         return( false );
     }
 

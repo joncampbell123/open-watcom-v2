@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,36 +36,36 @@
 #include "layer1.h"
 #include "util.h"
 
-WResTypeNode *__FindType( const WResID *type, WResDir currdir )
+WResTypeNode *__FindType( const WResID *type_id, WResDir dir )
 {
-    WResTypeNode        *currtype;
+    WResTypeNode        *typenode;
 
-    for( currtype = currdir->Head; currtype != NULL; currtype = currtype->Next ) {
-        if( WResIDCmp( type, &(currtype->Info.TypeName) ) ) {
+    for( typenode = dir->Head; typenode != NULL; typenode = typenode->Next ) {
+        if( WResIDCmp( type_id, &(typenode->Info.TypeName) ) ) {
             break;
         }
     }
 
-    return( currtype );
+    return( typenode );
 }
 
-WResResNode *__FindRes( const WResID *name, WResTypeNode *currtype )
+WResResNode *__FindRes( const WResID *res_id, WResTypeNode *typenode )
 {
-    WResResNode         *currres;
+    WResResNode         *resnode;
 
-    for( currres = currtype->Head; currres != NULL; currres = currres->Next ) {
-        if( WResIDCmp( name, &( currres->Info.ResName ) ) ) {
+    for( resnode = typenode->Head; resnode != NULL; resnode = resnode->Next ) {
+        if( WResIDCmp( res_id, &( resnode->Info.ResName ) ) ) {
             break;
         }
     }
 
-    return( currres );
+    return( resnode );
 }
 
-WResLangNode *__FindLang( const WResLangType *lang, WResResNode *curres ) {
-/***********************************************************************/
-
-    WResLangNode        *curlang;
+WResLangNode *__FindLang( const WResLangType *lang, WResResNode *resnode )
+/************************************************************************/
+{
+    WResLangNode        *langnode;
     WResLangType        deflang;
 
     if( lang == NULL ) {
@@ -72,13 +73,13 @@ WResLangNode *__FindLang( const WResLangType *lang, WResResNode *curres ) {
         deflang.sublang = DEF_SUBLANG;
         lang = &deflang;
     }
-    curlang = curres->Head;
-    while( curlang != NULL ) {
-        if( curlang->Info.lang.lang == lang->lang
-            && curlang->Info.lang.sublang == lang->sublang ) break;
-        curlang = curlang->Next;
+    langnode = resnode->Head;
+    while( langnode != NULL ) {
+        if( langnode->Info.lang.lang == lang->lang
+            && langnode->Info.lang.sublang == lang->sublang ) break;
+        langnode = langnode->Next;
     }
-    return( curlang );
+    return( langnode );
 }
 
 /*
@@ -86,28 +87,28 @@ WResLangNode *__FindLang( const WResLangType *lang, WResResNode *curres ) {
  *                    is NULL the first resource with the given name and
  *                    type is returned
  */
-WResDirWindow WResFindResource( const WResID *type, const WResID *name,
-                        WResDir currdir, const WResLangType *lang )
+WResDirWindow WResFindResource( const WResID *type_id, const WResID *res_id,
+                        WResDir dir, const WResLangType *lang )
 {
-    WResDirWindow   newwind;
+    WResDirWindow   wind;
 
-    newwind.CurrType = __FindType( type, currdir );
-    if( newwind.CurrType != NULL ) {
-        newwind.CurrRes = __FindRes( name, newwind.CurrType );
-        if( newwind.CurrRes != NULL ) {
+    wind.CurrType = __FindType( type_id, dir );
+    if( wind.CurrType != NULL ) {
+        wind.CurrRes = __FindRes( res_id, wind.CurrType );
+        if( wind.CurrRes != NULL ) {
             if( lang == NULL ) {
-                newwind.CurrLang = newwind.CurrRes->Head;
+                wind.CurrLang = wind.CurrRes->Head;
             } else {
-                newwind.CurrLang = __FindLang( lang, newwind.CurrRes );
+                wind.CurrLang = __FindLang( lang, wind.CurrRes );
             }
         } else {
-            newwind.CurrLang = NULL;
-            newwind.CurrType = NULL;
+            wind.CurrLang = NULL;
+            wind.CurrType = NULL;
         }
     } else {
-        newwind.CurrRes = NULL;
-        newwind.CurrLang = NULL;
+        wind.CurrRes = NULL;
+        wind.CurrLang = NULL;
     }
 
-    return( newwind );
+    return( wind );
 }

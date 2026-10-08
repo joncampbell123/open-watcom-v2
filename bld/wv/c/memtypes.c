@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,7 +35,7 @@
 #include "dbgdata.h"
 #include "mad.h"
 #include "memtypes.h"
-#include "dbgmem.h"
+#include "memfuncs.h"
 #include "dbgitem.h"
 #include "strutil.h"
 #include "dbgscan.h"
@@ -53,7 +54,7 @@ static walk_result MadMemTypeWalk( mad_type_handle mth, void *d )
         i = data->num_types;
         MADTypeInfo( mth, &mti );
         MADCli( String )( MADTypeName( mth ), TxtBuff, TXT_LEN );
-        data->labels[i] = DupStr( TxtBuff );
+        data->labels[i] = MemStrdupSafe( TxtBuff );
         data->info[i].mth = mth;
         data->info[i].item_width = GetMADMaxFormatWidth( mth );
         data->info[i].item_size = BITS2BYTES( mti.b.bits );
@@ -84,8 +85,8 @@ void MemInitTypes( mad_type_kind mas, mem_type_walk_data *data )
     MADTypeWalk( mas, MadMemTypeWalk, data );
     if( data->num_types == 0 )
         return;
-    data->labels = DbgAlloc( data->num_types * sizeof( *data->labels ) );
-    data->info = DbgAlloc( data->num_types * sizeof( *data->info ) );
+    data->labels = MemAllocSafe( data->num_types * sizeof( *data->labels ) );
+    data->info = MemAllocSafe( data->num_types * sizeof( *data->info ) );
     data->num_types = 0;
     MADTypeWalk( mas, MadMemTypeWalk, data );
 }
@@ -95,10 +96,10 @@ void MemFiniTypes( mem_type_walk_data *data )
     int         i;
 
     for( i = 0; i < data->num_types; ++i ) {
-        DbgFree( data->labels[i] );
+        MemFree( data->labels[i] );
     }
-    DbgFree( data->labels );
-    DbgFree( data->info );
+    MemFree( data->labels );
+    MemFree( data->info );
     data->num_types = 0;
     data->labels = NULL;
     data->info = NULL;

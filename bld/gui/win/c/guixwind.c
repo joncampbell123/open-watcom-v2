@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -58,6 +58,9 @@
 #include "guimdi.h"
 #include "guistat.h"
 #include "guix.h"
+#ifdef __WINDOWS__
+    #include "wclbproc.h"
+#endif
 
 
 #if !defined(__NT__)
@@ -181,18 +184,36 @@ void GUIAPI GUIDestroyWnd( gui_window *wnd )
     }
 }
 
-#ifdef __OS2_PM__
+#if defined( __OS2_PM__ )
 static bool DoRegisterClass( WPI_INST hinst, char *class_name, PFNWP win_call_back, UINT style, int extra )
 {
     return( WinRegisterClass( hinst.hab, class_name, win_call_back, CS_CLIPCHILDREN | CS_SIZEREDRAW | CS_MOVENOTIFY | style, extra ) );
 }
-#else
+#elif defined( __WINDOWS__ )
 static bool DoRegisterClass( WPI_INST hinst, char *class_name, WNDPROCx win_call_back, UINT style, int extra )
 {
     WNDCLASS    wc;
 
     wc.style = style;
     wc.lpfnWndProc = GetWndProc( win_call_back );
+    wc.cbClsExtra = 0;
+    wc.cbWndExtra = extra;
+    wc.hInstance = hinst;
+    wc.hIcon = _wpi_loadicon( NULLHANDLE, IDI_APPLICATION );
+    wc.hCursor = LoadCursor( NULLHANDLE, IDC_ARROW );
+    wc.hbrBackground = NULLHANDLE;
+    wc.lpszMenuName = NULL;
+    wc.lpszClassName = class_name;
+
+    return( RegisterClass( &wc ) != 0 );
+}
+#else
+static bool DoRegisterClass( WPI_INST hinst, char *class_name, WNDPROC win_call_back, UINT style, int extra )
+{
+    WNDCLASS    wc;
+
+    wc.style = style;
+    wc.lpfnWndProc = win_call_back;
     wc.cbClsExtra = 0;
     wc.cbWndExtra = extra;
     wc.hInstance = hinst;
@@ -274,7 +295,7 @@ int GUIXMain( int argc, char *argv[],
 
     GUIMainTouched = true;
 
-    GUIMemOpen();
+    GUIMemOpen();                   /* user replaceable stub function */
 
     GUIStoreArgs( argv, argc );
 
@@ -308,7 +329,7 @@ int GUIXMain( int argc, char *argv[],
 #endif
     GUICleanup();
     GUIDead();                  /* user replaceable stub function */
-    GUIMemClose();
+    GUIMemClose();              /* user replaceable stub function */
     return( ret );
 }
 
@@ -552,11 +573,11 @@ bool GUIXCreateWindow( gui_window *wnd, gui_create_info *dlg_info, gui_window *p
 #if defined( _M_I86 )
     frame_hwnd = WinCreateStdWindow( parent_hwnd, frame_flags | WS_CLIPCHILDREN | WS_CLIPSIBLINGS, &flags,
                                      NULL, (char *)dlg_info->title,
-                                     0, (HMODULE)0, 0, NULL );
+                                     0, 0, 0, NULL );
 #else
     frame_hwnd = WinCreateStdWindow( parent_hwnd, frame_flags | WS_CLIPCHILDREN | WS_CLIPSIBLINGS, &flags,
                                      NULL, dlg_info->title,
-                                     0, (HMODULE)0, 0, NULL );
+                                     0, 0, 0, NULL );
 #endif
     if( frame_hwnd != NULLHANDLE ) {
         oldFrameProc = _wpi_subclasswindow( frame_hwnd, GUIFrameProc );

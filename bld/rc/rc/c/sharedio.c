@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,11 +34,12 @@
 #include "global.h"
 #include <errno.h>
 #include "rcerrors.h"
-#include "autodep.h"
+#include "depinfo.h"
 #include "reserr.h"
 #include "wresdefn.h"
 #include "rcrtns.h"
 #include "rccore.h"
+#include "memfuncs.h"
 
 #include "clibext.h"
 
@@ -74,9 +75,8 @@ bool OpenResFiles( ExtraRes *resnames, ResFileInfo **presfiles, bool *allopen,
 {
     unsigned        rescnt;
     ResFileInfo     *resfile;
-    WResID          *res_name;
-    WResID          *res_type;
-    bool            error;
+    WResID          *res_id;
+    WResID          *type_id;
     bool            dup_discarded;
     WResTargetOS    res_os;
 
@@ -84,18 +84,17 @@ bool OpenResFiles( ExtraRes *resnames, ResFileInfo **presfiles, bool *allopen,
     *presfiles = NULL;
     rescnt = 0;
     for( ; resnames != NULL; resnames = resnames->next ) {
-        resfile = RESALLOC( sizeof( ResFileInfo ) );
+        resfile = MemAllocSafe( sizeof( ResFileInfo ) );
         resfile->next = *presfiles;
         *presfiles = resfile;
-        resfile->Dir = WResInitDir();
+        resfile->Dir = NULL;
         resfile->name = resnames->name;
         resfile->fp = ResOpenFileRO( resfile->name );
         if( resfile->fp == NULL ) {
             RcError( ERR_CANT_OPEN_FILE, resfile->name, LastWresErrStr() );
             goto HANDLE_ERROR;
         }
-        error = WResReadDir2( resfile->fp, resfile->Dir, &dup_discarded, resfile );
-        if( error ) {
+        if( WResReadDir2( resfile->fp, &resfile->Dir, &dup_discarded, resfile ) ) {
             switch( LastWresStatus() ) {
             case WRS_BAD_SIG:
                 RcError( ERR_INVALID_RES, resfile->name );
@@ -116,13 +115,13 @@ bool OpenResFiles( ExtraRes *resnames, ResFileInfo **presfiles, bool *allopen,
         /*
          * remove the autodepend resource
          */
-        res_name = WResIDFromStr( DEP_LIST_NAME );
-        res_type = WResIDFromNum( DEP_LIST_TYPE );
-        WResDelResource( resfile->Dir, res_type, res_name );
-        WResIDFree( res_name );
-        WResIDFree( res_type );
+        res_id = WResIDFromStr( DEP_LIST_NAME );
+        type_id = WResIDFromNum( DEP_LIST_TYPE );
+        WResDelResource( resfile->Dir, type_id, res_id );
+        WResIDFree( res_id );
+        WResIDFree( type_id );
 
-        res_os = WResGetTargetOS( resfile->Dir );
+        res_os = resfile->Dir->TargetOS;
         switch( type ) {
         case EXE_TYPE_NE_WIN:
             if( res_os != WRES_OS_WIN16 ) {
@@ -179,7 +178,7 @@ void CloseResFiles( ResFileInfo *resfiles )
         resfiles = res->next;
         WResFreeDir( res->Dir );
         RCCloseFile( &(res->fp) );
-        RESFREE( res );
+        MemFree( res );
     }
 }
 
@@ -231,7 +230,7 @@ void SharedIOInitStatics( void )
     memset( &errFromWres, 0, sizeof( ErrFrame ) );
 }
 
-void ReportDupResource( WResID *nameid, WResID *typeid, const char *file1,
+void ReportDupResource( WResID *res_id, WResID *type_id, const char *file1,
                            const char *file2, bool warn )
 /*******************************************************************/
 {
@@ -241,10 +240,10 @@ void ReportDupResource( WResID *nameid, WResID *typeid, const char *file1,
     char        typebuf[20];
     unsigned    strbase;
 
-    if( typeid->IsName ) {
-        type = WResIDToStr( typeid );
+    if( type_id->IsName ) {
+        type = WResIDToStr( type_id );
     } else {
-        switch( typeid->ID.Num ) {
+        switch( type_id->ID.Num ) {
         case RESOURCE2INT( RT_CURSOR ):
         case RESOURCE2INT( RT_GROUP_CURSOR ):
             type = "cursor";
@@ -285,20 +284,20 @@ void ReportDupResource( WResID *nameid, WResID *typeid, const char *file1,
             break;
         default:
             type = typebuf;
-            sprintf( type, "%u", (unsigned)typeid->ID.Num );
+            sprintf( type, "%u", (unsigned)type_id->ID.Num );
             break;
         }
     }
 
-    if( nameid->IsName ) {
-        name = WResIDToStr( nameid );
+    if( res_id->IsName ) {
+        name = WResIDToStr( res_id );
     } else {
         name = namebuf;
-        sprintf( name, "%u", (unsigned)nameid->ID.Num );
+        sprintf( name, "%u", (unsigned)res_id->ID.Num );
     }
-    if( !typeid->IsName
-      && typeid->ID.Num == RESOURCE2INT( RT_STRING ) ) {
-        strbase = ( nameid->ID.Num - 1 ) * 16;
+    if( !type_id->IsName
+      && type_id->ID.Num == RESOURCE2INT( RT_STRING ) ) {
+        strbase = ( res_id->ID.Num - 1 ) * 16;
         if( file1 != NULL
           && file2 != NULL ) {
             if( warn ) {
@@ -329,11 +328,11 @@ void ReportDupResource( WResID *nameid, WResID *typeid, const char *file1,
             RcError( ERR_DUPLICATE_RES, type, name );
         }
     }
-    if( nameid->IsName ) {
-        RESFREE( name );
+    if( res_id->IsName ) {
+        MemFree( name );
     }
-    if( typeid->IsName ) {
-        RESFREE( type );
+    if( type_id->IsName ) {
+        MemFree( type );
     }
 }
 

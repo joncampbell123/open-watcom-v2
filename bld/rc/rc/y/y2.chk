@@ -1,0 +1,89 @@
+s/r conflict in state 39 on Y_STRING:
+	shift to 164
+324 (144): string-constant <- string-group (unit production)
+
+Sample sentence(s) for reduce of rule 324:
+  Y_DLGTEMPLATE Y_MLE Y_BEGIN Y_CONTROL Y_NAME Y_INTEGER 
+Y_INTEGER Y_INTEGER Y_INTEGER Y_INTEGER Y_STRING . Y_STRING
+  Will never shift token 'Y_STRING' in this context
+Sample sentence(s) for shift to state 164:
+  Y_DLGTEMPLATE Y_MLE Y_BEGIN Y_CONTROL Y_NAME Y_INTEGER 
+Y_INTEGER Y_INTEGER Y_INTEGER Y_INTEGER Y_STRING .
+Y_STRING Y_END $eof 
+---
+
+s/r conflict in state 46 on Y_MINUS:
+	shift to 169
+349 (15d): shift-exp <- additive-exp (unit production)
+
+Sample sentence(s) for reduce of rule 349:
+  Y_DLGTEMPLATE Y_MLE Y_BEGIN Y_ICON Y_MLE Y_INTEGER Y_INTEGER 
+Y_INTEGER Y_INTEGER Y_INTEGER Y_INTEGER . Y_MINUS
+  Will never shift token 'Y_MINUS' in this context
+Sample sentence(s) for shift to state 169:
+  Y_DLGTEMPLATE Y_MLE Y_BEGIN Y_ICON Y_MLE Y_INTEGER Y_INTEGER 
+Y_INTEGER Y_INTEGER Y_INTEGER Y_INTEGER .
+Y_MINUS Y_INTEGER Y_END $eof 
+---
+
+s/r conflict in state 231 on Y_MINUS:
+	shift to 169
+351 (15f): shift-exp <- shift-exp Y_SHIFTR additive-exp
+
+Sample sentence(s) for reduce of rule 351:
+  Y_DLGTEMPLATE Y_INTEGER Y_SHIFTR Y_INTEGER . Y_MINUS
+  Will never shift token 'Y_MINUS' in this context
+Sample sentence(s) for shift to state 169:
+  Y_DLGTEMPLATE Y_INTEGER Y_SHIFTR Y_INTEGER .
+Y_MINUS Y_INTEGER 
+Y_BEGIN Y_SLIDER Y_INTEGER Y_INTEGER Y_INTEGER Y_INTEGER Y_INTEGER Y_END 
+$eof 
+---
+
+s/r conflict in state 232 on Y_MINUS:
+	shift to 169
+350 (15e): shift-exp <- shift-exp Y_SHIFTL additive-exp
+
+Sample sentence(s) for reduce of rule 350:
+  Y_DLGTEMPLATE Y_INTEGER Y_SHIFTL Y_INTEGER . Y_MINUS
+  Will never shift token 'Y_MINUS' in this context
+Sample sentence(s) for shift to state 169:
+  Y_DLGTEMPLATE Y_INTEGER Y_SHIFTL Y_INTEGER .
+Y_MINUS Y_INTEGER 
+Y_BEGIN Y_SLIDER Y_INTEGER Y_INTEGER Y_INTEGER Y_INTEGER Y_INTEGER Y_END 
+$eof 
+---
+
+s/r conflict in state 501 on Y_COMMA:
+	shift to 203
+107 (06b): comma-opt <-
+
+Sample sentence(s) for reduce of rule 107:
+  Y_DLGTEMPLATE Y_MLE Y_BEGIN Y_VALUESET Y_INTEGER 
+Y_INTEGER Y_INTEGER Y_INTEGER Y_INTEGER . Y_COMMA
+  Will never shift token 'Y_COMMA' in this context
+Sample sentence(s) for shift to state 203:
+  Y_DLGTEMPLATE Y_MLE Y_BEGIN Y_VALUESET Y_INTEGER 
+Y_INTEGER Y_INTEGER Y_INTEGER Y_INTEGER .
+Y_COMMA Y_END $eof 
+---
+
+actions combined:                           50
+parser states:                             603
+# states (1 reduce only):                  285
+reduce/reduce conflicts:                     0
+shift/reduce conflicts:                      5
+number of rules not reduced:                10
+120 (078): resource-options-p <-
+121 (079): resource-options-p <- resource-options-p resource-option
+226 (0e2): menu-item-options <- menu-item-option
+227 (0e3): menu-item-options <- menu-item-options comma-opt menu-item-option
+228 (0e4): menu-item-option <- Y_BITMAP
+229 (0e5): menu-item-option <- Y_HELP
+238 (0ee): diag-options-stmt <- menu-stmt (unit production)
+239 (0ef): diag-options-stmt <- font-stmt (unit production)
+240 (0f0): menu-stmt <- Y_MENU name-id
+248 (0f8): font-stmt <- Y_FONT comma-opt
+bytes used in tables:                    12549
+states with defaults:                      438
+states with parents:                       511

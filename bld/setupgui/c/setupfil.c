@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -232,7 +232,11 @@ static void modify_value_list( VBUF *value, const VBUF *new_value, append_mode a
 /*****************************************************************************************************/
 {
     NoDupPaths( value, new_value );
-    if( !uninstall ) {
+    if( uninstall ) {
+        /*
+         * no action for uninstall
+         */
+    } else {
         if( append == AM_AFTER ) {
             VbufConcChr( value, PATH_LIST_SEP );
             VbufConcVbuf( value, new_value );
@@ -315,7 +319,9 @@ static var_type parse_line( char *line, VBUF *name, VBUF *value, var_type vt_set
      * NAME VALUE
      */
     VbufRewind( name );
-    SKIP_SPACES( line );
+    while( isspace( *(unsigned char *)line ) ) {
+        line++;
+    }
     if( noecho ) {
         if( strnicmp( line, NOECHO_PREFIX, sizeof( NOECHO_PREFIX ) - 1 ) == 0 ) {
             line += sizeof( NOECHO_PREFIX ) - 1;
@@ -323,7 +329,9 @@ static var_type parse_line( char *line, VBUF *name, VBUF *value, var_type vt_set
     }
     if( IS_SETENVCMD( line ) ) {
         line += SETENV_LEN;
-        SKIP_SPACES( line );
+        while( isspace( *(unsigned char *)line ) ) {
+            line++;
+        }
         if( vt_setenv == VAR_ASSIGN_SETENV ) {
             VbufConcStr( name, SETENV );
         }
@@ -333,7 +341,7 @@ static var_type parse_line( char *line, VBUF *name, VBUF *value, var_type vt_set
     }
     s = line;
     for( ; (c = *line) != '\0'; line++ ) {
-        if( isspace( c )
+        if( isspace( (unsigned char)c )
           || c == '=' ) {
             break;
         }
@@ -341,12 +349,16 @@ static var_type parse_line( char *line, VBUF *name, VBUF *value, var_type vt_set
     VbufConcBuffer( name, s, (vbuflen)( line - s ) );
     VbufRewind( value );
     if( *line == '=' ) {
-        SKIP_CHAR_SPACES( line );
+        while( isspace( *(unsigned char *)++line ) ) {
+            /* nothing */
+        }
         VbufConcStr( value, line );
     } else if( vt == vt_setenv ) {
         vt = VAR_ERROR;
     } else {
-        SKIP_SPACES( line );
+        while( isspace( *(unsigned char *)line ) ) {
+            line++;
+        }
         VbufConcStr( value, line );
         vt = VAR_CMD;
     }
@@ -587,18 +599,11 @@ static bool ModFile( const VBUF *orig, const VBUF *new,
      * allocate array to remember variables
      */
     if( num_xxx > 0 ) {
-        found_xxx = GUIMemAlloc( num_xxx * sizeof( bool ) );
-        if( found_xxx == NULL ) {
-            return( false );
-        }
+        found_xxx = MemAllocSafe( num_xxx * sizeof( bool ) );
         memset( found_xxx, false, num_xxx * sizeof( bool ) );
     }
     if( num_env > 0 ) {
-        found_env = GUIMemAlloc( num_env * sizeof( bool ) );
-        if( found_env == NULL ) {
-            GUIMemFree( found_xxx );
-            return( false );
-        }
+        found_env = MemAllocSafe( num_env * sizeof( bool ) );
         memset( found_env, false, num_env * sizeof( bool ) );
     }
     while( fgets( envbuf, sizeof( envbuf ) - 1, fp1 ) != NULL ) {
@@ -610,7 +615,9 @@ static bool ModFile( const VBUF *orig, const VBUF *new,
          * don't process empty lines but keep them in new file
          */
         line = envbuf;
-        SKIP_SPACES( line );
+        while( isspace( *(unsigned char *)line ) ) {
+            line++;
+        }
         if( line[0] != '\0' ) {
             func_xxx( line, num_xxx, found_xxx, uninstall, noecho );
             if( num_env > 0 ) {
@@ -630,7 +637,11 @@ static bool ModFile( const VBUF *orig, const VBUF *new,
         }
     }
     fclose( fp1 );
-    if( !uninstall ) {
+    if( uninstall ) {
+        /*
+         * no action for uninstall
+         */
+    } else {
         /*
          * handle any remaining variables
          */
@@ -638,10 +649,10 @@ static bool ModFile( const VBUF *orig, const VBUF *new,
         FinishEnvironmentLines( fp2, num_env, found_env, false, noecho );
     }
     if( num_xxx > 0 ) {
-        GUIMemFree( found_xxx );
+        MemFree( found_xxx );
     }
     if( num_env > 0 ) {
-        GUIMemFree( found_env );
+        MemFree( found_env );
     }
     if( fclose( fp2 ) != 0 ) {
         MsgBoxVbuf( NULL, "IDS_ERROR_CLOSING", GUI_OK, new );
@@ -697,7 +708,7 @@ static void CheckAutoLine( char *line, int num_auto, bool *found_auto, bool unin
               || ( VbufCompExt( &fext, "com", true ) != 0
               && VbufLen( &fext ) > 0 ) )
                 break;
-            WinDotCom = GUIStrDup( line );
+            WinDotCom = MemStrdupSafe( line );
             line[0] = '\0';
         }
         VbufFree( &fext );
@@ -782,7 +793,7 @@ static void FinishAutoLines( FILE *fp, int num_auto, bool *found_auto, bool batc
     if( WinDotCom != NULL ) {
         fputs( WinDotCom, fp );
         fputc( '\n', fp );
-        GUIMemFree( WinDotCom );
+        MemFree( WinDotCom );
         WinDotCom = NULL;
     }
     VbufFree( &vbuf );
@@ -885,7 +896,7 @@ static void CheckConfigLine( char *line, int num_cfg, bool *found_cfg, bool unin
                 }
                 continue;
             }
-            if( isdigit( VbufString( &line_val )[0] ) ) {
+            if( isdigit( ((unsigned char *)VbufString( &line_val ))[0] ) ) {
                 /*
                  * for files=20, linefers=30 etc
                  */
@@ -1083,7 +1094,7 @@ bool ModifyAutoExec( bool uninstall )
                  */
                 const char  *sys_drv;
                 sys_drv = GetVariableStrVal( "WinSystemDir" );
-                boot_drive = toupper( sys_drv[0] );
+                boot_drive = toupper( *(unsigned char *)sys_drv );
             }
 #else
             /*
@@ -1368,7 +1379,7 @@ static void secondarysearch( const VBUF *filename, VBUF *buffer )
 static void VersionStr( int fh, char *ver, size_t verlen, char *verbuf, size_t verbuflen )
 /****************************************************************************************/
 {
-    static char         Buffer[2048];
+    static char         Buffer[_2K];
     int                 len;
     int                 size;
     char                *p;
@@ -1555,10 +1566,8 @@ bool CheckInstallDLL( const VBUF *name, vhandle var_handle )
     if( ok ) {
         VbufSplitpath( name, &drive, &dir, NULL, NULL );
         VbufMakepath( &path1, &drive, &dir, NULL, NULL );
-//        strupr( path1 );
         VbufSplitpath( &prev_path, &drive, &dir, NULL, NULL );
         VbufMakepath( &path2, &drive, &dir, NULL, NULL );
-//        strupr( path2 );
         VbufSetStr( &dst_dir, GetVariableStrVal( "DstDir" ) );
         if( VbufCompVbuf( &path1, &dst_dir, true ) == 0
           && VbufCompVbuf( &path2, &dst_dir, true ) == 0 ) {
@@ -1600,7 +1609,6 @@ bool CheckInstallDLL( const VBUF *name, vhandle var_handle )
         ok = false;
     }
     if( ok ) {
-//        strupr( &dll_name );
         VbufSetVbuf( &path1, &unpacked_as );
         VbufSetVbuf( &path2, &prev_path );
         CheckVersion( &path1, &drive, &dir );
@@ -1823,7 +1831,7 @@ bool ModifyConfiguration( bool uninstall )
         VbufInit( &changes );
         VbufInit( &temp_vbuf );
 
-        found = GUIMemAlloc( num_env * sizeof( bool ) );
+        found = MemAllocSafe( num_env * sizeof( bool ) );
         memset( found, false, num_env * sizeof( bool ) );
         VbufConcStr( &temp_vbuf, GetVariableStrVal( "DstDir" ) );
         GetOldConfigFileDir( &changes, &temp_vbuf, uninstall );
@@ -1868,7 +1876,7 @@ bool ModifyConfiguration( bool uninstall )
             VbufFree( &cur_val );
             VbufFree( &cur_var );
         }
-        GUIMemFree( found );
+        MemFree( found );
         bRet = true;
 
         VbufFree( &temp_vbuf );
@@ -1895,7 +1903,11 @@ bool ModifyRegAssoc( bool uninstall )
     int     num;
     int     i;
 
-    if( !uninstall ) {
+    if( uninstall ) {
+        /*
+         * no action for uninstall
+         */
+    } else {
         if( DoDialog( "ModifyAssociations" ) == DLG_CANCEL ) {
             return( false );
         }
@@ -1963,7 +1975,9 @@ bool AddToUninstallList( bool uninstall )
     VbufInit( &buf );
     VbufConcStr( &buf, "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\" );
     VbufConcStr( &buf, GetVariableStrVal( "UninstallKeyName" ) );
-    if( !uninstall ) {
+    if( uninstall ) {
+        RegDeleteKey( HKEY_LOCAL_MACHINE, VbufString( &buf ) );
+    } else {
         RegCreateKey( HKEY_LOCAL_MACHINE, VbufString( &buf ), &hkey );
         val = GetVariableStrVal( "UninstallDisplayName" );
         RegSetValueEx( hkey, "DisplayName", 0L, REG_SZ, (LPBYTE)val, (DWORD)( strlen( val ) + 1 ) );
@@ -1990,8 +2004,6 @@ bool AddToUninstallList( bool uninstall )
         RegSetValueEx( hkey, "NoModify", 0L, REG_DWORD, (LPBYTE)&dw, (DWORD)( sizeof( DWORD ) ) );
         RegSetValueEx( hkey, "NoRepair", 0L, REG_DWORD, (LPBYTE)&dw, (DWORD)( sizeof( DWORD ) ) );
         RegCloseKey( hkey );
-    } else {
-        RegDeleteKey( HKEY_LOCAL_MACHINE, VbufString( &buf ) );
     }
     VbufFree( &buf );
 
@@ -2041,10 +2053,10 @@ bool GenerateBatchFile( bool uninstall )
 #endif
             num_env = SimNumEnvironment();
             if( num_env > 0 ) {
-                found_env = GUIMemAlloc( num_env * sizeof( bool ) );
+                found_env = MemAllocSafe( num_env * sizeof( bool ) );
                 memset( found_env, false, num_env * sizeof( bool ) );
                 FinishEnvironmentLines( fp, num_env, found_env, true, NOECHO );
-                GUIMemFree( found_env );
+                MemFree( found_env );
             }
 #if defined( __DOS__ ) || defined( __WINDOWS__ )
             SetBoolVariableByName( "IsOS2DosBox", isOS2DosBox );

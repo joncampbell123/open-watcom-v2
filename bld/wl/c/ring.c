@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -128,7 +128,8 @@ void* RINGNAME(Promote) (       // PROMOTE ELEMENT TO START OF RING
     prev = prv;
     element = elt;
     last = *rhdr;
-    if( prev == NULL || last == prev ) {
+    if( prev == NULL
+      || last == prev ) {
         /* already at front */
         return( element );
     }
@@ -162,7 +163,8 @@ void RINGNAME(Insert) (         // INSERT ELEMENT INTO RING
     verifyNotInRing( *rhdr, relement );
     ielement = insert;
     lelement = *rhdr;
-    if( ( lelement == NULL ) || ( lelement == ielement ) ) {
+    if( ( lelement == NULL )
+      || ( lelement == ielement ) ) {
         RINGNAME(Append)( hdr, element );
     } else if( ielement == NULL ) {  // insert at start of ring
         relement->next = lelement->next;
@@ -372,7 +374,7 @@ void *RINGNAME(Alloc) (         // ALLOCATE AND APPEND NEW ELEMENT
 {
     void *new_element;          // - allocated element
 
-    _ChkAlloc( new_element, size );
+    new_element = MemAllocSafe( size );
     RINGNAME(Append)( hdr, new_element );
     return( new_element );
 }
@@ -383,7 +385,7 @@ void RINGNAME(Dealloc) (        // DE-ALLOCATE A RING ELEMENT
     void *element )             // - element to be de-allocated
 {
     RINGNAME(Prune)( hdr, element );
-    _LnkFree( element );
+    MemFree( element );
 }
 
 
@@ -397,7 +399,7 @@ void RINGNAME(Free) (           // FREE ALL ELEMENTS IN A RING
         elt = RINGNAME(Pop)( hdr );
         if( elt == NULL )
             break;
-        _LnkFree( elt );
+        MemFree( elt );
     }
 }
 

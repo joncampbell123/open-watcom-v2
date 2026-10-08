@@ -53,19 +53,13 @@
 #include "rtdata.h"
 #include "fltsupp.h"
 #include "_environ.h"
+#include "xmain.h"
 
 
 #if defined( _M_I86 )
 #define __FAR __far
 #else
 #define __FAR
-#endif
-
-extern int main( int, char **, char ** );
-#if defined( _M_I86 )
-#pragma aux main __modify [__sp]
-#else
-#pragma aux main __modify [__esp]
 #endif
 
 void    __near *_endheap;                   /* temporary work-around */
@@ -91,13 +85,13 @@ static void _WCI86FAR __null_FPE_rtn( int fpe_type )
 
 #if defined( _M_I86 )
 
-static _WCNORETURN void _Not_Enough_Memory( void )
+static _WCNORETURN void _WCNEAR _Not_Enough_Memory( void )
 {
     __fatal_runtime_error( "Not enough memory", 1 );
     // never return
 }
 
-static void SetupArgs( struct _proc_spawn *cmd )
+static void _WCNEAR SetupArgs( struct _proc_spawn *cmd )
 {
     register char *cp, **cpp, *mp, **argv;
     register int argc, envc, i;
@@ -220,7 +214,7 @@ static char __far * __SLIB_CALLBACK _s_EFG_printf(
     return( (*__EFG_printf)( SLIB2CLIB( char, buffer ), SLIB2CLIB( va_list, pargs ), SLIB2CLIB( void, specs ) ) );
 }
 
-static void setup_slib( void )
+static void _WCNEAR setup_slib( void )
 {
     __f = __MAGIC.sptrs[0];         /* Set pointer to slib function table   */
     __MAGIC.malloc = &_s_malloc;    /* Pointers to slib callback routines   */
@@ -274,13 +268,14 @@ _WCNORETURN void _WCNEAR _CMain( free, n, cmd, stk_bot, pid )
 
 #else   /* !defined( _M_I86 ) */
 
-#pragma aux _s_EFG_printf __far __parm [__eax] [__edx] [__ebx]
-static char *_s_EFG_printf(
-    char    *buffer,
-    va_list *pargs,
-    void    *specs )
+
+#pragma aux _s_EFG_printf __parm [__eax] [__edx] [__ebx]
+static char * __far _s_EFG_printf( char *buffer, va_list *pargs, void *specs )
+/*****************************************************************************
+ * 32-bit QNX callback must be __far function
+ */
 {
-    return (*__EFG_printf)( buffer, pargs, specs );
+    return( (*__EFG_printf)( buffer, pargs, specs ) );
 }
 
 extern unsigned short   _cs( void );
@@ -307,7 +302,7 @@ _WCNORETURN void _WCNEAR _CMain( int argc, char **argv, char **arge )
     environ             = arge;
     tmp.p               = &def_errno;
     __setmagicvar( &tmp.p, _m_errno_ptr );
-    tmp.f               = (void (*)())_s_EFG_printf;
+    tmp.f               = (void (*)())(unsigned)_s_EFG_printf;
     __setmagicvar( &tmp.f, _m_efgfmt_off );
     tmp.s               = _cs();
     __setmagicvar( &tmp.s, _m_efgfmt_cs );

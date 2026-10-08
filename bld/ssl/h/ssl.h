@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -32,104 +33,117 @@
 #include <stdio.h>
 #include "bool.h"
 #include "sslops.h"
+#include "ppmem.h"
 
-#include "pushpck1.h"
 
 #define MAX_TOKEN_LEN   256
 
+#define KEYWORDS_DEFS \
+    KEYWORDS_DEF( "input",     T_INPUT,  CLASS_INPUT ) \
+    KEYWORDS_DEF( "output",    T_OUTPUT, CLASS_OUTPUT ) \
+    KEYWORDS_DEF( "error",     T_ERROR,  CLASS_ERROR ) \
+    KEYWORDS_DEF( "type",      T_TYPE,   CLASS_TYPE ) \
+    KEYWORDS_DEF( "mechanism", T_MECH,   CLASS_SEM ) \
+    KEYWORDS_DEF( "rules",     T_RULES,  CLASS_RULE )
+
+#define DELIMS_DEFS \
+    DELIMS_DEF( ';', T_SEMI ) \
+    DELIMS_DEF( ':', T_COLON ) \
+    DELIMS_DEF( '?', T_QUESTION ) \
+    DELIMS_DEF( '.', T_DOT ) \
+    DELIMS_DEF( '#', T_POUND ) \
+    DELIMS_DEF( '{', T_LEFT_BRACE ) \
+    DELIMS_DEF( '}', T_RITE_BRACE ) \
+    DELIMS_DEF( '[', T_LEFT_BRACKET ) \
+    DELIMS_DEF( ']', T_RITE_BRACKET ) \
+    DELIMS_DEF( '(', T_LEFT_PAREN ) \
+    DELIMS_DEF( ')', T_RITE_PAREN ) \
+    DELIMS_DEF( '>', T_GT ) \
+    DELIMS_DEF( '|', T_OR ) \
+    DELIMS_DEF( '*', T_STAR ) \
+    DELIMS_DEF( '@', T_AT ) \
+    DELIMS_DEF( ',', T_COMMA ) \
+    DELIMS_DEF( '=', T_EQUALS )
+
+#define NO_LOCATION ((unsigned)-1)
+
 typedef enum {
     /* single character delimiters */
-    T_SEMI,
-    T_COLON,
-    T_QUESTION,
-    T_DOT,
-    T_POUND,
-    T_LEFT_BRACE,
-    T_RITE_BRACE,
-    T_LEFT_BRACKET,
-    T_RITE_BRACKET,
-    T_LEFT_PAREN,
-    T_RITE_PAREN,
-    T_GT,
-    T_OR,
-    T_STAR,
-    T_AT,
-    T_COMMA,
-    T_EQUALS,
+    #define DELIMS_DEF(a,b) b,
+        DELIMS_DEFS
+    #undef DELIMS_DEF
     /* two character delimiters */
     T_GT_GT,
     /* keywords */
-    T_INPUT,
-    T_OUTPUT,
-    T_ERROR,
-    T_TYPE,
-    T_MECH,
-    T_RULES,
+    #define KEYWORDS_DEF(a,b,c) b,
+        KEYWORDS_DEFS
+    #undef KEYWORDS_DEF
     /* other things */
     T_LITERAL,
     T_NAME,
     T_BAD_CHAR,
     T_EOF,
-} token;
+} ssl_token;
 
 typedef enum {
-    CLASS_INPUT,
-    CLASS_OUTPUT,
+    #define KEYWORDS_DEF(a,b,c) c,
+        KEYWORDS_DEFS
+    #undef KEYWORDS_DEF
     CLASS_INOUT,
-    CLASS_ERROR,
-    CLASS_TYPE,
-    CLASS_SEM,
-    CLASS_RULE,
     CLASS_ENUMS,
     CLASS_ANY,
-} class;
-
-#define NO_LOCATION ((unsigned short)-1)
+} ssl_class;
 
 typedef struct instruction {
-    struct instruction      *flink, *blink;
-    unsigned short          location;
-    unsigned short          operand;
-    void                    *ptr;
-    op_code                 ins;
+    struct instruction      *flink;
+    struct instruction      *blink;
+    union {
+        struct instruction  *lbl;
+        struct choice_entry *choice;
+    } u;
+    union {
+        int                 operand;
+        int                 reference;
+    } u1;
+    unsigned                location;
+    op_code                 opcode;
+    bool                    is_long;
 } instruction;
 
 typedef struct choice_entry {
     struct choice_entry     *link;
-    unsigned short          value;
     instruction             *lbl;
+    int                     value;
 } choice_entry;
 
 typedef union {
-    unsigned        token;          /* for tokens */
+    int             token;          /* for tokens */
     struct {                        /* for semantic actions */
-        unsigned short value;
-        struct symbol  *ret;
-        struct symbol  *parm;
+        struct symbol   *ret;
+        struct symbol   *parm;
+        int             value;
     }               sem;
     struct {                        /* for rules */
-        instruction *lbl;
-        struct symbol    *ret;
-        unsigned short   exported        : 1;
-        unsigned short   defined         : 1;
+        instruction     *lbl;
+        struct symbol   *ret;
+        unsigned        exported    : 1;
+        unsigned        defined     : 1;
     }               rule;
     struct {                        /* for type values */
         struct symbol   *type;
-        unsigned short  value;
+        int             value;
     }               enums;
 } values;
 
 typedef struct symbol {
-    struct  symbol  *link;
+    struct symbol   *link;
     char            *name;
     char            *alias;
     values          v;
-    class           typ;
+    ssl_class       typ;
 } symbol;
 
-#include "poppck.h"
-
-extern token           CurrToken;
+extern ssl_token       CurrToken;
 extern char            TokenBuff[MAX_TOKEN_LEN];
 extern unsigned        TokenLen;
 extern FILE            *PrsFile;

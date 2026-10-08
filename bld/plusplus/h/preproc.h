@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -58,6 +58,16 @@
 #define IS_PPOPERATOR_PRAGMA(s,l)   ((CompFlags.extensions_enabled || (CompVars.cxxstd > STD_CXX98 )) \
                                     && l == (sizeof(PPOPERATOR_PRAGMA) - 1) \
                                     && memcmp(s, PPOPERATOR_PRAGMA, sizeof(PPOPERATOR_PRAGMA)) == 0)
+
+#define TYPE_MTOKEN     unsigned char
+#define SIZE_MTOKEN     sizeof(TYPE_MTOKEN)
+#define GET_MTOKEN(p)   (*(TYPE_MTOKEN *)(p))
+#define SET_MTOKEN(p,v) (*(TYPE_MTOKEN *)(p)=(v))
+
+#define TYPE_MPARM      unsigned char
+#define SIZE_MPARM      sizeof(TYPE_MPARM)
+#define GET_MPARM(p)    (*(TYPE_MPARM *)(p))
+#define SET_MPARM(p,v)  (*(TYPE_MPARM *)(p)=(v))
 
 enum {
     EL_NEW_LINE = 0x01,
@@ -153,6 +163,9 @@ bool MacroExists(               // TEST IF MACRO EXISTS
     const char *macname,        // - macro name
     size_t len )                // - length of macro name
 ;
+void DumpAllMacros(             // DUMP ALL PREDEFINED MACROS
+    void )
+;
 void MacroFini(                 // MACRO PROCESSING -- COMPLETION
     void )
 ;
@@ -246,7 +259,7 @@ void DoMacroExpansion(          // EXPAND A MACRO
 void Expecting(                 // ISSUE EXPECTING ERROR FOR A TOKEN
     const char *a_token )       // - required token
 ;
-const char *TokenString(        // RETURN A PRINTABLE STRING FOR CURRENT TOK
+const char *CurTokenString(     // RETURN A PRINTABLE STRING FOR CURRENT TOK
     void )
 ;
 bool ExpectingToken(            // ISSUE EXPECTING ERROR FOR A TOKEN

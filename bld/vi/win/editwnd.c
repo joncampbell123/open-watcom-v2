@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -37,10 +37,12 @@
 #include "vifont.h"
 #include "color.h"
 #include "utils.h"
-#include "wclbproc.h"
 #include "winifini.h"
 #include "myprintf.h"
 // #include "mdisim.h"
+#ifdef __WINDOWS__
+    #include "wclbproc.h"
+#endif
 
 
 /* Local Windows CALLBACK function prototypes */
@@ -67,7 +69,11 @@ bool EditWindowInit( void )
     WNDCLASS    wc;
 
     wc.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
+#ifdef __WINDOWS__
     wc.lpfnWndProc = GetWndProc( EditWindowProc );
+#else
+    wc.lpfnWndProc = EditWindowProc;
+#endif
     wc.cbClsExtra = 0;
     wc.cbWndExtra = EXTRA_WIN_DATA;
     wc.hInstance = InstanceHandle;
@@ -507,7 +513,7 @@ static void sendDragMessage( HWND hwnd )
 {
     if( timerID ) {
         if( isMouseButtonDown() ) {
-            SendMessage( hwnd, WM_MOUSEMOVE, 0, MAKELONG( MouseX, MouseY ) );
+            SendMessage( hwnd, WM_MOUSEMOVE, 0, MAKELPARAM( MouseX, MouseY ) );
         } else {
             /* it's possible that someone ate our WM_BUTTONUP
              * or something stupid (WVIDEO perhaps...) */
@@ -740,7 +746,7 @@ WINEXPORT LRESULT CALLBACK EditWindowProc( window_id wid, UINT msg, WPARAM wpara
 
     switch( msg ) {
     case WM_CREATE:
-        wd = MemAlloc( sizeof( window_data ) );
+        wd = MemAllocSafe( sizeof( window_data ) );
         WINDOW_TO_ID( wid, (LONG_PTR)&EditWindow );
         DATA_TO_ID( wid, (LONG_PTR)wd );
         return( 0 );
@@ -929,12 +935,14 @@ WINEXPORT BOOL CALLBACK ResizeExtra( window_id wid, LPARAM lparam )
  */
 void ResetExtraRects( void )
 {
-    WNDENUMPROC     wndenumproc;
-
     if( !BAD_ID( edit_container_window_id ) ) {
-        wndenumproc = MakeProcInstance_WNDENUM( ResizeExtra, InstanceHandle );
-        EnumChildWindows( edit_container_window_id, wndenumproc, 0L );
+#ifdef __WINDOWS__
+        WNDENUMPROC wndenumproc = MakeProcInstance_WNDENUM( ResizeExtra, InstanceHandle );
+        EnumChildWindows( edit_container_window_id, wndenumproc, 0 );
         FreeProcInstance_WNDENUM( wndenumproc );
+#else
+        EnumChildWindows( edit_container_window_id, ResizeExtra, 0 );
+#endif
     }
 
 } /* ResetExtraRects */

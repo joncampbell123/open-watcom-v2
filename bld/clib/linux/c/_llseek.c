@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2019 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -31,11 +31,12 @@
 
 
 #include "variety.h"
+#include "seterrno.h"
 #include <unistd.h>
 #include "linuxsys.h"
 
 
-_WCRTLINK int _llseek( unsigned int __fildes, unsigned long __hi, unsigned long __lo, loff_t *__res, unsigned int __whence)
+_WCRTLINK int _llseek( unsigned int __fildes, unsigned long __hi, unsigned long __lo, off64_t *__res, unsigned int __whence)
 {
     syscall_res res = sys_call5( SYS__llseek, (u_long)__fildes, __hi, __lo, (u_long)__res, (u_long)__whence );
     __syscall_return( int, res );

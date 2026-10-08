@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -44,7 +44,6 @@
 #include "rcerrors.h"
 #include "preproc.h"
 #include "reserr.h"
-#include "autodep.h"
 #include "errprt.h"
 #include "util.h"
 #include "rcldstr.h"
@@ -113,7 +112,7 @@ static FileStack    InStack;
 static void freeCurrentFileName( void )
 /*************************************/
 {
-    RESFREE( InStack.Current->Filename );
+    MemFree( InStack.Current->Filename );
     InStack.Current->Filename = NULL;
 }
 
@@ -151,14 +150,12 @@ static file_loc *addLocation( file_loc *prev, const char *filename )
 
     if( prev == NULL
       || strcmp( prev->Filename, filename ) != 0 ) {
-        loc = RESALLOC( sizeof( file_loc ) );
-        if( loc != NULL ) {
-            loc->prev = prev;
-            loc->IsCOrHFile = checkCurrentFileType( filename );
-            loc->Filename = RESALLOC( strlen( filename ) + 1 );
-            strcpy( loc->Filename, filename );
-            return( loc );
-        }
+        loc = MemAllocSafe( sizeof( file_loc ) );
+        loc->prev = prev;
+        loc->IsCOrHFile = checkCurrentFileType( filename );
+        loc->Filename = MemAllocSafe( strlen( filename ) + 1 );
+        strcpy( loc->Filename, filename );
+        return( loc );
     }
     return( prev );
 }
@@ -171,8 +168,8 @@ static file_loc *removeLocation( file_loc *loc )
     prev = NULL;
     if( loc != NULL ) {
         prev = loc->prev;
-        RESFREE( loc->Filename );
-        RESFREE( loc );
+        MemFree( loc->Filename );
+        MemFree( loc );
     }
     return( prev );
 }
@@ -202,7 +199,7 @@ static bool openNewFile( const char *filename )
 /*********************************************/
 {
     InStack.Current->fp = NULL;
-    InStack.Current->Filename = RESALLOC( strlen( filename ) + 1 );
+    InStack.Current->Filename = MemAllocSafe( strlen( filename ) + 1 );
     strcpy( InStack.Current->Filename, filename );
     InStack.Current->Offset = 0;
     /*
@@ -261,7 +258,7 @@ static bool RcIoPopTextInputFile( void )
 static void RcIoTextInputInit( void )
 /***********************************/
 {
-    InStack.Buffer = RESALLOC( IO_BUFFER_SIZE );
+    InStack.Buffer = MemAllocSafe( IO_BUFFER_SIZE );
     InStack.BufferSize = IO_BUFFER_SIZE;
     InStack.Current = InStack.Stack;
     InStack.Location = NULL;
@@ -274,7 +271,7 @@ static bool RcIoTextInputShutdown( void )
         InStack.Location = removeLocation( InStack.Location );
     }
     if( InStack.Buffer != NULL ) {
-        RESFREE( InStack.Buffer );
+        MemFree( InStack.Buffer );
         InStack.Buffer = NULL;
         InStack.BufferSize = 0;
         if( IsEmptyFileStack( InStack ) ) {
@@ -407,6 +404,7 @@ int RcIoGetChar( void )
                  * this error is reported in readCurrentFileBuffer so just terminate
                  */
                 RcFatalError( ERR_NO_MSG );
+                /* never return */
             }
         }
         if( InStack.NextChar >= InStack.EofChar ) {
@@ -425,14 +423,14 @@ int RcIoGetChar( void )
                  * this error is reported in readCurrentFileBuffer so just terminate
                  */
                 RcFatalError( ERR_NO_MSG );
-            } else {
-                /*
-                 * return \n which will end the current token properly
-                 * if it it is not a string and end it with a runaway
-                 * string error for strings
-                 */
-                return( '\n' );
+                /* never return */
             }
+            /*
+             * return \n which will end the current token properly
+             * if it it is not a string and end it with a runaway
+             * string error for strings
+             */
+            return( '\n' );
         }
     }
     return( GetLogChar() );
@@ -505,11 +503,11 @@ static bool Pass1InitRes( void )
     }
 
     if( CmdLineParms.TargetOS == RC_TARGET_OS_WIN16 ) {
-        WResSetTargetOS( CurrResFile.dir, WRES_OS_WIN16 );
+        CurrResFile.dir->TargetOS = WRES_OS_WIN16;
     } else if( CmdLineParms.TargetOS == RC_TARGET_OS_WIN32 ) {
-        WResSetTargetOS( CurrResFile.dir, WRES_OS_WIN32 );
+        CurrResFile.dir->TargetOS = WRES_OS_WIN32;
     } else {
-        WResSetTargetOS( CurrResFile.dir, WRES_OS_OS2 );
+        CurrResFile.dir->TargetOS = WRES_OS_OS2;
     }
 
     if( CmdLineParms.MSResFormat ) {
@@ -517,7 +515,7 @@ static bool Pass1InitRes( void )
         /*
          * write null header here if it is win32
          */
-        if( CmdLineParms.TargetOS == RC_TARGET_OS_WIN32 ) {
+        if( CmdLineParms.iswin32 ) {
             null_loc.start = SemStartResource();
             null_loc.len = SemEndResource( null_loc.start );
             null_id.IsName = false;
@@ -660,7 +658,7 @@ static void Pass1ResFileShutdown( void )
             if( CurrResFile.IsWatcomRes ) {
                 error = WResWriteDir( CurrResFile.fp, CurrResFile.dir );
                 if( error ) {
-                    RcError( ERR_WRITTING_RES_FILE, CurrResFile.filename, LastWresErrStr() );
+                    RcError( ERR_WRITTING_RES, CurrResFile.filename, LastWresErrStr() );
                 }
             }
             if( !error ) {

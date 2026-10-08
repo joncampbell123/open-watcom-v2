@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -58,7 +58,7 @@ static void          WdeFreeInfoData( WdeResInfo * );
 static WResResNode  *WdeRenameWResResNode( WResTypeNode *, WResResNode *, WResID * );
 static bool          WdeAddResToType( WResTypeNode *, WResResNode * );
 static WResTypeNode *WdeAddTypeToDir( WResDir, uint_16 );
-static WResResNode  *WdeCreateWResResNode( uint_16, WResID *, WResLangType *, uint_16, uint_32, uint_32, void * );
+static WResResNode  *WdeCreateWResResNode( uint_16, WResID *, WResLangType *, ResMemFlags, uint_32, uint_32, void * );
 static WResTypeNode *WdeAllocWResTypeNode( uint_16 );
 static WResResNode  *WdeAllocWResResNode( uint_16, WResID * );
 
@@ -172,18 +172,18 @@ bool WdeInfoToData( WdeResInfo *info )
             if( data != NULL ) {
                 rnode = WdeRenameWResResNode( dnode, ditem->rnode, ditem->dialog_name );
                 if( rnode == NULL ) {
-                    WRMemFree( data );
+                    MemFree( data );
                     return( false );
                 }
                 ditem->rnode = rnode;
                 ditem->lnode->data = data;
                 ditem->lnode->Info.Length = dsize;
                 ditem->lnode->Info.Offset = 0;
-                ditem->lnode->Info.MemoryFlags = ditem->dialog_info->MemoryFlags;
+                ditem->lnode->Info.res_flags = ditem->dialog_info->res_flags;
             }
         } else {
             rnode = WdeCreateWResResNode( 1, ditem->dialog_name, &lang,
-                                          ditem->dialog_info->MemoryFlags, 0,
+                                          ditem->dialog_info->res_flags, 0,
                                           dsize, data );
             if( rnode != NULL ) {
                 if( info->info->dir == NULL ) {
@@ -198,13 +198,13 @@ bool WdeInfoToData( WdeResInfo *info )
                     ditem->rnode = rnode;
                     ditem->lnode = rnode->Head;
                 } else {
-                    WRMemFree( rnode->Head );
-                    WRMemFree( rnode );
-                    WRMemFree( data );
+                    MemFree( rnode->Head );
+                    MemFree( rnode );
+                    MemFree( data );
                     return( false );
                 }
             } else {
-                WRMemFree( data );
+                MemFree( data );
                 return( false );
             }
 
@@ -237,7 +237,7 @@ WdeDialogBoxInfo *WdeGetItemDBI( WdeResDlgItem *ditem )
             name = WdeCopyWResID( name );
             if( name != NULL ) {
                 if( ditem->dialog_name != NULL ) {
-                    WRMemFree( ditem->dialog_name );
+                    MemFree( ditem->dialog_name );
                 }
                 ditem->dialog_name = name;
             }
@@ -304,7 +304,7 @@ WResResNode *WdeRenameWResResNode( WResTypeNode *tnode, WResResNode *rnode, WRes
         if( rnode->Next != NULL ) {
             rnode->Next->Prev = new_rnode;
         }
-        WRMemFree( rnode );
+        MemFree( rnode );
     }
 
     return( new_rnode );
@@ -360,7 +360,7 @@ WResTypeNode *WdeAllocWResTypeNode( uint_16 type )
 {
     WResTypeNode *tnode;
 
-    tnode = (WResTypeNode *)WRMemAlloc( sizeof( WResTypeNode ) );
+    tnode = MemAlloc( sizeof( WResTypeNode ) );
 
     if( tnode != NULL ) {
         memset( tnode, 0, sizeof( WResTypeNode ) );
@@ -370,7 +370,7 @@ WResTypeNode *WdeAllocWResTypeNode( uint_16 type )
     return( tnode );
 }
 
-static WResLangNode *WdeAllocWResLangNode( WResLangType *lang, uint_16 memflags,
+static WResLangNode *WdeAllocWResLangNode( WResLangType *lang, ResMemFlags res_flags,
                                     uint_32 offset, uint_32 dsize, char *data )
 {
     WResLangNode *lnode;
@@ -379,14 +379,14 @@ static WResLangNode *WdeAllocWResLangNode( WResLangType *lang, uint_16 memflags,
         return( NULL );
     }
 
-    lnode = (WResLangNode *)WRMemAlloc( sizeof( WResLangNode ) );
+    lnode = MemAlloc( sizeof( WResLangNode ) );
 
     if( lnode != NULL ) {
         lnode->Next = NULL;
         lnode->Prev = NULL;
         lnode->data = data;
         lnode->Info.lang = *lang;
-        lnode->Info.MemoryFlags = memflags;
+        lnode->Info.res_flags = res_flags;
         lnode->Info.Offset = offset;
         lnode->Info.Length = dsize;
     }
@@ -395,7 +395,7 @@ static WResLangNode *WdeAllocWResLangNode( WResLangType *lang, uint_16 memflags,
 }
 
 WResResNode *WdeCreateWResResNode( uint_16 num_resources, WResID *name,
-                                   WResLangType *lang, uint_16 memflags,
+                                   WResLangType *lang, ResMemFlags res_flags,
                                    uint_32 offset, uint_32 dsize,
                                    void *data )
 {
@@ -403,14 +403,14 @@ WResResNode *WdeCreateWResResNode( uint_16 num_resources, WResID *name,
     WResLangNode *lnode;
 
     rnode = NULL;
-    lnode = WdeAllocWResLangNode( lang, memflags, offset, dsize, data );
+    lnode = WdeAllocWResLangNode( lang, res_flags, offset, dsize, data );
     if( lnode != NULL ) {
         rnode = WdeAllocWResResNode( num_resources, name );
         if( rnode != NULL ) {
             rnode->Head = lnode;
             rnode->Tail = lnode;
         } else {
-            WRMemFree( lnode );
+            MemFree( lnode );
         }
     }
 
@@ -432,7 +432,7 @@ WResResNode *WdeAllocWResResNode( uint_16 num_resources, WResID *name )
             len += name->ID.Name.NumChars - 1;
         }
     }
-    new_rnode = (WResResNode *)WRMemAlloc( len );
+    new_rnode = MemAlloc( len );
     if( new_rnode != NULL ) {
         new_rnode->Head = NULL;
         new_rnode->Tail = NULL;

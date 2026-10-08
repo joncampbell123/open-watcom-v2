@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -57,7 +57,6 @@ static size_t readbytes( b_file *io, char *buff, size_t len )
         FSetEof( io );
         return( READ_ERROR );
     }
-    io->phys_offset += (unsigned long)bytes_read;
     return( bytes_read );
 }
 
@@ -67,13 +66,11 @@ static  int     FillBuffer( b_file *io )
 {
     size_t      bytes_read;
 
-    bytes_read = readbytes( io, io->buffer, io->buff_size );
+    bytes_read = readbytes( io, io->buffer, IO_BUFFER );
     if( bytes_read == READ_ERROR )
         return( -1 );
     // setup the buffer
     io->b_curs = 0;
-    io->attrs |= READ_AHEAD;
-    io->high_water = 0;
     io->read_len = bytes_read;
     return( 0 );
 }
@@ -87,19 +84,14 @@ size_t FGetRecText( b_file *io, char *b, size_t len )
     size_t      read;
 
     FSetIOOk( io );
-    if( io->attrs & BUFFERED ) {
+    if( io->buffered ) {
         char            *ptr;
         char            *stop;
         bool            seen_cr;
         bool            trunc;
-        size_t          max_valid;
 
         // determine maximum valid position in the buffer
-        max_valid = io->read_len;
-        if( max_valid < io->high_water ) {
-            max_valid = io->high_water;
-        }
-        stop = io->buffer + max_valid;
+        stop = io->buffer + io->read_len;
         ptr = io->buffer + io->b_curs;
         read = 0;
         seen_cr = false;
@@ -124,12 +116,6 @@ size_t FGetRecText( b_file *io, char *b, size_t len )
             if( ch == CHAR_LF )
                 break;
             if( !seen_cr ) {
-                if( ch == CHAR_CTRL_Z ) {
-                    --ptr; // give back char so we don't read past EOF
-                    if( read == 0 )
-                        FSetEof( io );
-                    break;
-                }
                 if( ch == CHAR_CR ) {
                     seen_cr = true;
                 } else if( read < len ) {
@@ -173,9 +159,6 @@ size_t FGetRecText( b_file *io, char *b, size_t len )
                 if( *b == CHAR_LF )
                     return( read );
                 --b;
-            } else if( *b == CHAR_CTRL_Z ) {
-                FSetEof( io );
-                return( read );
             }
 #endif
             ++b;

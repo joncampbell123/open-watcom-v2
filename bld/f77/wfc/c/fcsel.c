@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -36,6 +36,7 @@
 //
 
 #include "ftnstd.h"
+#include "i64.h"
 #include "symbol.h"
 #include "cgdefs.h"
 #include "cg.h"
@@ -50,45 +51,34 @@
 #include "cgprotos.h"
 
 
-void    DoSelect( FCODE kind ) {
-//==============================
-
+void    DoSelect( FCODE kind )
+//============================
 // Select processing for SELECT and computed GOTO.
-
-    sel_handle          s;
-    int                 cases;
-    int                 stmts;
-    label_handle        label;
-    sym_id              sn;
-    sym_id              sel_sym;
-    cg_name             sel_expr;
-    obj_ptr             curr_obj;
-    signed_32           lo;
-    signed_32           hi;
+{
+    sel_handle      s;
+    int             cases;
+    int             stmts;
+    label_handle    cglbl;
+    sym_id          sel_sym;
+    cg_name         sel_expr;
+    obj_ptr         curr_obj;
+    signed_64       lo;
+    signed_64       hi;
 
     s = CGSelInit();
     cases = GetU16();
     stmts = cases;
-    CGSelOther( s, GetLabel( GetU16() ) );
+    CGSelOther( s, GetCgLabel( GetU16() ) );
     curr_obj = FCodeTell( 0 );
-    for( ; cases != 0; cases-- ) {
+    while( cases-- > 0 ) {
         if( kind == FC_COMPUTED_GOTO ) {
-            sn = GetPtr();
-            label = GetStmtLabel( sn );
+            cglbl = _GetStmtCgLabel( (sym_id)GetPtr() );
         } else {
-            label = GetLabel( GetU16() );
+            cglbl = GetCgLabel( GetU16() );
         }
-        hi = GetConst32();
-        lo = GetConst32();
-        // the following code is to get around a bug
-        // in the code generator - eventually the "if"
-        // block should be replaced by the "else" block
-        if( (hi ^ lo) < 0 ) {
-            CGSelRange( s, lo, -1, label );
-            CGSelRange( s, 0, hi, label );
-        } else {
-            CGSelRange( s, lo, hi, label );
-        }
+        Set64ValI32( hi, GetU32() );
+        Set64ValI32( lo, GetU32() );
+        CGSelRange( s, lo, hi, cglbl );
     }
     sel_sym = GetPtr();
     if( sel_sym->u.ns.u1.s.typ == FT_CHAR ) {
@@ -103,18 +93,17 @@ void    DoSelect( FCODE kind ) {
         FCodeSeek( curr_obj );
         for( ; stmts != 0; stmts-- ) {
             RefStmtLabel( GetPtr() );
-            GetConst32();
-            GetConst32();
+            GetU32();
+            GetU32();
         }
         GetPtr(); // skip select variable
     }
 }
 
 
-void    FCSelect( void ) {
-//========================
-
+void    FCSelect( void )
+//======================
 // Perform SELECT statement.
-
+{
     DoSelect( FC_SELECT );
 }

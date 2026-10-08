@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -41,36 +41,20 @@
 #include "guistr.h"
 #include "guiutil.h"
 #include "guihotsp.h"
+//#include "memfuncs.h"
 
 
-bool GUISetEditText( an_edit_control *edit_control, char const *text, bool is_GUI_data )
-/*
+bool GUISetEditText( an_edit_control *edit_control, char const *text )
+/*********************************************************************
  * "free" edit_control->buffer and "strdup" text to it.
  * isGUIdata chooses between local and ui functions to allow ui to realloc
  */
 {
-    char const  *filler;
-    size_t      fillerLength;
-    char        *new;
-
-    filler = ( text == NULL ) ? LIT_GUI( Empty ) : text;
-    fillerLength = strlen( filler );
-    if( is_GUI_data ) {
-        new = GUIMemAlloc( fillerLength + 1 );
-    } else {
-        new = uimalloc( fillerLength + 1 );
-    }
-    if( new == NULL ) {
-        return( false );
-    }
-    strcpy( new, filler );
-    if( is_GUI_data ) {
-        GUIMemFree( edit_control->buffer );
-    } else {
-        uifree( edit_control->buffer );
-    }
-    edit_control->buffer = new;
-    edit_control->length = fillerLength;
+    if( text == NULL )
+        text = "";
+    MemFree( edit_control->buffer );
+    edit_control->buffer = MemStrdupSafe( text );
+    edit_control->length = strlen( edit_control->buffer );
     return( true );
 }
 
@@ -105,7 +89,14 @@ bool GUIAPI GUISetText( gui_window *wnd, gui_ctl_id id, const char *text )
             char    **fldtext;
             char    *new_str;
 
-            new_str = GUIStrDupOK( text, &ret );
+            ret = true;
+            new_str = NULL;
+            if( text != NULL ) {
+                new_str = MemStrdup( text );
+                if( new_str == NULL ) {
+                    ret = false;
+                }
+            }
             if( ret ) {
                 fldtext = NULL;
                 switch( field->typ ) {
@@ -113,7 +104,7 @@ bool GUIAPI GUISetText( gui_window *wnd, gui_ctl_id id, const char *text )
                 case FLD_RADIO: fldtext = &field->u.radio->str; break;
                 case FLD_TEXT: fldtext = &field->u.str; break;
                 }
-                GUIMemFree( *fldtext );
+                MemFree( *fldtext );
                 *fldtext = new_str;
             }
         }
@@ -121,7 +112,7 @@ bool GUIAPI GUISetText( gui_window *wnd, gui_ctl_id id, const char *text )
 
     case FLD_EDIT:
     case FLD_INVISIBLE_EDIT:
-        edit = (an_edit_control *)field->u.edit;
+        edit = field->u.edit;
         break;
     case FLD_COMBOBOX:
         combo_box = field->u.combo;
@@ -131,7 +122,7 @@ bool GUIAPI GUISetText( gui_window *wnd, gui_ctl_id id, const char *text )
         return( false );   /* without redrawing field */
     }
     if( ( edit != NULL ) && ( ui_dlg_info != NULL ) ) {
-        ret = GUISetEditText( edit, text, field->typ != FLD_EDIT );
+        ret = GUISetEditText( edit, text );
         if( ret ) {
             uiupdateedit( ui_dlg_info, field );
         }

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,9 +35,9 @@
 #include <limits.h>
 #include "wio.h"
 #include "help.h"
-#include "helpmem.h"
 #include "iopath.h"
 #include "pathgrp2.h"
+#include "memfuncs.h"
 
 #include "clibext.h"
 
@@ -56,7 +56,7 @@ void SetHelpFileDefExt( const char *name, char *buff )
 
     _splitpath2( name, pg.buffer, &pg.drive, &pg.dir, &pg.fname, &pg.ext );
     if( pg.ext[0] == '\0' )
-        pg.ext = DEF_EXT;
+        pg.ext = FEXT_DEF;
     _makepath( buff, pg.drive, pg.dir, pg.fname, pg.ext );
 }
 
@@ -66,12 +66,12 @@ static void freeSearchList( void )
 
     if( srch_List != NULL ) {
         for( i = 0; ; i++ ) {
-            HelpMemFree( srch_List[i].info );
+            MemFree( srch_List[i].info );
             if( srch_List[i].type == SRCHTYPE_EOL ) {
                 break;
             }
         }
-        HelpMemFree( srch_List );
+        MemFree( srch_List );
         srch_List = NULL;
     }
 }
@@ -83,7 +83,7 @@ static void freeHelpFiles( void )
     for( count = 0; count < MAX_HELP_FILES; ++count ) {
         if( helpFiles[count].name == NULL )
             break;
-        HelpMemFree( helpFiles[count].name );
+        MemFree( helpFiles[count].name );
         helpFiles[count].name = NULL;
     }
 }
@@ -145,10 +145,10 @@ static void initSearchList(
         while( srchlist[count].type != SRCHTYPE_EOL )
             count++;
         count++;
-        srch_List = HelpMemAlloc( count * sizeof( HelpSrchPathItem ) );
+        srch_List = MemAllocSafe( count * sizeof( HelpSrchPathItem ) );
         for( i = 0; i < count ; ++i ) {
             srch_List[i].type = srchlist[i].type;
-            srch_List[i].info = HelpDupStr( srchlist[i].info );
+            srch_List[i].info = MemStrdupSafe( srchlist[i].info );
         }
     }
 }
@@ -166,7 +166,7 @@ static int do_init(                 /* INITIALIZATION FOR THE HELP PROCESS     *
     for( ; *helpfilenames != NULL; ++helpfilenames ) {
         SetHelpFileDefExt( *helpfilenames, filename );
         if( search_for_file( fullpath, filename, srchlist ) ) {
-            helpFiles[count].name = HelpDupStr( fullpath );
+            helpFiles[count].name = MemStrdupSafe( fullpath );
             helpFiles[count].fp = NULL;
             ++count;
             if( count >= MAX_HELP_FILES ) {

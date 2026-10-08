@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,21 +34,35 @@
 #include "vi.h"
 #include "subclass.h"
 #include <assert.h>
-#include "wclbproc.h"
+#ifdef __WINDOWS__
+    #include "wclbproc.h"
+#endif
 
 
 proc_entry  *procHead;
 proc_entry  *procTail;
 
+#ifdef __WINDOWS__
 void SubclassGenericAdd( HWND hwnd, WNDPROCx wndproc, HINSTANCE inst )
+#else
+void SubclassGenericAdd( HWND hwnd, WNDPROC wndproc, HINSTANCE inst )
+#endif
 {
     proc_entry  *newProc;
 
-    newProc = MemAlloc( sizeof( proc_entry ) );
+#ifdef __WINDOWS__
+#else
+    /* unused parameters */ (void)inst;
+#endif
+    newProc = MemAllocSafe( sizeof( proc_entry ) );
 
     newProc->hwnd = hwnd;
     newProc->oldProc = (WNDPROC)GET_WNDPROC( hwnd );
+#ifdef __WINDOWS__
     newProc->newProc = MakeProcInstance_WND( wndproc, inst );
+#else
+    newProc->newProc = wndproc;
+#endif
     SET_WNDPROC( hwnd, (LONG_PTR)newProc->newProc );
 
     AddLLItemAtEnd( (ss **)&procHead, (ss **)&procTail, (ss *)newProc );
@@ -66,8 +80,9 @@ void SubclassGenericRemove( HWND hwnd )
     assert( findProc != NULL );
 
     SET_WNDPROC( hwnd, (LONG_PTR)findProc->oldProc );
+#ifdef __WINDOWS__
     FreeProcInstance_WND( findProc->newProc );
-
+#endif
     MemFree( DeleteLLItem( (ss **)&procHead, (ss **)&procTail, (ss *)findProc ) );
 }
 

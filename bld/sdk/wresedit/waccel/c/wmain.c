@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -162,7 +162,13 @@ int WINAPI WEP( int parm )
 
     return( TRUE );
 }
+
 #endif
+
+static void nomemcb( void )
+{
+    // handle no memory state
+}
 
 void WRESEAPI WAccelInit( void )
 {
@@ -173,7 +179,7 @@ void WRESEAPI WAccelInit( void )
         AccelTable = LoadAccelerators( inst, "WAccelAccelTable" );
     }
     if( ref_count == 0 ) {
-        WRInit();
+        WRInit( false, nomemcb );
         SetRCInstance( inst );
         WInit( inst );
     }
@@ -213,7 +219,7 @@ WAccelHandle WRESEAPI WAccelStartEdit( WAccelInfo *info )
 
     if( ok ) {
         if( einfo->info->file_name != NULL ) {
-            einfo->file_name = WStrDup( einfo->info->file_name );
+            einfo->file_name = WStrdup( einfo->info->file_name );
             ok = (einfo->file_name != NULL);
             if( ok ) {
                 einfo->file_type = WRIdentifyFile( einfo->file_name );
@@ -294,7 +300,7 @@ int WRESEAPI WAccelCloseSession( WAccelHandle hndl, int force_exit )
     einfo = (WAccelEditInfo *)WGetEditSessionInfo( hndl );
 
     if( einfo != NULL && einfo->info != NULL ) {
-        if( SendMessage( einfo->win, WM_CLOSE, (WPARAM)force_exit, 0 ) != 0 ) {
+        if( SendMessage( einfo->win, WM_CLOSE, force_exit, 0 ) != 0 ) {
             return( FALSE );
         }
     }
@@ -322,7 +328,7 @@ WAccelInfo *WAccelGetEInfo( WAccelHandle hndl, bool keep )
     if( ok ) {
         if( einfo->info->modified ) {
             if( info->data != NULL ) {
-                WRMemFree( info->data );
+                MemFree( info->data );
             }
             info->data = NULL;
             info->data_size = 0;
@@ -442,7 +448,7 @@ char *WCreateEditTitle( WAccelEditInfo *einfo )
     offset = WRFindFnOffset( fname );
     fname = &fname[offset];
     len = strlen( fname ) + strlen( text ) + 6;
-    title = (char *)WRMemAlloc( len );
+    title = MemAlloc( len );
     if( title != NULL ) {
         strcpy( title, text );
         strcat( title, " - [" );
@@ -475,7 +481,7 @@ void WSetEditTitle( WAccelEditInfo *einfo )
         if( is_rc ) {
             FreeRCString( title );
         } else {
-            WRMemFree( title );
+            MemFree( title );
         }
     }
 }
@@ -490,7 +496,7 @@ bool WCreateEditWindow( HINSTANCE inst, WAccelEditInfo *einfo )
     RECT        rect;
 
     if( einfo == NULL ) {
-        return( FALSE );
+        return( false );
     }
 
     x = CW_USEDEFAULT;
@@ -533,25 +539,25 @@ bool WCreateEditWindow( HINSTANCE inst, WAccelEditInfo *einfo )
         if( is_rc ) {
             FreeRCString( title );
         } else {
-            WRMemFree( title );
+            MemFree( title );
         }
     }
 
     if( einfo->win == (HWND)NULL ) {
-        return( FALSE );
+        return( false );
     }
 
     if( !WCreateRibbon( einfo ) ) {
-        return( FALSE );
+        return( false );
     }
 
     einfo->wsb = WCreateStatusLine( einfo->win, inst );
     if( einfo->wsb == NULL ) {
-        return( FALSE );
+        return( false );
     }
 
     if( !WCreateAccelEditWindow( einfo, inst ) ) {
-        return( FALSE );
+        return( false );
     }
 
     hmenu2 = GetMenu( einfo->win );
@@ -571,7 +577,7 @@ bool WCreateEditWindow( HINSTANCE inst, WAccelEditInfo *einfo )
 
     SetFocus( einfo->edit_dlg );
 
-    return( TRUE );
+    return( true );
 }
 
 WAccelEditInfo *WGetCurrentEditInfo( void )
@@ -612,7 +618,7 @@ static void handleSymbols( WAccelEditInfo *einfo )
     WRAddSymbolsToComboBox( einfo->info->symbol_table, einfo->edit_dlg, IDM_ACCEDCMDID, WR_HASHENTRY_ALL );
     if( text != NULL ) {
         WSetEditWithStr( GetDlgItem( einfo->edit_dlg, IDM_ACCEDCMDID ), text );
-        WRMemFree( text );
+        MemFree( text );
     }
 
     WHandleSelChange( einfo );
@@ -628,7 +634,7 @@ static void handleLoadSymbols( WAccelEditInfo *einfo )
     }
 
     if( einfo->info->symbol_file != NULL ) {
-        WRMemFree( einfo->info->symbol_file );
+        MemFree( einfo->info->symbol_file );
     }
     einfo->info->symbol_file = file;
 
@@ -677,7 +683,7 @@ WINEXPORT LRESULT CALLBACK WMainWndProc( HWND hWnd, UINT message, WPARAM wParam,
     MINMAXINFO      *minmax;
     about_info      ai;
 
-    pass_to_def = TRUE;
+    pass_to_def = true;
     ret = FALSE;
     einfo = (WAccelEditInfo *)GET_WNDLONGPTR( hWnd, 0 );
     WSetCurrentEditInfo( einfo );
@@ -688,7 +694,7 @@ WINEXPORT LRESULT CALLBACK WMainWndProc( HWND hWnd, UINT message, WPARAM wParam,
             DestroyWindow( einfo->key_info.text_win );
             ReleaseCapture();
             WHandleChange( einfo );
-            pass_to_def = FALSE;
+            pass_to_def = false;
         }
     }
 
@@ -698,7 +704,7 @@ WINEXPORT LRESULT CALLBACK WMainWndProc( HWND hWnd, UINT message, WPARAM wParam,
             !GET_WM_ACTIVATE_FMINIMIZED( wParam, lParam ) &&
             einfo != NULL && einfo->edit_dlg != (HWND)NULL ) {
             SetFocus( einfo->edit_dlg );
-            pass_to_def = FALSE;
+            pass_to_def = false;
         }
         break;
 
@@ -786,16 +792,16 @@ WINEXPORT LRESULT CALLBACK WMainWndProc( HWND hWnd, UINT message, WPARAM wParam,
         switch( wp ) {
         case IDM_ACC_CLEAR:
             WHandleClear( einfo );
-            pass_to_def = FALSE;
+            pass_to_def = false;
             break;
 
         case IDM_ACC_UPDATE:
             SendMessage( einfo->info->parent, ACCEL_PLEASE_SAVEME, 0, (LPARAM)einfo->hndl );
-            pass_to_def = FALSE;
+            pass_to_def = false;
             break;
 
         case IDM_ACC_OPEN:
-            pass_to_def = FALSE;
+            pass_to_def = false;
             if( einfo->info->modified ) {
                 ret = WQuerySave( einfo, FALSE );
                 if( !ret ) {
@@ -808,17 +814,17 @@ WINEXPORT LRESULT CALLBACK WMainWndProc( HWND hWnd, UINT message, WPARAM wParam,
 
         case IDM_ACC_SAVE:
             WSaveObject( einfo, false, false );
-            pass_to_def = FALSE;
+            pass_to_def = false;
             break;
 
         case IDM_ACC_SAVEAS:
             WSaveObject( einfo, true, false );
-            pass_to_def = FALSE;
+            pass_to_def = false;
             break;
 
         case IDM_ACC_SAVEINTO:
             WSaveObject( einfo, true, true );
-            pass_to_def = FALSE;
+            pass_to_def = false;
             break;
 
         case IDM_ACC_EXIT:
@@ -828,76 +834,76 @@ WINEXPORT LRESULT CALLBACK WMainWndProc( HWND hWnd, UINT message, WPARAM wParam,
 
         case IDM_ACC_PASTE:
             WPasteAccelItem( einfo );
-            pass_to_def = FALSE;
+            pass_to_def = false;
             break;
 
         case IDM_ACC_COPY:
         case IDM_ACC_CUT:
             WClipAccelItem( einfo, wp == IDM_ACC_CUT );
-            pass_to_def = FALSE;
+            pass_to_def = false;
             break;
 
         case IDM_ACC_DELETE:
             WDeleteAccelEntry( einfo );
-            pass_to_def = FALSE;
+            pass_to_def = false;
             break;
 
         case IDM_ACC_NEWITEM:
             WInsertAccelEntry( einfo );
-            pass_to_def = FALSE;
+            pass_to_def = false;
             break;
 
         case IDM_ACC_KEYVALUE:
             WSetStatusByID( einfo->wsb, W_GETTINGKEYS, 0 );
             WHandleGetKeyValue( einfo, einfo->last_menu_select == IDM_ACC_KEYVALUE );
             WSetStatusReadyText( einfo->wsb );
-            pass_to_def = FALSE;
+            pass_to_def = false;
             break;
 
         case IDM_ACC_SYMBOLS:
             handleSymbols( einfo );
-            pass_to_def = FALSE;
+            pass_to_def = false;
             break;
 
         case IDM_ACC_LOAD_SYMBOLS:
             handleLoadSymbols( einfo );
-            pass_to_def = FALSE;
+            pass_to_def = false;
             break;
 
         case IDM_ACC_SHOWRIBBON:
             hmenu = WGetMenuHandle( einfo );
             WShowRibbon( einfo, hmenu );
-            pass_to_def = FALSE;
+            pass_to_def = false;
             break;
 
         case IDM_ACC_MEM_FLAGS:
             WSetStatusByID( einfo->wsb, W_CHANGEACCELMEMFLAGS, 0 );
-            einfo->info->modified |= WChangeMemFlags( einfo->win, &einfo->info->MemFlags,
+            einfo->info->modified |= WChangeMemFlags( einfo->win, &einfo->info->res_flags,
                                                       einfo->info->res_name,
                                                       WGetEditInstance(),
                                                       WAccHelpRoutine );
-            pass_to_def = FALSE;
+            pass_to_def = false;
             WSetStatusReadyText( einfo->wsb );
             break;
 
         case IDM_ACC_RENAME:
             WHandleRename( einfo );
-            pass_to_def = FALSE;
+            pass_to_def = false;
             break;
 
         case IDM_HELP:
             WAccHelpRoutine();
-            pass_to_def = FALSE;
+            pass_to_def = false;
             break;
 
         case IDM_HELP_SEARCH:
             WAccHelpSearchRoutine();
-            pass_to_def = FALSE;
+            pass_to_def = false;
             break;
 
         case IDM_HELP_ON_HELP:
             WAccHelpOnHelpRoutine();
-            pass_to_def = FALSE;
+            pass_to_def = false;
             break;
 
         case IDM_ACC_ABOUT:
@@ -907,7 +913,7 @@ WINEXPORT LRESULT CALLBACK WMainWndProc( HWND hWnd, UINT message, WPARAM wParam,
             ai.version = AllocRCString( W_ABOUT_VERSION );
             ai.title = AllocRCString( W_ABOUT_TITLE );
             DoAbout( &ai, FreeRCString );
-            pass_to_def = FALSE;
+            pass_to_def = false;
             break;
         }
         break;
@@ -958,7 +964,7 @@ bool WQuerySaveRes( WAccelEditInfo *einfo, bool force_exit )
                 FreeRCString( text );
             }
             if( title != NULL ) {
-                WRMemFree( title );
+                MemFree( title );
             }
         }
         if( ret == IDYES ) {
@@ -968,11 +974,11 @@ bool WQuerySaveRes( WAccelEditInfo *einfo, bool force_exit )
                 SendMessage( einfo->info->parent, ACCEL_PLEASE_SAVEME, 0, (LPARAM)einfo->hndl );
             }
         } else if( ret == IDCANCEL ) {
-            return( FALSE );
+            return( false );
         }
     }
 
-    return( TRUE );
+    return( true );
 }
 
 bool WQuerySaveSym( WAccelEditInfo *einfo, bool force_exit )
@@ -983,11 +989,11 @@ bool WQuerySaveSym( WAccelEditInfo *einfo, bool force_exit )
     char        *text;
 
     if( einfo == NULL || !einfo->info->stand_alone ) {
-        return( TRUE );
+        return( true );
     }
 
     if( !WRIsHashTableDirty( einfo->info->symbol_table ) ) {
-        return( TRUE );
+        return( true );
     }
 
     if( force_exit ) {
@@ -1003,7 +1009,7 @@ bool WQuerySaveSym( WAccelEditInfo *einfo, bool force_exit )
         FreeRCString( text );
     }
     if( title != NULL ) {
-        WRMemFree( title );
+        MemFree( title );
     }
 
     if( ret == IDYES ) {
@@ -1018,10 +1024,10 @@ bool WQuerySaveSym( WAccelEditInfo *einfo, bool force_exit )
         }
         return( WSaveSymbols( einfo->win, einfo->info->symbol_table, &einfo->info->symbol_file, false ) );
     } else if( ret == IDCANCEL ) {
-        return( FALSE );
+        return( false );
     }
 
-    return( TRUE );
+    return( true );
 }
 
 bool WHandleWM_CLOSE( WAccelEditInfo *einfo, bool force_exit )
@@ -1075,11 +1081,11 @@ static bool WQueryClearRes( WAccelEditInfo *einfo )
             FreeRCString( title );
         }
         if( ret == IDYES ) {
-            return( TRUE );
+            return( true );
         }
     }
 
-    return( FALSE );
+    return( false );
 }
 
 void WHandleClear( WAccelEditInfo *einfo )
@@ -1096,7 +1102,7 @@ void WHandleClear( WAccelEditInfo *einfo )
             einfo->getting_key = FALSE;
             if( einfo->info->stand_alone ) {
                 if( einfo->file_name != NULL ) {
-                    WRMemFree( einfo->file_name );
+                    MemFree( einfo->file_name );
                     einfo->file_name = NULL;
                     WSetEditTitle( einfo );
                 }

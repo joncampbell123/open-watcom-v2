@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -49,8 +49,6 @@
 
 #define DEF_BACKUP      1
 #define MAX_BACKUP      9
-
-#define DOS_EOF_CHAR    0x1a
 
 typedef struct include_entry {
     struct include_entry    *prev;
@@ -139,7 +137,7 @@ static void AddCtlFile( const char *name )
             break;
         owner = &curr->next;
     }
-    curr = MAlloc( sizeof( *curr ) );
+    curr = MemAllocSafe( sizeof( *curr ) );
     curr->next = NULL;
     strcpy( curr->name, name );
     *owner = curr;
@@ -171,7 +169,7 @@ static bool ProcessOptions( char *argv[], bool opt_end )
 
     while( argv[0] != NULL ) {
         if( !opt_end && argv[0][0] == '-' ) {
-            switch( tolower( argv[0][1] ) ) {
+            switch( (char)tolower( ((unsigned char **)argv)[0][1] ) ) {
             case 'c':
                 argv = getvalue( argv, parm_buff );
                 AddCtlFile( parm_buff );
@@ -231,7 +229,8 @@ static int parse_string( const char *env, char **args )
     char        parm_buff[_MAX_PATH];
     int         pos;
     bool        quoted;
-    char        prev, c;
+    char        prev;
+    char        c;
     int         argc;
 
     quoted = false;
@@ -244,12 +243,12 @@ static int parse_string( const char *env, char **args )
                 parm_buff[pos - 1] = c;
             prev = '\0';
             continue;
-        } else if( isspace( c ) ) {
+        } else if( isspace( (unsigned char)c ) ) {
             if( !quoted ) {
                 if( pos > 0 ) {
                     if( args != NULL ) {
                         parm_buff[pos] = '\0';
-                        args[argc] = MStrdup( parm_buff );
+                        args[argc] = MemStrdupSafe( parm_buff );
                     }
                     ++argc;
                     pos = 0;
@@ -262,7 +261,7 @@ static int parse_string( const char *env, char **args )
             if( !quoted ) {
                 if( args != NULL ) {
                     parm_buff[pos] = '\0';
-                    args[argc] = MStrdup( parm_buff );
+                    args[argc] = MemStrdupSafe( parm_buff );
                 }
                 ++argc;
                 pos = 0;
@@ -278,7 +277,7 @@ static int parse_string( const char *env, char **args )
     if( pos > 0 ) {
         if( args != NULL ) {
             parm_buff[pos] = '\0';
-            args[argc] = MStrdup( parm_buff );
+            args[argc] = MemStrdupSafe( parm_buff );
         }
         ++argc;
     }
@@ -295,14 +294,13 @@ static bool ProcessEnv( bool opt_end )
     if( env != NULL ) {
         argc = parse_string( env, NULL );
         if( argc > 0 ) {
-            args = MAlloc( ( argc + 1 ) * sizeof( char * ) );
+            args = MemAllocSafe( ( argc + 1 ) * sizeof( char * ) );
             argc = parse_string( env, args );
             args[argc] = NULL;
             opt_end = ProcessOptions( args, opt_end );
-            while( argc > 0 ) {
-                MFree( args[--argc] );
-            }
-            MFree( args );
+            while( argc > 0 )
+                MemFree( args[--argc] );
+            MemFree( args );
         }
     }
     return( opt_end );
@@ -314,7 +312,7 @@ static void PushInclude( const char *name )
     pgroup2         pg;
     char            dir_name[_MAX_PATH];
 
-    new = MAlloc( sizeof( *new ) );
+    new = MemAllocSafe( sizeof( *new ) );
     new->prev = includeStk;
     new->skipping = 0;
     new->ifdefskipping = 0;
@@ -342,7 +340,7 @@ static bool PopInclude( void )
     fclose( curr->fp );
     includeStk = curr->prev;
     ResetArchives( curr->reset_abit );
-    MFree( curr );
+    MemFree( curr );
     if( includeStk == NULL )
         return( false );
     SysChdir( GetIncludeCWD() );
@@ -353,6 +351,7 @@ static bool GetALine( char *line, int max_len )
 {
     for( ;; ) {
         if( fgets( line, max_len, includeStk->fp ) != NULL ) {
+            line[strcspn( line, "\r\n" )] = '\0';   /* Allow crlf or lf EOL on any platform */
             includeStk->lineno++;
             break;
         }
@@ -373,6 +372,7 @@ static char *SubstOne( const char **inp, char *out )
     char        *starpos;
     const char  *rep;
     unsigned    parm;
+    int         c;
 
     in = *inp;
     p = out;
@@ -381,13 +381,21 @@ static char *SubstOne( const char **inp, char *out )
         case '>':
             *p = '\0';
             /*
+             * only environment variable names can exist
+             * therefore it is upper-cased before processing
+             * to use case-sensitive keyword compare
+             */
+            p = out;
+            while( (c = *(unsigned char *)p) != '\0' )
+                *p++ = toupper( c );
+            /*
              * If the parameter is a number (n) followed by an asterisk,
              * copy from parameter n to the end to out. E.g. <2*>
              */
             parm = 1;
-            for( starpos = out; isdigit( *starpos ); starpos++ )
+            for( starpos = out; isdigit( *(unsigned char *)starpos ); starpos++ )
                 ;
-            if( stricmp( starpos, "*" ) == 0 ) {
+            if( strcmp( starpos, "*" ) == 0 ) {
                 rep = NULL;
                 p = out;
                 sscanf( out, "%u", &parm );
@@ -404,7 +412,7 @@ static char *SubstOne( const char **inp, char *out )
                 *inp = in + 1;
                 *out = '\0';
                 return( out );
-            } else if( stricmp( out, "CWD" ) == 0 ) {
+            } else if( strcmp( out, "CWD" ) == 0 ) {
                 rep = GetIncludeCWD();
             } else {
                 rep = getenv( out );
@@ -437,16 +445,14 @@ static void SubstLine( const char *in, char *out )
     bool        first;
 
     first = true;
-    SKIP_BLANKS( in );
+    while( isspace( *(unsigned char *)in ) )
+        in++;
     for( ;; ) {
         switch( *in ) {
         case '^':                       /* Escape next byte special meaning */
             ++in;
             switch( *in ) {
-            case '\n':
             case '\0':
-            case '\r':                  /* Allow DOS line in UNIX port */
-            case DOS_EOF_CHAR:          /* Allow DOS EOF in UNIX port */
                 break;
             default:
                 *out++ = *in++;
@@ -466,10 +472,7 @@ static void SubstLine( const char *in, char *out )
             ++in;
             out = SubstOne( &in, out );
             break;
-        case '\n':
         case '\0':
-        case '\r':                      /* Allow DOS line in UNIX port */
-        case DOS_EOF_CHAR:              /* Allow DOS EOF in UNIX port */
             *out = '\0';
             return;
         default:
@@ -480,14 +483,20 @@ static void SubstLine( const char *in, char *out )
 }
 
 static char *GetWord( char *p, char **start )
+/********************************************
+ * read word and upper-case it
+ */
 {
-    SKIP_BLANKS( p );
-    for( *start = p; *p != '\0'; ++p ) {
-        if( IS_BLANK( *p ) ) {
-            *p++ = '\0';
-            break;
-        }
+    int             c;
+
+    while( isspace( *(unsigned char *)p ) )
+        p++;
+    *start = p;
+    while( (c = *(unsigned char *)p) != '\0' && !isspace( c ) ) {
+        *p++ = toupper( c );
     }
+    if( c )
+        *p++ = '\0';
     return( p );
 }
 
@@ -511,13 +520,12 @@ static int MatchFound( char *p )
     p = GetWord( p, &word );
     if( *word == '\0' )
         Fatal( "Missing match word\n" );
-
     if( *word == '(' ) { /* Multiple match words, store them */
         p = GetWord( p, &word );
         for( ; MatchWords < 20; ) {
             if( *word == '\0' )
                 Fatal( "Missing match word\n" );
-            if( stricmp( word, "\"\"" ) == 0 ) { /* 'No parameter' indicator */
+            if( strcmp( word, "\"\"" ) == 0 ) { /* 'No parameter' indicator */
                 EmptyOk = true;
             } else {
                 Match[MatchWords++] = word;
@@ -545,7 +553,7 @@ static int MatchFound( char *p )
         }
         WordsExamined++;
         for( i = 0; i < MatchWords; i++ ) {
-            if( stricmp( Match[i], word ) == 0 ) {
+            if( strcmp( Match[i], word ) == 0 ) {
                 return( 1 );
             }
         }
@@ -576,14 +584,14 @@ static int ProcessCtlFile( const char *name )
         case '[':
             /* a directive */
             p = GetWord( p + 1, &word );
-            if( stricmp( word, "INCLUDE" ) == 0 ) {
+            if( strcmp( word, "INCLUDE" ) == 0 ) {
                 if( !includeStk->skipping && !includeStk->ifdefskipping ) {
                     char    inc_file[_MAX_PATH];
 
                     p = GetPathOrFile( p, inc_file );
                     PushInclude( inc_file );
                 }
-            } else if( stricmp( word, "LOG" ) == 0 ) {
+            } else if( strcmp( word, "LOG" ) == 0 ) {
                 if( includeStk->skipping == 0 ) {
                     char    log_name[_MAX_PATH];
 
@@ -598,19 +606,19 @@ static int ProcessCtlFile( const char *name )
                         OpenLog( log_name );
                     }
                 }
-            } else if( stricmp( word, "BLOCK" ) == 0 ) {
+            } else if( strcmp( word, "BLOCK" ) == 0 ) {
                 includeStk->skipping = 0;   /* New block: reset skip flags */
                 includeStk->ifdefskipping = 0;
                 if( !MatchFound( p ) )
                     includeStk->skipping++;
                 break;
-            } else if( stricmp( word, "IFDEF" ) == 0 ) {
+            } else if( strcmp( word, "IFDEF" ) == 0 ) {
                 if( includeStk->ifdefskipping != 0 )
                     includeStk->ifdefskipping--;
                 if( !MatchFound( p ) )
                     includeStk->ifdefskipping++;
                 break;
-            } else if( stricmp( word, "ENDIF" ) == 0 ) {
+            } else if( strcmp( word, "ENDIF" ) == 0 ) {
                 if( includeStk->ifdefskipping != 0 )
                     includeStk->ifdefskipping--;
                 break;
@@ -623,7 +631,8 @@ static int ProcessCtlFile( const char *name )
             logit = ( VerbLevel > 0 );
             if( *p == '@' ) {
                 p++;
-                SKIP_BLANKS( p );
+                while( isspace( *(unsigned char *)p ) )
+                    p++;
                 logit = false;
             }
             if( includeStk->skipping == 0 && includeStk->ifdefskipping == 0 ) {
@@ -699,7 +708,7 @@ int main( int argc, char *argv[] )
     int         rc = 0;
     bool        opt_end;
 
-    MOpen();
+    MemOpen();
     SysInit( argc, argv );
     LogBackup = DEF_BACKUP;
     opt_end = false;
@@ -719,11 +728,11 @@ int main( int argc, char *argv[] )
             rc = 1;
         }
         next = CtlList->next;
-        MFree( CtlList );
+        MemFree( CtlList );
         CtlList = next;
     }
     CloseLog();
-    MClose();
+    MemClose();
     return( rc );
 }
 

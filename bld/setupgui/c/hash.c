@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -39,6 +39,7 @@
 #include "guiutil.h"
 #include "vhandle.h"
 #include "hash.h"
+#include "memfuncs.h"
 
 
 typedef struct hash_element {
@@ -63,9 +64,7 @@ hash_handle     HashInit( size_t size, hash_key_cmp func )
     assert( size != 0 );
     assert( func );
 
-    ht = GUIMemAlloc( sizeof( hash_table ) + (sizeof( hash_element * ) * size) );
-    if( !ht )
-        return( NULL );
+    ht = MemAllocSafe( sizeof( hash_table ) + (sizeof( hash_element * ) * size) );
     memset( ht, 0, sizeof( hash_table ) + (sizeof( hash_element * ) * size) );
     ht->size = size;
     ht->cmp_func = func;
@@ -81,12 +80,10 @@ bool HashInsert( hash_handle ht, hash_key k, vhandle data )
     assert( ht );
     assert( k );
 
-    he = GUIMemAlloc( sizeof( hash_element ) );
-    if( he == NULL )
-        return( false );
+    he = MemAllocSafe( sizeof( hash_element ) );
     i = hashKey( ht->size, k );
     he->data = data;
-    he->key = GUIStrDup( k );
+    he->key = MemStrdupSafe( k );
     he->next = ht->table[i];
     ht->table[i] = he;
     return( true );
@@ -123,11 +120,11 @@ void HashFini( hash_handle ht )
     for( i = 0; i < ht->size; i++ ) {
         for( he = ht->table[i]; he != NULL; he = next ) {
             next = he->next;
-            GUIMemFree( (void *)he->key );
-            GUIMemFree( he );
+            MemFree( (void *)he->key );
+            MemFree( he );
         }
     }
-    GUIMemFree( ht );
+    MemFree( ht );
 }
 
 
@@ -140,7 +137,7 @@ static unsigned int hashKey( size_t size, hash_key k )
     assert( size != 0 );
 
     while( *k ) {
-        hash = (hash << 4) + tolower( *k );
+        hash = (hash << 4) + tolower( *(unsigned char *)k );
         if( hash & 0xffff0000 ) {
             hash += hash >> 24;
         }

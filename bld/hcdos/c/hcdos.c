@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -40,11 +40,12 @@
 #include "cmdswtch.h"
 #include "hcdos.h"
 #include "helpidx.h"
-#include "helpmem.h"
+#include "helpmemu.h"
 #include "helpscan.h"
 #include "index.h"
 #include "wibhelp.h"
 #include "pathgrp2.h"
+#include "memfuncs.h"
 
 #include "clibext.h"
 
@@ -268,7 +269,7 @@ static bool pass1( FILE *fin, const char **helpstr )
                     PrintError( "DEFTOPIC string ignored with this format.\n" );
                 } else {
                     ptr = find_str( buffer + IB_DEFAULT_TOPIC_SIZE );
-                    namebuff = HelpMemAlloc( strlen( ptr ) + 1 );
+                    namebuff = MemAllocSafe( strlen( ptr ) + 1 );
                     strcpy( namebuff, ptr );
                     helpstr[0] = namebuff;
                 }
@@ -282,7 +283,7 @@ static bool pass1( FILE *fin, const char **helpstr )
                     PrintError( "DESCRIPTION string ignored with this format.\n" );
                 } else {
                     ptr = find_str( buffer + IB_DESCRIPTION_SIZE );
-                    namebuff = HelpMemAlloc( strlen( ptr ) + 1 );
+                    namebuff = MemAllocSafe( strlen( ptr ) + 1 );
                     strcpy( namebuff, ptr );
                     helpstr[1] = namebuff;
                 }
@@ -295,7 +296,7 @@ static bool pass1( FILE *fin, const char **helpstr )
     namebuff = NULL;
     namebuff_len = 0;
     while( !feof( fin ) ) {
-        h = (a_helpnode *)HelpMemAlloc( sizeof( a_helpnode ) );
+        h = MemAllocSafe( sizeof( a_helpnode ) );
         h->fpos = fpos;
         buflen = strlen( buffer );
         if( buffer[buflen - 1] == '\n' ) {
@@ -316,8 +317,8 @@ static bool pass1( FILE *fin, const char **helpstr )
             }
             len = ptr - ( buffer + IB_TOPIC_NAME_SIZE + 1 );
             if( namebuff_len <= len ) {
-                HelpMemFree( namebuff );
-                namebuff = HelpMemAlloc( len + 1 );
+                MemFree( namebuff );
+                namebuff = MemAllocSafe( len + 1 );
                 namebuff_len = len + 1;
             }
             memcpy( namebuff, buffer + IB_TOPIC_NAME_SIZE + 1, len );
@@ -335,8 +336,8 @@ static bool pass1( FILE *fin, const char **helpstr )
             }
             len = ptr - ( buffer + IB_TOPIC_NAME_SIZE );
             if( namebuff_len <= len ) {
-                HelpMemFree( namebuff );
-                namebuff = HelpMemAlloc( len + 1 );
+                MemFree( namebuff );
+                namebuff = MemAllocSafe( len + 1 );
                 namebuff_len = len + 1;
             }
             memcpy( namebuff, buffer + IB_TOPIC_NAME_SIZE, len );
@@ -351,7 +352,7 @@ static bool pass1( FILE *fin, const char **helpstr )
                 PrintError( "invalid help topic line '%s'\n", buffer );
             }
         }
-        h->name = strdup( namebuff );
+        h->name = MemStrdupSafe( namebuff );
         if( Verbose ) {
             printf( "   %s\n", h->name );
         }
@@ -400,7 +401,7 @@ static bool pass1( FILE *fin, const char **helpstr )
             }
         }
     }
-    HelpMemFree( namebuff );
+    MemFree( namebuff );
     return( true );
 }
 
@@ -429,8 +430,8 @@ static void checkBufCB( HelpTokenType type, Info *info, void *_node )
 
     if( type == TK_PLAIN_LINK || type == TK_GOOFY_LINK ) {
         if( nameBufLen <= info->u.link.topic_len ) {
-            HelpMemFree( nameBuf );
-            nameBuf = HelpMemAlloc( info->u.link.topic_len + 1 );
+            MemFree( nameBuf );
+            nameBuf = MemAllocSafe( info->u.link.topic_len + 1 );
             nameBufLen = info->u.link.topic_len + 1;
         }
         memcpy( nameBuf, info->u.link.topic, info->u.link.topic_len );
@@ -444,7 +445,7 @@ static void checkBufCB( HelpTokenType type, Info *info, void *_node )
 static void check_buffer( a_helpnode *h, char *buffer )
 {
     ScanLine( buffer, checkBufCB, h );
-    HelpMemFree( nameBuf );
+    MemFree( nameBuf );
     nameBuf = NULL;
     nameBufLen = 0;
 }
@@ -641,10 +642,9 @@ int main( int argc, char **argv )
     }
     FiniError();
     if( helpstr != NULL ) {
-        HelpMemFree( (void *)helpdefstr[0] );
-        HelpMemFree( (void *)helpdefstr[1] );
+        MemFree( (void *)helpdefstr[0] );
+        MemFree( (void *)helpdefstr[1] );
     }
-    HelpMemPrtList();
     HelpMemClose();
 
     return( 0 );

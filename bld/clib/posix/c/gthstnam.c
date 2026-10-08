@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *
 *  ========================================================================
 *
@@ -31,6 +31,7 @@
 ****************************************************************************/
 
 #include "variety.h"
+#include "seterrno.h"
 #include "_resolve.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,44 +41,54 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-#include "rterrno.h"
 #ifdef __RDOS__
-#include "rdos.h"
+    #include "rdos.h"
 #else
-#include "thread.h"
+    #include "thread.h"
+#endif
+#include "_hostent.h"
 
+
+#ifdef __RDOS__
+
+#else
 
 #define DNSRESOLV   "/etc/resolv.conf"
 
-static struct hostent *__check_hostdb( const char *name )
+static int _WCNEAR __check_hostdb( const char *name )
 {
     int             i;
-    struct hostent  *one;
-    bool            alias;
+    int             rc;
 
-    one = NULL;
-    if( name != NULL ) {
-        alias = false;
-        sethostent( 1 );
-        while( !alias && (one = gethostent()) != NULL ) {
-            if( one->h_name != NULL && strcmp( one->h_name, name ) == 0 )
+    rc = -1;
+
+    if( name == NULL )
+        return( rc );
+
+    sethostent( 1 );
+
+    while( rc == -1 && gethostent() != NULL ) {
+        if( _RWD_hostent.h_name != NULL && strcmp( _RWD_hostent.h_name, name ) == 0 ) {
+            rc = 0;
+            break;
+        }
+        for( i = 0; _RWD_hostent.h_aliases[i] != NULL; i++ ) {
+            if( strcmp( _RWD_hostent.h_aliases[i], name ) == 0 ) {
+                rc = 0;
                 break;
-            for( i = 0; one->h_aliases[i] != NULL; i++ ) {
-                if( strcmp( one->h_aliases[i], name ) == 0 ) {
-                    alias = true;
-                    break;
-                }
             }
         }
-        endhostent();
     }
-    return( one );
+
+    endhostent();
+
+    return( rc );
 }
 
 /* Messy function for retrieving the "last" indexed nameserver
  * from the DNS resolution config file
  */
-static int __get_nameserver( int last, in_addr_t *dnsaddr )
+static int _WCNEAR __get_nameserver( int last, in_addr_t *dnsaddr )
 {
     FILE    *fp;
     int     ret;
@@ -135,18 +146,17 @@ static int __get_nameserver( int last, in_addr_t *dnsaddr )
     return( ret );
 }
 
-static struct hostent *__check_dns_4( const char *name )
+static int _WCNEAR __check_dns_4( const char *name )
 {
-    in_addr_t               dnsaddr;
-    int                     servercount;
-    int                     dns_success;
-    static struct hostent   ret;
+    in_addr_t       dnsaddr;
+    int             servercount;
+    int             dns_success;
 
     dns_success = 0;
     for( servercount = 0; __get_nameserver( servercount, &dnsaddr ); servercount++ ) {
-        dns_success = _dns_query( name, DNSQ_TYPE_A, dnsaddr, &ret );
+        dns_success = _dns_query( name, DNSQ_TYPE_A, dnsaddr );
         if( dns_success > 0 ) {
-            return( &ret );
+            return( 0 );
         }
     }
     switch( -dns_success ) {
@@ -163,7 +173,7 @@ static struct hostent *__check_dns_4( const char *name )
         h_errno = NO_DATA;
         break;
     }
-    return( NULL );
+    return( -1 );
 }
 #endif
 
@@ -171,9 +181,9 @@ static struct hostent *__check_dns_4( const char *name )
 _WCRTLINK struct hostent *gethostbyname( const char *name )
 {
 #ifdef __RDOS__
-    static struct hostent  ret;
     static uint32_t *list[2];
     static uint32_t ip;
+
     ip = inet_addr( name );
     if( ip == INADDR_NONE ) {
         ip = RdosNameToIp( name );
@@ -182,19 +192,19 @@ _WCRTLINK struct hostent *gethostbyname( const char *name )
             return( NULL );
         }
     }
-    ret.h_name = (char *)name;
-    ret.h_aliases = NULL;
-    ret.h_addrtype = AF_INET;
-    ret.h_length = sizeof( uint32_t );
+    _RWD_hostent.h_name = (char *)name;
+    _RWD_hostent.h_aliases = NULL;
+    _RWD_hostent.h_addrtype = AF_INET;
+    _RWD_hostent.h_length = sizeof( uint32_t );
     list[0] = &ip;
     list[1] = 0;
-    ret.h_addr_list = (char **)list;
-    return( &ret );
+    _RWD_hostent.h_addr_list = (char **)list;
 #else
-    static struct hostent   *ret;
-    ret = __check_hostdb( name );
-    if( ret == NULL )
-        ret = __check_dns_4( name );
-    return( ret );
+    if( __check_hostdb( name ) == -1 ) {
+        if( __check_dns_4( name ) == -1 ) {
+            return( NULL );
+        }
+    }
 #endif
+    return( &_RWD_hostent );
 }

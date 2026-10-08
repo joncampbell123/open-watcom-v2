@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -38,62 +38,66 @@
 #include "alloc.h"
 #include "walloca.h"
 
-FILE *yaccin;
-char *loadpath;
-char *srcname_norm = NULL;
-char *codefilename;
-char *headerfilename;
-char *descfilename;
 
-char *symprefix = "yy";
+FILE        *yaccin;
+char        *loadpath;
+char        *srcname_norm = NULL;
+char        *codefilename;
+char        *headerfilename;
+char        *descfilename;
 
-char param_requested;
+char        *symprefix = "yy";
 
-index_n RR_conflicts;
-index_n SR_conflicts;
-index_n nstate_1_reduce;
+char        param_requested;
 
-bool lineflag           = false;
-bool bigflag            = false;
-bool fastflag           = false;
-bool denseflag          = false;
-bool enumflag           = false;
-bool default_shiftflag  = false;
-bool compactflag        = false;
-bool showflag           = false;
-bool translateflag      = false;
-bool defaultwarnflag    = true;
+unsigned    nstate_1_reduce;
 
-static bool eliminateunitflag   = false;
-static bool verbosefileflag     = false;
-static bool headerfileflag      = true;
-static bool proflag             = false;
+unsigned    RR_conflicts;
+unsigned    SR_conflicts;
 
-static int warnings = 0;
+bool        lineflag           = false;
+bool        bigflag            = false;
+bool        fastflag           = false;
+bool        denseflag          = false;
+bool        enumflag           = false;
+bool        default_shiftflag  = false;
+bool        compactflag        = false;
+bool        showflag           = false;
+bool        translateflag      = false;
+bool        defaultwarnflag    = true;
 
-static FILE *openr( char *filename )
+static bool     eliminateunitflag   = false;
+static bool     verbosefileflag     = false;
+static bool     headerfileflag      = true;
+static bool     proflag             = false;
+
+static int      warnings = 0;
+
+static FILE *openr( const char *filename )
 {
-    FILE *file;
+    FILE            *file;
 
     file = fopen( filename, "r" );
     if( file == NULL ) {
         msg( "Can't open %s.\n", filename );
+        /* never return */
     }
     return( file );
 }
 
-static FILE *openw( char *filename )
+static FILE *openw( const char *filename )
 {
-    FILE *file;
+    FILE            *file;
 
     file = fopen( filename, "w+" );
     if( file == NULL ) {
         msg( "Can't open %s for output.\n", filename );
+        /* never return */
     }
     return( file );
 }
 
-static void setoptions( char *p )
+static void setoptions( const char *p )
 {
     for( ; *p; ++p ) {
         switch( *p ) {
@@ -149,13 +153,14 @@ static void setoptions( char *p )
             break;
         default:
             msg( "Unknown option '%c'\n", *p );
+            /* never return */
         }
     }
 }
 
-void warn( char *fmt, ... )
+void warn( const char *fmt, ... )
 {
-    va_list args;
+    va_list         args;
 
     printf( "Warning! " );
     va_start( args, fmt );
@@ -164,20 +169,21 @@ void warn( char *fmt, ... )
     ++warnings;
 }
 
-void msg( char *fmt, ... )
+void msg( const char *fmt, ... )
 {
-    va_list args;
+    va_list         args;
 
     printf( "Error! " );
     va_start( args, fmt );
     vprintf( fmt, args );
     va_end( args );
     exit( 1 );
+    /* never return */
 }
 
-void srcinfo_warn( char *fmt, ... )
+void srcinfo_warn( const char *fmt, ... )
 {
-    va_list args;
+    va_list         args;
 
     printf( "%s(%d): ", srcname_norm, lineno );
     printf( "Warning! " );
@@ -187,9 +193,9 @@ void srcinfo_warn( char *fmt, ... )
     ++warnings;
 }
 
-void srcinfo_msg( char *fmt, ... )
+void srcinfo_msg( const char *fmt, ... )
 {
-    va_list args;
+    va_list         args;
 
     printf( "%s(%d): ", srcname_norm, lineno );
     printf( "Error! " );
@@ -197,11 +203,12 @@ void srcinfo_msg( char *fmt, ... )
     vprintf( fmt, args );
     va_end( args );
     exit( 1 );
+    /* never return */
 }
 
-void dumpstatistic( char *name, unsigned stat )
+void dumpstatistic( const char *name, unsigned stat )
 {
-    size_t len;
+    size_t          len;
 
     len = strlen( name );
     printf( "%s:", name );
@@ -214,7 +221,7 @@ void dumpstatistic( char *name, unsigned stat )
 
 void copy_part( FILE *fi, FILE *fo )
 {
-    int ch;
+    int             ch;
 
     while( (ch = fgetc( fi )) != '\f' && ch != EOF ) {
         fputc( ch, fo );
@@ -223,20 +230,20 @@ void copy_part( FILE *fi, FILE *fo )
 
 void copy_rest( FILE *fi, FILE *fo )
 {
-    int ch;
+    int             ch;
 
     while( (ch = fgetc( fi )) != EOF ) {
         fputc( ch, fo );
     }
 }
 
-static char *fname_normalize( char *name )
+static char *fname_normalize( const char *name )
 {
-    char    c;
-    char    *p;
-    char    *dst;
+    char            c;
+    char            *p;
+    char            *dst;
 
-    p = dst = malloc( strlen( name ) + 1 );
+    p = dst = MemAllocSafe( strlen( name ) + 1 );
     while( (c = *name++) != '\0' ) {
         if( c == '\\' )
             c = '/';
@@ -248,17 +255,19 @@ static char *fname_normalize( char *name )
 
 int main( int argc, char **argv )
 {
-    int     i;
-    FILE    *skeleton;
-    FILE    *temp1;
-    FILE    *temp2;
-    FILE    *tokout;
-    FILE    *actout;
-    int     ch;
-    char    *srcname;
-    char    *fileprefix = "y";
-    size_t  size;
+    int             i;
+    FILE            *skeleton;
+    FILE            *temp1;
+    FILE            *temp2;
+    FILE            *tokout;
+    FILE            *actout;
+    int             ch;
+    char            *srcname;
+    char            *fileprefix = "y";
+    size_t          size;
+    a_token         token;
 
+    MemInit();
     param_requested = 0;
     for( i = 1; i < argc; ++i ) {
         ch = argv[i][0];
@@ -312,12 +321,13 @@ int main( int argc, char **argv )
         skeleton = openr( argv[argc - 1] );
         if( skeleton == NULL ) {
             msg( "could not open driver source code '%s'\n", argv[argc - 1] );
+            /* never return */
         }
     }
     loadpath = argv[0];
     *getname( loadpath ) = '\0';
     srcname = argv[i];
-    if( !strrchr( srcname, '.' ) ) {
+    if( strrchr( srcname, '.' ) == NULL ) {
         srcname = alloca( strlen( argv[i] )+3 );
         srcname = strcat( strcpy( srcname, argv[i] ), ".y" );
     }
@@ -325,27 +335,29 @@ int main( int argc, char **argv )
     srcname_norm = fname_normalize( srcname );
 
     size = strlen( fileprefix);
-    codefilename   = MALLOC( size + 6, char );
+    codefilename   = MemAllocSafe( size + 6 );
     strcat( strcpy( codefilename, fileprefix), "tab.c" );
-    headerfilename = MALLOC( size + 6, char );
+    headerfilename = MemAllocSafe( size + 6 );
     strcat( strcpy( headerfilename, fileprefix), "tab.h" );
-    descfilename   = MALLOC( size + 5, char );
+    descfilename   = MemAllocSafe( size + 5 );
     strcat( strcpy( descfilename, fileprefix), ".out" );
     actout = openw( codefilename );
     tokout = openw( headerfilename );
     temp1 = tmpfile();
     if( temp1 == NULL ) {
         msg( "Cannot create temporary file\n" );
+        /* never return */
     }
-    defs( temp1 );
+    defs( temp1, &token );
     dump_header( tokout );
     close_header( tokout );
     fclose( tokout );
     temp2 = tmpfile();
     if( temp2 == NULL ) {
         msg( "Cannot create temporary file\n" );
+        /* never return */
     }
-    rules( temp2 );
+    rules( temp2, &token );
     buildpro();
     CalcMinSentence();
     if( proflag || showflag ) {
@@ -364,6 +376,7 @@ int main( int argc, char **argv )
     if( default_shiftflag ) {
         if( keyword_id_low == 0 ) {
             msg( "No %%keyword_id <low> <high> specified." );
+            /* never return */
         } else {
             MarkDefaultShifts();
         }
@@ -377,8 +390,10 @@ int main( int argc, char **argv )
     if( warnings ) {
         if( warnings == 1 ) {
             msg( "%s: 1 warning\n", srcname );
+            /* never return */
         } else {
             msg( "%s: %d warnings\n", srcname, warnings );
+            /* never return */
         }
     }
     parsestats();
@@ -410,7 +425,11 @@ int main( int argc, char **argv )
      */
     copy_part( temp1, actout );
     fclose( temp1 );
-    genobj( actout );
+    if( fastflag ) {
+        genobj_fast( actout );
+    } else {
+        genobj( actout );
+    }
     /*
      * copy middle part of skeleton
      */
@@ -426,12 +445,26 @@ int main( int argc, char **argv )
         copy_rest( skeleton, actout );
         fclose( skeleton );
     }
-    tail( actout );
+    tail( actout, &token );
     fclose( yaccin );
     fclose( actout );
-    FREE( codefilename );
-    FREE( headerfilename );
-    FREE( descfilename );
-    FREE( srcname_norm );
+    MemFree( codefilename );
+    MemFree( headerfilename );
+    MemFree( descfilename );
+    MemFree( srcname_norm );
+    /*
+     * Release all major data structures in dependency order:
+     *   1. lset/rset follow-set blocks (raction->follow pointers into rset
+     *      are no longer needed after genobj)
+     *   2. ambiguity conflict nodes (a_SR_conflict_list freed via buildpro)
+     *   3. symbol/production graph (symlist, a_sym, a_pro, SR_conflict_list)
+     *   4. state graph (statelist, a_state, items, trans, redun, parents,
+     *      statetab; state->look points into the block freed in step 1)
+     */
+    FreeLalr1Sets();
+    FreeAmbigData();
+    FreeBuildproData();
+    FreeStateData();
+    MemFini();
     return( 0 );
 }

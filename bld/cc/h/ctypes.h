@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -109,8 +109,8 @@ typedef enum    type_modifiers {    /* type   leaf   sym   */
     FLAG_UNALIGNED  = 0x10000,      /*                     _Packed structures */
     FLAG_INLINE     = 0x20000,      /* Y20000              _inline keyword */
     FLAG_WAS_ARRAY  = 0x20000,      /* Y20000              for "char *argv[]" */
-    FLAG_ABORTS     = 0x40000,      /* Y40000              __declspec(aborts) */
-    FLAG_NORETURN   = 0x80000,      /* Y80000              __declspec(noreturn) */
+    FLAG_ABORTS     = 0x40000,      /* Y40000              __declspec(__aborts) */
+    FLAG_NORETURN   = 0x80000,      /* Y80000              __declspec(__noreturn) */
     FLAG_FARSS      = 0x100000,     /* Y100000             use far ss for auto variables (-zu) */
 } type_modifiers;
 
@@ -609,6 +609,7 @@ typedef struct comp_flags {
     boolbit debug_info_some                     : 1;    /* d1 + some typing info     */
     boolbit emit_names                          : 1;    /* /en switch used           */
     boolbit cpp_mode                            : 1;    /* compiler CPP mode         */
+    boolbit cpp_dump_macros                     : 1;    /* dump predefined macros    */
     boolbit warnings_cause_bad_exit             : 1;    /* warnings=>non-zero exit   */
 
     boolbit save_restore_segregs                : 1;    /* save/restore segregs      */

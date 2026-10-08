@@ -234,6 +234,9 @@ static search_result LkupGblName( imp_image_handle *iih, section_info *inf, imp_
                 }
             }
             ish = DCSymCreate( iih, d );
+            if( ish == NULL ) {
+                return( SR_FAIL );
+            }
             ish->imh = GBL_MOD( gbl );
             MK_ADDR( addr, gbl->addr, inf->sect_id );
             /*

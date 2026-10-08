@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -116,7 +116,7 @@
   #define _TARGET_      "x86 32-bit"
 #endif
 
-#define TEMPFILE        "__wcl__" TOOL_LNK_EXT  /* temporary linker directive file 8.3 */
+#define TEMPFILE        "__wcl__" TOOL_FEXT_LNK  /* temporary linker directive file 8.3 */
 
 #ifdef __UNIX__
 #define IS_OPT(x)       ((x)=='-')
@@ -126,9 +126,9 @@
 
 #define IS_WS(x)        ((x)==' ' || (x)=='\t')
 
-#define IS_ASM(x)       (x[0] == '.' && fname_cmp(x + 1, ASM_EXT) == 0)
-#define IS_LIB(x)       HasFileExtension(x, LIB_EXT)
-#define IS_RES(x)       HasFileExtension(x, RES_EXT)
+#define IS_ASM(x)       (x[0] == '.' && fname_cmp(x + 1, FEXT_ASM) == 0)
+#define IS_LIB(x)       HasFileExtension(x, FEXT_LIB)
+#define IS_RES(x)       HasFileExtension(x, FEXT_RES)
 
 #define SKIP_SPACES(x)  while( IS_WS( *x ) ) ++x
 
@@ -161,13 +161,13 @@ static const char EngUsageText[] = {
 
 
 static etool tools[TYPE_MAX] = {
-    { LINK, LINK TOOL_EXE_EXT,   NULL },
-    { PACK, PACK TOOL_EXE_EXT,   NULL },
-    { DIS,  DIS  TOOL_EXE_EXT,   NULL },
-    { AS,   AS   TOOL_EXE_EXT,   NULL },
-    { CC,   CC   TOOL_EXE_EXT,   NULL },
-    { CPP,  CPP  TOOL_EXE_EXT,   NULL },
-    { FC,   FC   TOOL_EXE_EXT,   NULL }
+    { LINK, LINK TOOL_FEXT_EXE,   NULL },
+    { PACK, PACK TOOL_FEXT_EXE,   NULL },
+    { DIS,  DIS  TOOL_FEXT_EXE,   NULL },
+    { AS,   AS   TOOL_FEXT_EXE,   NULL },
+    { CC,   CC   TOOL_FEXT_EXE,   NULL },
+    { CPP,  CPP  TOOL_FEXT_EXE,   NULL },
+    { FC,   FC   TOOL_FEXT_EXE,   NULL }
 };
 
 
@@ -503,7 +503,7 @@ static int Parse( const char *cmd )
                 NormalizeFName( Word, MAX_CMD, Word );
                 new_item = MemAlloc( sizeof( list ) );
                 new_item->next = NULL;
-                new_item->item = MemStrDup( Word );
+                new_item->item = MemStrdup( Word );
                 if( IS_LIB( Word ) ) {
                     ListAppend( &Libs_List, new_item );
                 } else if( IS_RES( Word ) ) {
@@ -526,7 +526,7 @@ static int Parse( const char *cmd )
                     }
                     end = ScanFName( end, Word + len );
                     NormalizeFName( Word, MAX_CMD, Word );
-                    MakeName( Word, TOOL_LNK_EXT );
+                    MakeName( Word, TOOL_FEXT_LNK );
                     errno = 0;
                     if( (atfp = fopen( Word, "r" )) == NULL ) {
                         PrintMsg( WclMsgs[UNABLE_TO_OPEN_DIRECTIVE_FILE], Word, strerror(  errno ) );
@@ -554,7 +554,7 @@ static int Parse( const char *cmd )
                     if( strnicmp( Word + 1, "cl=", 3 ) == 0 ) {
                         Flags.link_for_sys = true;
                         MemFree( SystemName );
-                        SystemName = MemStrDup( Word + 4 );
+                        SystemName = MemStrdup( Word + 4 );
                         strcpy( Word, "bt=" );
                         strcpy( Word + 3, SystemName );
                     }
@@ -568,11 +568,11 @@ static int Parse( const char *cmd )
                         if( Word[2] == '=' || Word[2] == '#' ) {
                             end = file_end;
                             NormalizeFName( Word, MAX_CMD, Word + 3 );
-                            MakeName( Word, TOOL_LNK_EXT );  /* add extension */
+                            MakeName( Word, TOOL_FEXT_LNK );  /* add extension */
                             Link_Name = MemAlloc( strlen( Word ) + 1 );
                             strcpy( Link_Name, Word );
                         } else {
-                            Link_Name = MemStrDup( TEMPFILE );
+                            Link_Name = MemStrdup( TEMPFILE );
                         }
                         wcc_option = 0;
                         break;
@@ -581,7 +581,7 @@ static int Parse( const char *cmd )
                             end = file_end;
                             NormalizeFName( Word, MAX_CMD, Word + 3 );
                             MemFree( Exe_Name );
-                            Exe_Name = MemStrDup( Word );
+                            Exe_Name = MemStrdup( Word );
                         }
                         wcc_option = 0;
                         break;
@@ -594,7 +594,7 @@ static int Parse( const char *cmd )
                             end = file_end;
                             NormalizeFName( Word, MAX_CMD, Word + 3 );
                             MemFree( Map_Name );
-                            Map_Name = MemStrDup( Word );
+                            Map_Name = MemStrdup( Word );
                         }
                         wcc_option = 0;
                         break;
@@ -605,7 +605,7 @@ static int Parse( const char *cmd )
                             ++p;
                         NormalizeFName( p, MAX_CMD, p );
                         MemFree( Obj_Name );
-                        Obj_Name = MemStrDup( p );
+                        Obj_Name = MemStrdup( p );
                         break;
 #if defined( WCLI86 ) || defined( WCL386 )
                     case 'p':           /* floating-point option */
@@ -622,7 +622,7 @@ static int Parse( const char *cmd )
                 case 'k':               /* stack size option */
                     if( len > 1 ) {
                         MemFree( StackSize );
-                        StackSize = MemStrDup( Word + 1 );
+                        StackSize = MemStrdup( Word + 1 );
                     }
                     wcc_option = 0;
                     break;
@@ -640,7 +640,7 @@ static int Parse( const char *cmd )
                         if( opt == '=' || opt == '#' )
                             ++p;
                         MemFree( SystemName );
-                        SystemName = MemStrDup( p );
+                        SystemName = MemStrdup( p );
                     }
                     wcc_option = 0;
                     break;
@@ -782,18 +782,6 @@ static int Parse( const char *cmd )
 }
 
 
-static int useCPlusPlus( const char *p )
-/**************************************/
-{
-    return( *p++ == '.' && (
-        fname_cmp( p, "cpp" ) == 0 ||
-        fname_cmp( p, "cxx" ) == 0 ||
-        fname_cmp( p, "cc" )  == 0 ||
-        fname_cmp( p, "hpp" ) == 0 ||
-        fname_cmp( p, "hxx" ) == 0 ) );
-}
-
-
 static etool *FindToolGetPath( tool_type utl )
 /********************************************/
 {
@@ -848,6 +836,25 @@ static int tool_exec( tool_type utl, const char *p1, const char *p2 )
 static tool_type SrcName( char *name )
 /************************************/
 {
+#if 1
+    const char  *p;
+    tool_type   utl;
+
+    p = strrchr( name, '.' );
+    if( p == NULL || strpbrk( p, PATH_SEPS_STR ) != NULL )
+        p = name + strlen( name );
+    if( IS_ASM( p ) ) {
+        utl = TYPE_ASM;
+    } else {
+        utl = TYPE_C;               // assume C compiler
+        if( !Flags.force_c ) {
+            if( Flags.force_c_plus || UseCPlusPlus( p ) ) {
+                utl = TYPE_CPP;     // use C++ compiler
+            }
+        }
+    }
+    return( utl );
+#else
     pgroup2     pg;
     tool_type   utl;
 
@@ -860,7 +867,7 @@ static tool_type SrcName( char *name )
             if( access( name, F_OK ) != 0 ) {
                 strcpy( pg.ext, ".cc" );
                 if( access( name, F_OK ) != 0 ) {
-                    strcpy( pg.ext, "." ASM_EXT );
+                    strcpy( pg.ext, "." FEXT_ASM );
                     if( access( name, F_OK ) != 0 ) {
                         strcpy( pg.ext, ".c" );
                     }
@@ -873,12 +880,13 @@ static tool_type SrcName( char *name )
     } else {
         utl = TYPE_C;               // assume C compiler
         if( !Flags.force_c ) {
-            if( Flags.force_c_plus || useCPlusPlus( pg.ext ) ) {
+            if( Flags.force_c_plus || UseCPlusPlus( pg.ext ) ) {
                 utl = TYPE_CPP;     // use C++ compiler
             }
         }
     }
     return( utl );
+#endif
 }
 
 void BuildSystemLink( FILE *fp )
@@ -953,7 +961,7 @@ static FILE *OpenWlinkTmpFile( char *name )
     int     fh;
 
     for( i = 0; i < 100; i++ ) {
-        sprintf( name + 1 + 6, "%2.2d" TOOL_LNK_EXT, i );
+        sprintf( name + 1 + 6, "%2.2d" TOOL_FEXT_LNK, i );
         fh = open( name + 1, O_RDWR | O_CREAT | O_EXCL | O_BINARY, PMODE_RW );
         if( fh != -1 ) {
             close( fh );
@@ -1003,7 +1011,7 @@ static  int  CompLink( void )
             }
             AddNameObj( Word );
             if( Exe_Name == NULL ) {
-                Exe_Name = MemStrDup( RemoveExt( Word ) );
+                Exe_Name = MemStrdup( RemoveExt( Word ) );
             }
             file = GetName( NULL, NULL );   /* get next filename */
         }

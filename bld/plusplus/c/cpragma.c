@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -122,7 +122,10 @@ INITDEFN( pragma_extref, init, fini );
 
 bool GetMsgNum( const char *str, MSG_NUM *msgnum )
 {
-    if( tolower( *(unsigned char *)str ) == 'c' ) {
+    char            c;
+
+    c = *str;
+    if( c == 'C' || c == 'c' ) {
         /*
          * skip C compiler messages, prefixed by 'C' character
          */
@@ -133,7 +136,7 @@ bool GetMsgNum( const char *str, MSG_NUM *msgnum )
      * process C++ compiler messages, prefixed by 'P' character
      * or old messages, may be C or C+++ message
      */
-    if( tolower( *(unsigned char *)str ) == 'p' )
+    if( c == 'P' || c == 'p' )
         str++;
     if( isdigit( *(unsigned char *)str ) ) {
         *msgnum = atol( str );
@@ -428,13 +431,13 @@ static void pragCodeSeg(        // SET NEW CODE SEGMENT
     if( CurToken == T_LEFT_PAREN ) {
         NextToken();
         if( ( CurToken == T_STRING ) || ( CurToken == T_ID ) ) {
-            seg_name = CMemStrDup( Buffer );
+            seg_name = CMemStrdup( Buffer );
             seg_class = NULL;
             NextToken();
             if( CurToken == T_COMMA ) {
                 NextToken();
                 if( ( CurToken == T_STRING ) || ( CurToken == T_ID ) ) {
-                    seg_class = CMemStrDup( Buffer );
+                    seg_class = CMemStrdup( Buffer );
                     NextToken();
                 } else {
                     MustRecog( T_STRING );
@@ -474,13 +477,13 @@ static void pragDataSeg(        // SET NEW DATA SEGMENT
     if( CurToken == T_LEFT_PAREN ) {
         NextToken();
         if( ( CurToken == T_STRING ) || ( CurToken == T_ID ) ) {
-            seg_name = CMemStrDup( Buffer );
+            seg_name = CMemStrdup( Buffer );
             seg_class = NULL;
             NextToken();
             if( CurToken == T_COMMA ) {
                 NextToken();
                 if( ( CurToken == T_STRING ) || ( CurToken == T_ID ) ) {
-                    seg_class = CMemStrDup( Buffer );
+                    seg_class = CMemStrdup( Buffer );
                     NextToken();
                 } else {
                     MustRecog( T_STRING );
@@ -1596,7 +1599,7 @@ void PragObjNameInfo(           // RECOGNIZE OBJECT NAME INFORMATION
 {
     if( CurToken == T_STRING ) {
         CMemFree( CurrInfo->objname );
-        CurrInfo->objname = CMemStrDup( Buffer );
+        CurrInfo->objname = CMemStrdup( Buffer );
         NextToken();
     }
 }
@@ -1777,7 +1780,7 @@ struct textsegment *LkSegName(  // LOOKUP SEGMENT NAME
     }
     seg = CMemAlloc( sizeof( struct textsegment ) );
     seg->next = TextSegList;
-    seg->segname = CMemStrDup( name );
+    seg->segname = CMemStrdup( name );
     seg->segment_number = 0;
     TextSegList = seg;
     return( seg );

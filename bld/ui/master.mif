@@ -6,31 +6,34 @@ ui_nofpu = 1
 
 ui_nodoslfn = 1
 
+!ifdef sample
 ui_trmem = 1
+!endif
 
 ui_autodepends = .AUTODEPEND
 
 !include cproj.mif
 !include defrule.mif
 !include deftarg.mif
-!include trmem.mif
 
 !include $(ui_dir)/client.mif       # define cli_ui_os macro
+!ifdef sample
+!include tools.mif
+!endif
 
 #
 # cflags
 #
 .c: ../c;../../c;$(extra_cdir);$(trmem_dir)
 
-inc_dirs = -I"../h" $(cli_ui_inc_dirs)
+inc_dirs = -I"../h" $(cli_ui_inc_dirs) -I"$(trmem_dir)"
 inc_dirs_dos = -I"$(clib_dir)/mbyte/h"
-inc_dirs_nov = -I"$(watcom_nw40_h)" -I"$(lib_misc_dir)/h"
+#inc_dirs_nov = -I"$(watcom_nw40_h)" -I"$(lib_misc_dir)/h"
+inc_dirs_nov = -I"$(lib_misc_dir)/h"
 inc_dirs_qnx = -I. -I"../../unix/h"
 
 extra_cpp_flags_dos = -DCHARMAP
 extra_cpp_flags_nov = -D_NETWARE_CLIB
-
-extra_cpp_flags_f_uialloc = $(trmem_cpp_flags)
 
 !ifeq debug 0
 extra_c_flags = -os
@@ -39,9 +42,6 @@ extra_c_flags = -os
 extra_c_flags_nov     = -ot -4s
 extra_c_flags_win     = -zu
 extra_c_flags_qnx386 = -4r
-
-# memory tracker routines
-extra_c_flags_f_uialloc = $(trmem_cover_cflags)
 
 #
 # lflags
@@ -57,23 +57,22 @@ extra_l_flags_nov = opt st=10k opt description 'Sample NLM' &
 # objects
 #
 common_objs = &
-    uialloc.obj  uiarea.obj   uiattr.obj   uiback.obj   &
-    uiballoc.obj uiband.obj   uibarf.obj   uibattr.obj  &
-    uibcopy.obj  uibfake.obj  uibfill.obj  uibios.obj   &
-    uiblank.obj  uibox.obj    uibpix.obj   uibstr.obj   &
-    uicheck.obj  uiconfig.obj uicurs.obj   uidata.obj   &
-    uidchfld.obj uidebug.obj  uidevent.obj uidialcb.obj &
-    uidialog.obj uidirty.obj  uidlgfcn.obj uiev.obj     &
-    uifar.obj    uifmem.obj   uiforce.obj  uigadget.obj &
-    uigchar.obj  uiget.obj    uihotspt.obj uiinit.obj   &
-    uiledit.obj  uilist.obj   uilstbox.obj uimem.obj    &
-    uimenu.obj   uimenucr.obj uimget.obj   uimisc.obj   &
-    uimousev.obj uipad.obj    uipget.obj   uipopup.obj  &
-    uiprot.obj   uisnow.obj   uispawn.obj  uitab.obj    &
-    uivattr.obj  uivedit.obj  uivfill.obj  uivfld.obj   &
-    uivhide.obj  uivline.obj  uivmove.obj  uivopen.obj  &
-    uivscrn.obj  uivstr.obj   uivutil.obj  uiwin.obj    &
-    uiyield.obj  uipositi.obj
+    uiarea.obj   uiattr.obj   uiback.obj   uiballoc.obj &
+    uiband.obj   uibarf.obj   uibattr.obj  uibcopy.obj  &
+    uibfake.obj  uibfill.obj  uibios.obj   uiblank.obj  &
+    uibox.obj    uibpix.obj   uibstr.obj   uicheck.obj  &
+    uiconfig.obj uicurs.obj   uidata.obj   uidchfld.obj &
+    uidebug.obj  uidevent.obj uidialcb.obj uidialog.obj &
+    uidirty.obj  uidlgfcn.obj uiev.obj     uifar.obj    &
+    uiforce.obj  uigadget.obj uigchar.obj  uiget.obj    &
+    uihotspt.obj uiinit.obj   uiledit.obj  uilist.obj   &
+    uilstbox.obj uimenu.obj   uimenucr.obj uimget.obj   &
+    uimisc.obj   uimousev.obj uipad.obj    uipget.obj   &
+    uipopup.obj  uiprot.obj   uisnow.obj   uispawn.obj  &
+    uitab.obj    uivattr.obj  uivedit.obj  uivfill.obj  &
+    uivfld.obj   uivhide.obj  uivline.obj  uivmove.obj  &
+    uivopen.obj  uivscrn.obj  uivstr.obj   uivutil.obj  &
+    uiwin.obj    uiyield.obj  uipositi.obj
 
 # system type         dos  nov  nt   os2  qnx  unix  win  rdos
 # builder builds      yes  no   yes  yes  no   yes   yes  yes
@@ -117,7 +116,7 @@ common_objs = &
 #
 !ifdef sample
 exetarg_prebuild_objs = ui.lib
-exetarg_objs = sample.obj sampdial.obj
+exetarg_objs = sample.obj sampdial.obj uialloc.obj
 exetarg_libs = $(cli_ui_libs)
 exetarg_name = sample
 !include exetarg.mif

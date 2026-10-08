@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -454,7 +454,7 @@ static void addInstructionSymbol( ins_flags flags, ins_table *table_entry ) {
     if( flags & LK ) strcat( buffer, "l" );
     if( flags & AA ) strcat( buffer, "a" );
 
-    entry = MemAlloc( sizeof( ins_symbol ) );
+    entry = MemAllocSafe( sizeof( ins_symbol ) );
     entry->table_entry = table_entry;
     entry->flags = flags;
 
@@ -572,7 +572,7 @@ instruction *InsCreate( sym_handle op_sym )
 {
     instruction *ins;
 
-    ins = MemAlloc( sizeof( instruction ) );
+    ins = MemAllocSafe( sizeof( instruction ) );
     ins->opcode_sym = op_sym;
     ins->format = SymGetLink( op_sym );
     ins->num_operands = 0;

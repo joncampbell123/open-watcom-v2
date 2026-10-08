@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -32,7 +32,7 @@
 
 
 #include "wdeglbl.h"
-#include "wclbdde.h"
+#include <ddeml.h>
 #include "wrdll.h"
 #include "wdemsgbx.h"
 #include "rcstr.grh"
@@ -45,6 +45,9 @@
 #include "wdemain.h"
 #include "wderesin.h"
 #include "wdedde.h"
+#ifdef __WINDOWS__
+    #include "wclbdde.h"
+#endif
 
 
 /****************************************************************************/
@@ -91,7 +94,9 @@ static void     WdeHandlePokedData( HDDEDATA hData );
 /* static variables                                                         */
 /****************************************************************************/
 static  DWORD       IdInst = 0;
+#ifdef __WINDOWS__
 static  PFNCALLBACK DdeProcInst = NULL;
+#endif
 static  HSZ         hDialogService = NULL;
 static  HSZ         hDialogTopic = NULL;
 static  HSZ         hService = NULL;
@@ -120,16 +125,22 @@ bool WdeDDEStart( HINSTANCE inst )
         return( false );
     }
 
+#ifdef __WINDOWS__
     DdeProcInst = MakeProcInstance_DDE( DdeCallBack, inst );
     if( DdeProcInst == NULL ) {
         return( false );
     }
+#endif
 
     flags = APPCLASS_STANDARD | APPCMD_FILTERINITS |
             CBF_FAIL_ADVISES | CBF_FAIL_SELFCONNECTIONS |
             CBF_SKIP_REGISTRATIONS | CBF_SKIP_UNREGISTRATIONS;
 
+#ifdef __WINDOWS__
     ret = DdeInitialize( &IdInst, DdeProcInst, flags, 0 );
+#else
+    ret = DdeInitialize( &IdInst, DdeCallBack, flags, 0 );
+#endif
     if( ret != DMLERR_NO_ERROR ) {
         return( false );
     }
@@ -194,9 +205,11 @@ void WdeDDEEnd( void )
         DdeUninitialize( IdInst );
         IdInst = 0;
     }
+#ifdef __WINDOWS__
     if( DdeProcInst != NULL ) {
         FreeProcInstance_DDE( DdeProcInst );
     }
+#endif
 }
 
 bool WdeDDEDumpConversation( HINSTANCE inst )
@@ -302,7 +315,7 @@ HDDEDATA WdeCreateResNameData( WResID *name, bool is32bit )
 
     if( WRDataFromWResID( name, &data, &size, is32bit ) ) {
         hData = DdeCreateDataHandle( IdInst, (LPBYTE)data, (DWORD)size, 0, hNameItem, WdeDataClipbdFormat, 0 );
-        WRMemFree( data );
+        MemFree( data );
     }
 
     return( hData );
@@ -318,7 +331,7 @@ HDDEDATA WdeCreateResData( WdeResDlgItem *ditem )
 
     if( WdeGetItemData( ditem, &data, &size ) ) {
         hData = DdeCreateDataHandle( IdInst, (LPBYTE)data, (DWORD)size, 0, hDataItem, WdeDataClipbdFormat, 0 );
-        WRMemFree( data );
+        MemFree( data );
     }
 
     return( hData );
@@ -440,7 +453,7 @@ bool WdeStartDDEEditSession( void )
         if( ditem->dialog_name == NULL ) {
             ok = false;
         }
-        WRMemFree( data );
+        MemFree( data );
     }
 
     if( ok ) {
@@ -457,7 +470,7 @@ bool WdeStartDDEEditSession( void )
                 if( ditem->dialog_info == NULL ) {
                     ok = false;
                 }
-                WRMemFree( data );
+                MemFree( data );
             }
         }
     }
@@ -502,7 +515,7 @@ bool WdeStartDDEEditSession( void )
     }
 
     if( filename != NULL ) {
-        WRMemFree( filename );
+        MemFree( filename );
     }
 
     return( ok );
@@ -553,7 +566,7 @@ void WdeHandlePokedData( HDDEDATA hData )
 #endif
     }
 
-    WRMemFree( cmd );
+    MemFree( cmd );
 }
 
 HDDEDATA CALLBACK DdeCallBack( UINT wType, UINT wFmt, HCONV hConv,
@@ -578,7 +591,7 @@ HDDEDATA CALLBACK DdeCallBack( UINT wType, UINT wFmt, HCONV hConv,
         WdeServerConv = (HCONV)NULL;
         WdeClientConv = (HCONV)NULL;
         hmain = WdeGetMainWindowHandle();
-        SendMessage( hmain, WM_CLOSE, (WPARAM)1, 0 );
+        SendMessage( hmain, WM_CLOSE, 1, 0 );
         break;
 
     case XTYP_CONNECT:

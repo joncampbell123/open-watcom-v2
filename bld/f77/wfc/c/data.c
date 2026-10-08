@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -69,11 +69,10 @@ static  void    CkFlags( void );
 static  void    GetSConst( void );
 
 
-void    CpData(void) {
-//================
-
+void    CpData(void)
+//==================
 // Compile DATA statement.
-
+{
     label_id    end_data;
     int         data_sets;
     bool        error;
@@ -84,17 +83,18 @@ void    CpData(void) {
     data_sets = 0;
     CITNode->opr = OPR_COM; // prevent call to FinishImpDo first time
     end_data = GDataProlog();
-    for(;;) {
+    for( ;; ) {
         DoData();
         error |= AError;
         ++data_sets;
-        if( RecNOpn() ) {
+        if( RecNoOpn() ) {
             AdvanceITPtr();
             if( RecTrmOpr() )
                 break;
-            ReqComma();
+            ReqCommaOpr();
         }
-        if( RecTrmOpr() || error ) {
+        if( RecTrmOpr()
+          || error ) {
             break;
         }
     }
@@ -106,11 +106,10 @@ void    CpData(void) {
 }
 
 
-void    DataInit( itnode *var_node ) {
-//====================================
-
+void    DataInit( itnode *var_node )
+//==================================
 // Process data within a type declaration statement.
-
+{
     label_id    end_data;
 
     Free2CIT( var_node );
@@ -122,23 +121,23 @@ void    DataInit( itnode *var_node ) {
         DumpDataSets( 1, var_node );
     }
     GDataEpilog( end_data );
-    if( ReqNOpn() ) {
+    if( ReqNoOpn() ) {
         AdvanceITPtr();
     }
 }
 
 
-static  void    Free2CIT( itnode *node ) {
-//========================================
-
+static  void    Free2CIT( itnode *node )
+//======================================
 // Free all nodes between "node" and "CITNode".
-
+{
     itnode      *junk;
     itnode      *chaser;
 
-// this code makes a(3)/3*5/ from a type declaration look like
-// a/3*5/ as in a DATA statement so we can call DoData().
-
+    /*
+     * this code makes a(3)/3*5/ from a type declaration look like
+     * a/3*5/ as in a DATA statement so we can call DoData().
+     */
     junk = node->link;
     node->link = CITNode;
     chaser = junk;
@@ -150,11 +149,10 @@ static  void    Free2CIT( itnode *node ) {
 }
 
 
-static  void    DoData( void ) {
-//========================
-
+static  void    DoData( void )
+//============================
 // Process one vlist/dlist/ pair.
-
+{
     STMT    save_stmtproc;
 
     StmtSw |= SS_DATA_INIT;
@@ -172,25 +170,27 @@ static  void    DoData( void ) {
 }
 
 
-static  OPR    FindSlash( itnode **itptr_ptr ) {
-//===============================================
-
+static  OPR    FindSlash( itnode **itptr_ptr )
+//============================================
 // Scan ahead for an OPN_DIV and replace it with OPN_TRM.
-
+{
     int         level;
     itnode      *cit;
     OPR         opr;
 
     cit = CITNode;
     level = 0;
-    for(;;) {
-        if( RecOpenParen() ) {
+    for( ;; ) {
+        if( RecOpenParenOpr() ) {
             level++;
-        } else if( RecCloseParen() ) {
+        } else if( RecCloseParenOpr() ) {
             level--;
         }
         AdvanceITPtr();
-        if( ( (RecDiv() || RecCat()) && (level == 0) ) || RecTrmOpr() ) {
+        if( ( (RecDivOpr()
+          || RecCatOpr())
+          && (level == 0) )
+          || RecTrmOpr() ) {
             break;
         }
     }
@@ -202,11 +202,10 @@ static  OPR    FindSlash( itnode **itptr_ptr ) {
 }
 
 
-static  void    VarList( void ) {
-//=========================
-
+static  void    VarList( void )
+//=============================
 // Process one variable list in a DATA statement.
-
+{
     OPR         last_opr;
     OPR         opr;
     int         do_level;
@@ -217,12 +216,13 @@ static  void    VarList( void ) {
     while( CITNode != last_node ) {
         if( AError )
             break;
-        if( RecTrmOpr() && ( CITNode != ITHead ) ) {
+        if( RecTrmOpr()
+          && ( CITNode != ITHead ) ) {
             --do_level;
             FinishImpDo();
         } else if( StartImpDo() ) {
             ++do_level;
-        } else if( ReqName( NAME_VAR_OR_ARR ) ) {
+        } else if( ReqNameOpn( NAME_VAR_OR_ARR ) ) {
             InitVar = LkSym();
             if( InitVar->u.ns.u1.s.typ == FT_STRUCTURE ) {
                 // make sure structure size is calculated - normally
@@ -236,7 +236,7 @@ static  void    VarList( void ) {
             CITNode->opr = opr;
             ListItem();
             if( !RecTrmOpr() ) {
-                ReqComma();
+                ReqCommaOpr();
             }
         } else {
             AdvanceITPtr();
@@ -251,16 +251,15 @@ static  void    VarList( void ) {
         }
     } else {
         CITNode->opr = last_opr;
-        ReqDiv();
+        ReqDivOpr();
     }
 }
 
 
-static  bool    HexConst(void) {
-//==========================
-
+static  bool    HexConst(void)
+//============================
 // Check for a hexadecimal constant specifier.
-
+{
     char        *hex_data;
     size_t      hex_len;
     sym_id      sym;
@@ -268,7 +267,7 @@ static  bool    HexConst(void) {
     hex_data = CITNode->opnd;
     hex_len = CITNode->opnd_size;
     if( CITNode->opn.ds != DSOPN_HEX ) {
-        if( !RecName() )
+        if( !RecNameOpn() )
             return( false );
         if( *hex_data != 'Z' )
             return( false );
@@ -294,16 +293,15 @@ static  bool    HexConst(void) {
 }
 
 
-static  void    ConList( void ) {
-//=========================
-
+static  void    ConList( void )
+//=============================
 // Collect constants for data initialization.
-
+{
     OPR         opr;
     itnode      *last_node;
 
     opr = FindSlash( &last_node );
-    for(;;) {
+    for( ;; ) {
         if( RecNextOpr( OPR_MUL ) ) {
             ProcDataRepExpr();
             if( ITIntValue( CITNode ) <= 0 ) {
@@ -319,46 +317,45 @@ static  void    ConList( void ) {
         AdvanceITPtr();
         if( CITNode == last_node )
             break;
-        ReqComma();
+        ReqCommaOpr();
         if( AError ) {
             break;
         }
     }
     CITNode->opr = opr;
-    ReqDiv();
+    ReqDivOpr();
 }
 
 
-static  void    DumpDataSets( int num, itnode *node ) {
-//=====================================================
-
+static  void    DumpDataSets( int num, itnode *node )
+//===================================================
 // Dump the constants for data initialization.
-
+{
     itnode      *rpt;
 
     GStopIO();
     CITNode = node;
     GBegDList();
     while( --num >= 0 ) {
-        for(;;) {
+        for( ;; ) {
             AdvanceITPtr();
-            if( RecDiv() ) {
+            if( RecDivOpr() ) {
                 break;
             }
         }
-        for(;;) {
+        for( ;; ) {
             if( RecNextOpr( OPR_MUL ) ) {
                 rpt = CITNode;
                 AdvanceITPtr();
             } else {
                 rpt = NULL;
             }
-            if( RecNOpn() ) { // jump over optional sign.
+            if( RecNoOpn() ) { // jump over optional sign.
                 AdvanceITPtr();
             }
             GDataItem( rpt );
             AdvanceITPtr();
-            if( RecDiv() ) {
+            if( RecDivOpr() ) {
                 break;
             }
         }
@@ -368,19 +365,18 @@ static  void    DumpDataSets( int num, itnode *node ) {
 }
 
 
-static  void    GetSConst( void ) {
-//===========================
-
+static  void    GetSConst( void )
+//===============================
 // Signed constant converting without downscan-upscan process.
-
+{
     int         sign;
 
-    if( RecNOpn() ) {
+    if( RecNoOpn() ) {
         sign = 1;
         if( RecNextOpr( OPR_MIN ) ) {
             sign = -1;
-        } else if( !RecNextOpr( OPR_PLS ) ||
-                   ( CITNode->link->opn.ds < DSOPN_INT ) ) {
+        } else if( !RecNextOpr( OPR_PLS )
+          || ( CITNode->link->opn.ds < DSOPN_INT ) ) {
             ProcDataIExpr();
             return;
         }
@@ -440,7 +436,8 @@ size_t MkHexConst( const char *src, char *dst, size_t src_len )
         src_len--;
     }
     while( src_len != 0 ) {
-        if( isxdigit( (unsigned char)src[0] ) == 0 || isxdigit( (unsigned char)src[1] ) == 0 )
+        if( isxdigit( (unsigned char)src[0] ) == 0
+          || isxdigit( (unsigned char)src[1] ) == 0 )
             break;
         if( dst != NULL ) {
             *dst++ = Hex( src[0] ) * 0x10 + Hex( src[1] );
@@ -455,14 +452,15 @@ size_t MkHexConst( const char *src, char *dst, size_t src_len )
 }
 
 
-static  void    CkFlags( void ) {
-//=========================
-
+static  void    CkFlags( void )
+//=============================
+{
     if( (InitVar->u.ns.flags & SY_CLASS) != SY_VARIABLE ) {
-        ClassNameErr( DA_ILL_NAME, InitVar );
+        SymClassErr( DA_ILL_NAME, InitVar );
     } else if( (InitVar->u.ns.flags & SY_SUB_PARM) != 0 ) {
-        ClassNameErr( DA_ILL_NAME, InitVar );
-    } else if( (InitVar->u.ns.flags & SY_SUBSCRIPTED) && _Allocatable( InitVar ) ) {
+        SymClassErr( DA_ILL_NAME, InitVar );
+    } else if( (InitVar->u.ns.flags & SY_SUBSCRIPTED)
+      && _Allocatable( InitVar ) ) {
         IllName( InitVar );
     } else {
         // Don't set SY_TYPE otherwise we won't be able to detect whether

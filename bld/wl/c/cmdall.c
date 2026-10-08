@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -47,7 +47,6 @@
 #include "cmdrdv.h"
 #include "cmdqnx.h"
 #include "cmdelf.h"
-#include "cmdzdos.h"
 #include "cmdraw.h"
 #include "cmdline.h"
 #include "symtrace.h"
@@ -68,7 +67,7 @@
 static struct {
     union {
         file_list   *file;
-        member_list *module;
+        member_list *member;
     } u;
 } LastFile;
 
@@ -101,9 +100,9 @@ static bool ProcName( void )
         return( false );
     CmdFlags &= ~CF_UNNAMED;
     if( Name != NULL ) {
-        _LnkFree( Name );
+        MemFree( Name );
     }
-    Name = tostring();   // just keep the name around for now.
+    Name = getstring();   // just keep the name around for now.
     return( true );
 }
 
@@ -111,7 +110,7 @@ static bool ProcDwarfDBI( void )
 /******************************/
 {
     if( LinkFlags & (LF_ANY_DBI_FLAG & ~LF_DWARF_DBI_FLAG) ) {
-        LnkMsg( LOC+LINE+WRN+MSG_MULT_DBI_FORMATS, NULL );
+        LnkMsg( WRN+LOC+LINE+MSG_MULT_DBI_FORMATS, NULL );
         return( true );
     }
     LinkFlags |= LF_DWARF_DBI_FLAG;
@@ -122,7 +121,7 @@ static bool ProcWatcomDBI( void )
 /*******************************/
 {
     if( LinkFlags & (LF_ANY_DBI_FLAG & ~LF_OLD_DBI_FLAG) ) {
-        LnkMsg( LOC+LINE+WRN+MSG_MULT_DBI_FORMATS, NULL );
+        LnkMsg( WRN+LOC+LINE+MSG_MULT_DBI_FORMATS, NULL );
         return( true );
     }
     LinkFlags |= LF_OLD_DBI_FLAG;
@@ -133,12 +132,24 @@ static bool ProcCodeviewDBI( void )
 /*********************************/
 {
     if( LinkFlags & (LF_ANY_DBI_FLAG & ~LF_CV_DBI_FLAG) ) {
-        LnkMsg( LOC+LINE+WRN+MSG_MULT_DBI_FORMATS, NULL );
+        LnkMsg( WRN+LOC+LINE+MSG_MULT_DBI_FORMATS, NULL );
         return( true );
     }
     LinkFlags |= LF_CV_DBI_FLAG;
     return( true );
 }
+
+extern bool ProcHllDBI( void )
+/*********************************/
+{
+    if( LinkFlags & (LF_ANY_DBI_FLAG & ~LF_HLL_DBI_FLAG) ) {
+        LnkMsg( LOC+LINE+WRN+MSG_MULT_DBI_FORMATS, NULL );
+        return( true );
+    }
+    LinkFlags |= LF_HLL_DBI_FLAG;
+    return( true );
+}
+
 
 static bool ProcLine( void )
 /**************************/
@@ -197,8 +208,8 @@ static bool AddAlias( void )
  * add an individual alias
  */
 {
-    char        *name;
-    size_t      namelen;
+    char            *name;
+    size_t          namelen;
 
     DUPBUF_STACK( name, Token.this, Token.len );
     namelen = Token.len;
@@ -218,10 +229,10 @@ static bool ProcAlias( void )
 static bool AddReference( void )
 /******************************/
 {
-    symbol      *sym;
+    symbol          *sym;
 
     sym = SymOp( ST_CREATE_REFERENCE, Token.this, Token.len );
-    sym->info |= SYM_DCE_REF;   /* make sure it stays around */
+    sym->info |= SYM_1_DCE_REF;   /* make sure it stays around */
     return( true );
 }
 
@@ -236,9 +247,9 @@ static bool ProcOSName( void )
 {
     if( GetToken( SEP_EQUALS, TOK_INCLUDE_DOT ) ) {
         if( FmtData.osname != NULL ) {
-            _LnkFree( FmtData.osname );
+            MemFree( FmtData.osname );
         }
-        FmtData.osname = tostring();
+        FmtData.osname = getstring();
         return( true );
     }
     return( false );
@@ -270,75 +281,75 @@ static bool ProcSymFile( void )
 {
     if( GetToken( SEP_EQUALS, TOK_IS_FILENAME ) ) {
         if( SymFileName != NULL ) {
-            _LnkFree( SymFileName );
+            MemFree( SymFileName );
         }
         SymFileName = FileName( Token.this, Token.len, E_SYM, false );
     }
     return( true );
 }
 
-static void *AddObjFile( const char *name, char *member, file_list **filelist )
-/*****************************************************************************/
+static void *AddObjFile( const char *name, const char *membname, file_list **filelist )
+/*************************************************************************************/
 {
-    file_list       *new_entry;
-    member_list     *new_member;
+    file_list       *file;
+    member_list     *member;
 
-    new_member = NULL;
-    if( member != NULL ) {
-        _ChkAlloc( new_member, offsetof( member_list, name ) + strlen( member ) + 1 );
-        new_member->flags = DBIFlag;
-        strcpy( new_member->name, member );
-        new_member->next = NULL;
-        _LnkFree( member );
-        for( new_entry = CurrSect->files; new_entry != NULL; new_entry = new_entry->next_file ) {
-            if( FNAMECMPSTR( new_entry->infile->name.u.ptr, name ) == 0 ) {
+    member = NULL;
+    if( membname != NULL ) {
+        member = MemAllocSafe( sizeof( *member ) - 1 + strlen( membname ) + 1 );
+        member->flags_dbi = DBIFlag;
+        member->flags_mod = 0;
+        strcpy( member->name, membname );
+        member->next = NULL;
+        for( file = CurrSect->files; file != NULL; file = file->next ) {
+            if( FNAMECMPSTR( file->infile->name.u.ptr, name ) == 0 ) {
                 CmdFlags |= CF_MEMBER_ADDED;
-                if( new_entry->u.member != NULL ) {
-                    LinkList( &new_entry->u.member, new_member );
-                    return( new_member );
+                if( file->u.member != NULL ) {
+                    AppendList( (void **)&file->u.member, member );
+                    return( member );
                 } else {
-                    _LnkFree( new_member );      // user did a stupid thing.
-                    return( new_entry->u.member );
+                    MemFree( member );      // user did a stupid thing.
+                    return( file->u.member );
                 }
             }
         }
     }
-    new_entry = AllocNewFile( new_member );
-    if( new_member != NULL ) {
-        new_entry->infile = AllocUniqueFileEntry( name, UsrLibPath );
-        new_entry->infile->status |= INSTAT_LIBRARY;
+    file = AllocNewFile( member );
+    if( member != NULL ) {
+        file->infile = AllocUniqueFileEntry( name, UsrLibPath );
+        file->infile->status |= INSTAT_LIBRARY;
     } else {
-        new_entry->infile = AllocFileEntry( name, ObjPath );
+        file->infile = AllocFileEntry( name, ObjPath );
     }
-    *filelist = new_entry;
-    return( new_entry );
+    *filelist = file;
+    return( file );
 }
 
 static bool AddLibFile( void )
 /****************************/
 {
-    char        *ptr;
-    char        *membname;
-    file_list   *entry;
+    char            *ptr;
+    char            *membname;
+    file_list       *file;
 
     CmdFlags &= ~CF_MEMBER_ADDED;
     ptr = GetFileName( &membname );
     if( membname != NULL ) {
-        LnkMsg( LOC+LINE+WRN+MSG_NO_MEMB_IN_LIBFILE, NULL );
-        _LnkFree( membname );
-        _LnkFree( ptr );
+        LnkMsg( WRN+LOC+LINE+MSG_NO_MEMB_IN_LIBFILE, NULL );
+        MemFree( membname );
+        MemFree( ptr );
         return( true );
     }
-    entry = AllocNewFile( NULL );
-    entry->infile = AllocFileEntry( ptr, UsrLibPath );
-    entry->next_file = *LastLibFile;
-    *LastLibFile = entry;
-    LastLibFile = &entry->next_file;
+    file = AllocNewFile( NULL );
+    file->infile = AllocFileEntry( ptr, UsrLibPath );
+    file->next = *LastLibFile;
+    *LastLibFile = file;
+    LastLibFile = &file->next;
     if( *LastLibFile == NULL ) {    // no file directives found yet
         CurrFList = LastLibFile;
     }
-    entry->infile->status |= INSTAT_USE_LIBPATH;
-    _LnkFree( ptr );
+    file->infile->status |= INSTAT_USE_LIBPATH;
+    MemFree( ptr );
     return( true );
 }
 
@@ -359,14 +370,14 @@ static bool ProcLibFile( void )
 static bool AddModFile( void )
 /****************************/
 {
-    char        *ptr;
-    char        *membname;
+    char            *ptr;
+    char            *membname;
 
     ptr = GetFileName( &membname );
     AddHTableElem( Root->modFilesHashed, ptr );
     LinkFlags |= LF_GOT_CHGD_FILES;
     if( membname != NULL ) {
-        _LnkFree( membname );
+        MemFree( membname );
     }
     return( true );
 }
@@ -374,9 +385,9 @@ static bool AddModFile( void )
 static bool AddFile( void )
 /*************************/
 {
-    char        *ptr;
-    char        *membname;
-    file_list   **temp;
+    char            *ptr;
+    char            *membname;
+    file_list       **file;
 
     CmdFlags &= ~CF_MEMBER_ADDED;
 #ifdef _EXE
@@ -389,21 +400,23 @@ static bool AddFile( void )
     }
 #endif
     ptr = GetFileName( &membname );
-    if( membname == NULL && Name == NULL ) {
-        Name = ChkToString( Token.this, Token.len );
+    if( membname == NULL
+      && Name == NULL ) {
+        Name = getstring();
     }
-    temp = CurrFList;
+    file = CurrFList;
     if( *CurrFList != NULL ) {
-        CurrFList = &(*CurrFList)->next_file;
+        CurrFList = &(*CurrFList)->next;
     }
     LastFile.u.file = AddObjFile( ptr, membname, CurrFList );
     if( CmdFlags & CF_MEMBER_ADDED ) {
-        CurrFList = temp;               // go back to previous entry.
+        CurrFList = file;               // go back to previous entry.
     } else if( membname != NULL ) {     // 1st member added
-        LastFile.u.module = LastFile.u.file->u.member;
+        LastFile.u.member = LastFile.u.file->u.member;
         CmdFlags |= CF_MEMBER_ADDED;
     }
-    _LnkFree( ptr );
+    MemFree( membname );
+    MemFree( ptr );
     return( true );
 }
 
@@ -428,23 +441,23 @@ static bool ProcModFiles( void )
 static bool AddLib( void )
 /************************/
 {
-    char        *ptr;
-    file_list   *result;
+    char            *ptr;
+    file_list       *file;
 
     ptr = FileName( Token.this, Token.len, E_LIBRARY, false );
-    result = AddObjLib( ptr, LIB_PRIORITY_MAX );
-    result->flags |= STAT_USER_SPECD;
+    file = AddObjLib( ptr, LIB_PRIORITY_MAX );
+    file->flags_file |= STAT_USER_SPECD;
 #ifdef _EXE
     if( CmdFlags & CF_SET_SECTION ) {
-        result->flags |= STAT_LIB_FIXED;
-        result->ovlref = GetOvlRef();
+        file->flags_file |= STAT_LIB_FIXED;
+        file->ovlref = GetOvlRef();
     }
 #endif
     if( CmdFlags & CF_DOING_OPTLIB ) {
-        result->infile->status |= INSTAT_NO_WARNING;
+        file->infile->status |= INSTAT_NO_WARNING;
     }
     DEBUG(( DBG_BASE, "library: %s", ptr ));
-    _LnkFree( ptr );
+    MemFree( ptr );
     return( true );
 }
 
@@ -454,7 +467,7 @@ bool ProcLibrary( void )
  */
 {
     if( (LinkFlags & (LF_DWARF_DBI_FLAG | LF_OLD_DBI_FLAG | LF_NOVELL_DBI_FLAG)) == 0
-        && !IsSystemBlock() ) {
+      && !IsSystemBlock() ) {
         CmdFlags |= CF_FILES_BEFORE_DBI;
     }
     return( ProcArgList( AddLib, TOK_IS_FILENAME ) );
@@ -463,7 +476,7 @@ bool ProcLibrary( void )
 static bool ProcOptLib( void )
 /****************************/
 {
-    bool    retval;
+    bool            retval;
 
     CmdFlags |= CF_DOING_OPTLIB;
     retval = ProcLibrary();
@@ -477,7 +490,7 @@ static bool ProcLibPath( void )
  */
 {
     if( !GetToken( SEP_NO, TOK_IS_FILENAME ) ) {
-        LnkMsg( LOC+LINE+WRN+MSG_VALUE_INCORRECT, "s", "LIBPATH" );
+        LnkMsg( WRN+LOC+LINE+MSG_VALUE_INCORRECT, "s", "LIBPATH" );
         return( true );
     }
     AddLibPaths( Token.this, Token.len, true );  // true == add to front.
@@ -494,7 +507,7 @@ static bool ProcPath( void )
     const char      *end;
 
     if( GetToken( SEP_NO, TOK_IS_FILENAME ) ) {
-        _ChkAlloc( new_path, sizeof( path_entry ) + Token.len );
+        new_path = MemAllocSafe( sizeof( path_entry ) + Token.len );
         end = Token.this + Token.len;
         p = new_path->name;
         while( Token.this != end ) {
@@ -519,7 +532,7 @@ static bool ProcMap( void )
     MapFlags |= MAP_FLAG;
     if( GetToken( SEP_EQUALS, TOK_IS_FILENAME ) ) {
         if( MapFName != NULL ) {
-            _LnkFree( MapFName );
+            MemFree( MapFName );
         }
         MapFName = FileName( Token.this, Token.len, E_MAP, false );
         DEBUG(( DBG_OLD, "produce map file" ));
@@ -563,7 +576,7 @@ static bool ProcNameLen( void )
     ret = GetLong( &value );
     if( ret ) {
         if( value == 0 ) {
-            LnkMsg( LOC+LINE+WRN+MSG_VALUE_INCORRECT, "s", "NAMELEN" );
+            LnkMsg( WRN+LOC+LINE+MSG_VALUE_INCORRECT, "s", "NAMELEN" );
         } else {
             NameLen = value;
         }
@@ -628,10 +641,10 @@ static bool AddDisable( void )
         if( value <= MSG_MAX_ERR_MSG_NUM ) {
             ClearBit( MsgFlags, value );
         } else {
-            LnkMsg( LOC+LINE+WRN+MSG_INVALID_MSG_NUM, NULL );
+            LnkMsg( WRN+LOC+LINE+MSG_INVALID_MSG_NUM, NULL );
         }
     } else {
-        LnkMsg( LOC+LINE+WRN+MSG_INVALID_MSG_NUM, NULL );
+        LnkMsg( WRN+LOC+LINE+MSG_INVALID_MSG_NUM, NULL );
     }
     return( true );
 }
@@ -694,12 +707,19 @@ static bool ProcCVPack( void )
     return( true );
 }
 
+extern bool ProcHLLPack( void )
+/****************************/
+{
+    LinkFlags |= LF_HLLPACK_FLAG;
+    return( true );
+}
+
 static bool ProcIncremental( void )
 /*********************************/
 {
 #if !defined( __DOS__ )
     if( CmdFlags & CF_AFTER_INC ) {
-        LnkMsg( LOC+LINE+ERR+MSG_INC_NEAR_START, NULL );
+        LnkMsg( ERR+LOC+LINE+MSG_INC_NEAR_START, NULL );
     }
     LinkFlags |= LF_INC_LINK_FLAG;
     if( GetToken( SEP_EQUALS, TOK_IS_FILENAME ) ) {
@@ -707,7 +727,7 @@ static bool ProcIncremental( void )
     } else if( Name != NULL ) {
         IncFileName = FileName( Name, strlen( Name ), E_ILK, true );
     } else {
-        IncFileName = ChkStrDup( DEFAULT_INC_NAME );
+        IncFileName = MemStrdupSafe( DEFAULT_INC_NAME );
     }
     ReadPermData();
 #endif
@@ -733,9 +753,9 @@ static bool ProcOpResource( void )
 {
     if( GetToken( SEP_EQUALS, TOK_IS_FILENAME ) ) {
         FmtData.res_name_only = true;
-        FmtData.resource = tostring();
+        FmtData.resource = getstring();
     } else if( GetToken( SEP_NO, TOK_INCLUDE_DOT ) ) {
-        FmtData.resource = tostring();
+        FmtData.resource = getstring();
     } else {
         return( false );
     }
@@ -808,7 +828,7 @@ static bool ProcVFRemoval( void )
 static bool ProcStart( void )
 /***************************/
 {
-    char        *name;
+    char            *name;
 
     if( !GetToken( SEP_EQUALS, TOK_INCLUDE_DOT ) )
         return( false );
@@ -821,13 +841,13 @@ static bool ProcStart( void )
 static bool GetPackValue( unsigned_32 *value, const char *message )
 /*****************************************************************/
 {
-    ord_state   ret;
+    ord_state       ret;
 
     if( !HaveEquals( TOK_NORMAL ) )
         return( false );
     ret = getatol( value );
     if( ret != ST_IS_ORDINAL ) {
-        LnkMsg( LOC+LINE+WRN+MSG_VALUE_INCORRECT, "s", message );
+        LnkMsg( WRN+LOC+LINE+MSG_VALUE_INCORRECT, "s", message );
         return( true );
     }
     if( *value == 0 )
@@ -869,12 +889,12 @@ static bool ProcNewSegment( void )
  */
 {
     if( LastFile.u.file == NULL ) {
-        LnkMsg( LOC+LINE+WRN+MSG_NEWSEG_BEFORE_OBJ, NULL );
+        LnkMsg( WRN+LOC+LINE+MSG_NEWSEG_BEFORE_OBJ, NULL );
     } else {
         if( CmdFlags & CF_MEMBER_ADDED ) {
-            LastFile.u.module->flags |= MOD_LAST_SEG;
+            LastFile.u.member->flags_mod |= MOD_LAST_SEG;
         } else {
-            LastFile.u.file->flags |= STAT_LAST_SEG;
+            LastFile.u.file->flags_file |= STAT_LAST_SEG;
         }
     }
     return( true );
@@ -884,10 +904,11 @@ static bool ProcNewSegment( void )
 sysblock *FindSysBlock( const char *name )
 /****************************************/
 {
-    sysblock    *sys;
+    sysblock        *sys;
 
     for( sys = SysBlocks; sys != NULL; sys = sys->next ) {
-        if( sys->name != NULL && stricmp( sys->name, name ) == 0 ) {
+        if( sys->name != NULL
+          && stricmp( sys->name, name ) == 0 ) {
             return( sys );
         }
     }
@@ -897,15 +918,16 @@ sysblock *FindSysBlock( const char *name )
 static sysblock *FindSystemBlock( const char *name )
 /**************************************************/
 {
-    sysblock    *sys;
-    sysblock    *tmpblk;
-    size_t      len;
+    sysblock        *sys;
+    sysblock        *tmpblk;
+    size_t          len;
 
     tmpblk = FindSysBlock( name );
     if( tmpblk == NULL ) {
         len = strlen( name );
         for( sys = SysBlocks; sys != NULL; sys = sys->next ) {
-            if( sys->name != NULL && strnicmp( sys->name, name, len ) == 0 ) {
+            if( sys->name != NULL
+              && strnicmp( sys->name, name, len ) == 0 ) {
                 if( tmpblk == NULL ) {
                     tmpblk = sys;
                 } else {
@@ -926,7 +948,7 @@ static bool ProcSysDelete( void )
 static void CopyBlocks( void *copyp, const char *data, size_t size )
 /******************************************************************/
 {
-    char    **copyptr = copyp;
+    char            **copyptr = copyp;
 
     memcpy( *copyptr, data, size );
     *copyptr += size;
@@ -935,9 +957,9 @@ static void CopyBlocks( void *copyp, const char *data, size_t size )
 static void GetCommandBlock( sysblock **hdr, const char *name, parse_entry *endtab )
 /**********************************************************************************/
 {
-    char        *copyptr;
-    sysblock    *sys;
-    stringtable strtab;
+    char            *copyptr;
+    sysblock        *sys;
+    stringtable     strtab;
 
     InitStringTable( &strtab, false );
     AddBufferStringTable( &strtab, &strtab, offsetof( sysblock, commands ) );
@@ -948,16 +970,16 @@ static void GetCommandBlock( sysblock **hdr, const char *name, parse_entry *endt
         RestoreParser();
     }
     AddCharStringTable( &strtab, '\0' );
-    _ChkAlloc( copyptr, GetStringTableSize( &strtab ) );
+    copyptr = MemAllocSafe( GetStringTableSize( &strtab ) );
     sys = (sysblock *)copyptr;
     WriteStringTable( &strtab, CopyBlocks, &copyptr );
     FiniStringTable( &strtab );
     if( name != NULL ) {
-        sys->name = ChkStrDup( name );
+        sys->name = MemStrdupSafe( name );
     } else {
         sys->name = NULL;
     }
-    LinkList( hdr, sys );
+    AppendList( (void **)hdr, sys );
 }
 
 static bool ProcSysEnd( void )
@@ -980,7 +1002,7 @@ static char **getStubNamePtr( void )
 /**********************************/
 {
 #ifdef _OS2
-    if( HintFormat( MK_OS2 | MK_WIN_NE | MK_PE | MK_WIN_VXD ) ) {
+    if( HintFormat( MK_NE | MK_OS2_FLAT | MK_PE | MK_WIN_VXD ) ) {
         return( &FmtData.u.os2fam.stub_file_name );
     }
 #endif
@@ -1001,8 +1023,8 @@ static char **getStubNamePtr( void )
 static bool ProcStub( void )
 /**************************/
 {
-    char        *name;
-    char        **nameptr;
+    char            *name;
+    char            **nameptr;
 
     if( !HaveEquals( TOK_IS_FILENAME ) )
         return( false );
@@ -1014,9 +1036,9 @@ static bool ProcStub( void )
         *nameptr = name;
     } else if( IsSystemBlock() ) {
         /* if we're in a system block, we don't want to override a user specification */
-        _LnkFree( name );
+        MemFree( name );
     } else {
-        _LnkFree( *nameptr );
+        MemFree( *nameptr );
         *nameptr = name;
     }
     return( true );
@@ -1049,9 +1071,9 @@ static bool ProcImplib( void )
 {
     FmtData.make_implib = true;
     FmtData.make_impfile = false;
-    _LnkFree( FmtData.implibname );
+    MemFree( FmtData.implibname );
     if( GetToken( SEP_EQUALS, TOK_IS_FILENAME ) ) {
-        FmtData.implibname = tostring();
+        FmtData.implibname = getstring();
     }
     return( true );
 }
@@ -1061,9 +1083,9 @@ static bool ProcImpFile( void )
 {
     FmtData.make_implib = true;
     FmtData.make_impfile = true;
-    _LnkFree( FmtData.implibname );
+    MemFree( FmtData.implibname );
     if( GetToken( SEP_EQUALS, TOK_IS_FILENAME ) ) {
-        FmtData.implibname = tostring();
+        FmtData.implibname = getstring();
     }
     return( true );
 }
@@ -1071,7 +1093,7 @@ static bool ProcImpFile( void )
 static bool AddSymTrace( void )
 /*****************************/
 {
-    AddTraceListSym( tostring() );
+    AddTraceListSym( getstring() );
     return( true );
 }
 
@@ -1089,6 +1111,10 @@ static bool AddModTrace( void )
     char            *fname;
 
     fname = GetFileName( &membname );
+    /*
+     * AddTraceListMod consume membname
+     * dont free it
+     */
     AddTraceListMod( fname, membname );
     return( true );
 }
@@ -1141,18 +1167,20 @@ static bool ProcOutputStart( void )
 static bool ProcOutputOffset( void )
 /**********************************/
 {
-    ord_state   retval;
-    unsigned_32 value;
+    ord_state       retval;
+    unsigned_32     value;
 
     if( !GetToken( SEP_EQUALS, TOK_NORMAL ) ) {
         return( false );
     }
     retval = getatol( &value );
-    if( retval == ST_IS_ORDINAL && (value <= ( 0xFFFFUL << FmtData.SegShift ) || HintFormat( ~MK_SEGMENTED )) ) {
+    if( retval == ST_IS_ORDINAL
+      && (value <= ( 0xFFFFUL << FmtData.SegShift )
+      || HintFormat( ~MK_SEGMENTED )) ) {
         FmtData.output_offset = value;
         return( true );
     } else {
-        LnkMsg(LOC+LINE+WRN+MSG_VALUE_INCORRECT, "s", "OUTPUT OFFSET");
+        LnkMsg( WRN+LOC+LINE+MSG_VALUE_INCORRECT, "s", "OUTPUT OFFSET" );
         return( false );
     }
 }
@@ -1160,19 +1188,20 @@ static bool ProcOutputOffset( void )
 static bool ProcOutputHshift( void )
 /**********************************/
 {
-    ord_state   ret;
-    unsigned_16 value;
+    ord_state       ret;
+    unsigned_16     value;
 
     if( !GetToken( SEP_EQUALS, TOK_NORMAL ) ) {
         return( false );
     }
     ret = getatoi( &value );
-    if( ret == ST_IS_ORDINAL && value < 16) {
+    if( ret == ST_IS_ORDINAL
+      && value < 16) {
         FmtData.HexSegShift = 16 - value;
         FmtData.output_hshift = true;
         return( true );
     } else {
-        LnkMsg(LOC+LINE+WRN+MSG_VALUE_TOO_LARGE, "s", "OUTPUT HSHIFT");
+        LnkMsg( WRN+LOC+LINE+MSG_VALUE_TOO_LARGE, "s", "OUTPUT HSHIFT" );
         return( false );
     }
 }
@@ -1181,19 +1210,20 @@ static bool ProcOutputHshift( void )
 static bool ProcHshift( void )
 /****************************/
 {
-    ord_state   ret;
-    unsigned_16 value;
+    ord_state       ret;
+    unsigned_16     value;
 
     if( !GetToken( SEP_EQUALS, TOK_NORMAL ) ) {
         return( false );
     }
     ret = getatoi( &value );
-    if( ret == ST_IS_ORDINAL && value < 16) {
+    if( ret == ST_IS_ORDINAL
+      && value < 16) {
         FmtData.Hshift = value;
         SetSegMask();
         return( true );
     } else {
-        LnkMsg(LOC+LINE+WRN+MSG_VALUE_TOO_LARGE, "s", "HSHIFT");
+        LnkMsg( WRN+LOC+LINE+MSG_VALUE_TOO_LARGE, "s", "HSHIFT" );
         return( false );
     }
 }
@@ -1201,18 +1231,19 @@ static bool ProcHshift( void )
 static bool ProcFillchar( void )
 /******************************/
 {
-    ord_state   ret;
-    unsigned_16 value;
+    ord_state       ret;
+    unsigned_16     value;
 
     if( !GetToken( SEP_EQUALS, TOK_NORMAL ) ) {
         return( false );
     }
     ret = getatoi( &value );
-    if( ret == ST_IS_ORDINAL && value < 256) {
+    if( ret == ST_IS_ORDINAL
+      && value < 256) {
         FmtData.FillChar = value;
         return( true );
     } else {
-        LnkMsg(LOC+LINE+WRN+MSG_VALUE_TOO_LARGE, "s", "FILLCHAR");
+        LnkMsg( WRN+LOC+LINE+MSG_VALUE_TOO_LARGE, "s", "FILLCHAR" );
         return( false );
     }
 }
@@ -1220,8 +1251,8 @@ static bool ProcFillchar( void )
 static bool ProcOrdSegAdr( void )
 /*******************************/
 {
-    ord_state   ret;
-    unsigned_16 value;
+    ord_state       ret;
+    unsigned_16     value;
 
     if( !GetToken( SEP_EQUALS, TOK_NORMAL ) ) {
         return( false );
@@ -1233,7 +1264,7 @@ static bool ProcOrdSegAdr( void )
         return( true );
     } else {
         CurrOClass->FixedAddr = false;
-        LnkMsg(LOC+LINE+WRN+MSG_ADDR_INFO_TOO_LARGE, NULL);
+        LnkMsg( WRN+LOC+LINE+MSG_ADDR_INFO_TOO_LARGE, NULL );
         return( false );
     }
 }
@@ -1241,20 +1272,22 @@ static bool ProcOrdSegAdr( void )
 static bool ProcOrdOfsAdr( void )
 /*******************************/
 {
-    ord_state   retval;
-    unsigned_32 value;
+    ord_state       retval;
+    unsigned_32     value;
 
     if( !GetToken( SEP_EQUALS, TOK_NORMAL ) ) {
         return( false );
     }
     retval = getatol( &value );
-    if( retval == ST_IS_ORDINAL && (value <= 0xFFFFL || HintFormat( ~MK_SEGMENTED )) ) {
+    if( retval == ST_IS_ORDINAL
+      && (value <= 0xFFFFL
+      || HintFormat( ~MK_SEGMENTED )) ) {
         CurrOClass->Base.off = value;
         CurrOClass->FixedAddr = true;
         return( true );
     } else {
         CurrOClass->FixedAddr = false;
-        LnkMsg(LOC+LINE+WRN+MSG_VALUE_INCORRECT, "s", "ORDER CLNAME OFFSET");
+        LnkMsg( WRN+LOC+LINE+MSG_VALUE_INCORRECT, "s", "ORDER CLNAME OFFSET" );
         return( false );
     }
 }
@@ -1265,7 +1298,7 @@ static bool ProcOrdCopy( void )
     if( !GetToken( SEP_NO, TOK_INCLUDE_DOT ) ) {
         return( false );
     }
-    CurrOClass->SrcName = tostring();
+    CurrOClass->SrcName = getstring();
     CurrOClass->Copy = true;
     return( true );
 }
@@ -1280,8 +1313,8 @@ static bool ProcOrdNoEmit( void )
 static bool ProcOrdSegSegAdr( void )
 /**********************************/
 {
-    ord_state   ret;
-    unsigned_16 value;
+    ord_state       ret;
+    unsigned_16     value;
 
     if( !GetToken( SEP_EQUALS, TOK_NORMAL ) ) {
         return( false );
@@ -1293,7 +1326,7 @@ static bool ProcOrdSegSegAdr( void )
         return( true );
     } else {
         CurrOSeg->FixedAddr = false;
-        LnkMsg(LOC+LINE+WRN+MSG_ADDR_INFO_TOO_LARGE, NULL);
+        LnkMsg( WRN+LOC+LINE+MSG_ADDR_INFO_TOO_LARGE, NULL );
         return( false );
     }
 }
@@ -1301,20 +1334,22 @@ static bool ProcOrdSegSegAdr( void )
 static bool ProcOrdSegOfsAdr( void )
 /**********************************/
 {
-    ord_state   retval;
-    unsigned_32 value;
+    ord_state       retval;
+    unsigned_32     value;
 
     if( !GetToken( SEP_EQUALS, TOK_NORMAL ) ) {
         return( false );
     }
     retval = getatol( &value );
-    if( retval == ST_IS_ORDINAL && (value <= 0xFFFFL || HintFormat( ~MK_SEGMENTED )) ) {
+    if( retval == ST_IS_ORDINAL
+      && (value <= 0xFFFFL
+      || HintFormat( ~MK_SEGMENTED )) ) {
         CurrOSeg->Base.off = value;
         CurrOSeg->FixedAddr = true;
         return( true );
     } else {
         CurrOSeg->FixedAddr = false;
-        LnkMsg(LOC+LINE+WRN+MSG_VALUE_INCORRECT, "s", "ORDER CLNAME SEGMENT OFFSET");
+        LnkMsg( WRN+LOC+LINE+MSG_VALUE_INCORRECT, "s", "ORDER CLNAME SEGMENT OFFSET" );
         return( false );
     }
 }
@@ -1331,17 +1366,20 @@ static bool ProcObjAlign( void )
  * process ObjAlign option
  */
 {
-    ord_state           ret;
-    unsigned_32         value;
+    ord_state       ret;
+    unsigned_32     value;
 
     if( !HaveEquals( TOK_NORMAL ) )
         return( false );
     ret = getatol( &value );
-    if( ret != ST_IS_ORDINAL || value == 0 ) {
+    if( ret != ST_IS_ORDINAL
+      || value == 0 ) {
         return( false );
     }                                            /* value not a power of 2 */
-    if( value < 16 || value > _256M || (value & (value - 1)) ) {
-        LnkMsg( LOC+LINE+WRN+MSG_VALUE_INCORRECT, "s", "OBJALIGN" );
+    if( value < 16
+      || value > _256M
+      || (value & (value - 1)) ) {
+        LnkMsg( WRN+LOC+LINE+MSG_VALUE_INCORRECT, "s", "OBJALIGN" );
         value = _64K;
     }
     FmtData.objalign = value;
@@ -1356,9 +1394,9 @@ static bool ProcDescription( void )
         return( false );
     }
     if( FmtData.description != NULL ) {
-        _LnkFree( FmtData.description );
+        MemFree( FmtData.description );
     }
-    FmtData.description = tostring();
+    FmtData.description = getstring();
     return( true );
 }
 
@@ -1367,11 +1405,13 @@ void ChkBase( offset align )
  * Note: align must be a power of 2
  */
 {
-    if( FmtData.objalign != NO_BASE_SPEC && FmtData.objalign > align ) {
+    if( FmtData.objalign != NO_BASE_SPEC
+      && FmtData.objalign > align ) {
         align = FmtData.objalign;
     }
-    if( FmtData.base != NO_BASE_SPEC && (FmtData.base & (align - 1)) != 0 ) {
-        LnkMsg( LOC+LINE+WRN+MSG_OFFSET_MUST_BE_ALIGNED, "l", align );
+    if( FmtData.base != NO_BASE_SPEC
+      && (FmtData.base & (align - 1)) != 0 ) {
+        LnkMsg( WRN+LOC+LINE+MSG_OFFSET_MUST_BE_ALIGNED, "l", align );
         FmtData.base = __ROUND_UP_SIZE( FmtData.base, align );
     }
 }
@@ -1381,7 +1421,7 @@ static bool ProcImport( void )
 /****************************/
 {
 #ifdef _OS2
-    if( HintFormat( MK_OS2 | MK_WIN_NE | MK_PE ) ) {
+    if( HintFormat( MK_NE | MK_OS2_FLAT | MK_PE ) ) {
         return( ProcOS2Import() );
     }
 #endif
@@ -1402,7 +1442,7 @@ static bool ProcExport( void )
 /****************************/
 {
 #ifdef _OS2
-    if( HintFormat( MK_OS2 | MK_WIN_NE | MK_PE | MK_WIN_VXD ) ) {
+    if( HintFormat( MK_NE | MK_OS2_FLAT | MK_PE | MK_WIN_VXD ) ) {
         return( ProcOS2Export() );
     }
 #endif
@@ -1453,7 +1493,7 @@ static bool ProcSegment( void )
 /*****************************/
 {
 #ifdef _OS2
-    if( HintFormat( MK_OS2 | MK_WIN_NE | MK_PE | MK_WIN_VXD ) ) {
+    if( HintFormat( MK_NE | MK_OS2_FLAT | MK_PE | MK_WIN_VXD ) ) {
         return( ProcOS2Segment() );
     }
 #endif
@@ -1471,7 +1511,7 @@ static bool ProcAlignment( void )
 /*******************************/
 {
 #ifdef _OS2
-    if( HintFormat( MK_OS2_NE | MK_WIN_NE | MK_OS2_LX | MK_PE ) ) {
+    if( HintFormat( MK_NE | MK_OS2_LX | MK_PE ) ) {
         return( ProcOS2Alignment() );
     }
 #endif
@@ -1494,7 +1534,7 @@ static bool ProcHeapSize( void )
     }
 #endif
 #ifdef _OS2
-    if( HintFormat( MK_OS2 | MK_WIN_NE | MK_PE ) ) {
+    if( HintFormat( MK_NE | MK_OS2_FLAT | MK_PE ) ) {
         return( ProcOS2HeapSize() );
     }
 #endif
@@ -1533,7 +1573,7 @@ static bool ProcOffset( void )
     }
 #endif
 //#ifdef _OS2
-//    if( FmtData.type & (MK_OS2 | MK_WIN_NE | MK_PE) ) {
+//    if( FmtData.type & (MK_NE | MK_OS2_FLAT | MK_PE) ) {
 //        ChkBase( _64K );
 //        return( true );
 //    }
@@ -1573,7 +1613,7 @@ static bool ProcXDbg( void )
  * process DEBUG command
  */
 {
-    char        value[7];
+    char            value[7];
 
     if( GetToken( SEP_EQUALS, TOK_INCLUDE_DOT ) ) {
         if( Token.len > 6 ) {
@@ -1611,14 +1651,14 @@ static bool ProcOrdSeg( void )
     if( !GetToken( SEP_NO, TOK_INCLUDE_DOT ) ) {
         return( false );
     }
-    _ChkAlloc( CurrOSeg, sizeof( ORDER_SEGMENT ) );
+    CurrOSeg = MemAllocSafe( sizeof( ORDER_SEGMENT ) );
     CurrOSeg->NextSeg = CurrOClass->SegList;
     CurrOClass->SegList = CurrOSeg;
-    CurrOSeg->Name = tostring();
+    CurrOSeg->Name = getstring();
     CurrOSeg->FixedAddr = false;
     CurrOSeg->NoEmit = false;
     while( ProcOne( OrderSegOpts, SEP_NO ) )
-        {};
+        /* nothing */;
     return( true );
 }
 
@@ -1634,20 +1674,20 @@ static parse_entry  OrderClassOpts[] = {
 static bool ProcOrdClass( void )
 /******************************/
 {
-    ORDER_CLASS *LastOClass;
+    ORDER_CLASS     *LastOClass;
 
     if( !GetToken( SEP_NO, TOK_INCLUDE_DOT ) ) {
         return( false );
     }
     LinkState |= LS_SPEC_ORDER_FLAG;
     LastOClass = CurrOClass;
-    _ChkAlloc( CurrOClass, sizeof( ORDER_CLASS ) );
+    CurrOClass = MemAllocSafe( sizeof( ORDER_CLASS ) );
     if( LastOClass == NULL ) {
         CurrSect->orderlist = CurrOClass;
     } else {
         LastOClass->NextClass = CurrOClass;
     }
-    CurrOClass->Name = tostring();
+    CurrOClass->Name = getstring();
     CurrOClass->NextClass = NULL;
     CurrOClass->Ring = NULL;
     CurrOClass->SegList = NULL;
@@ -1656,7 +1696,7 @@ static bool ProcOrdClass( void )
     CurrOClass->Copy = false;
     CurrOClass->NoEmit = false;
     while( ProcOne( OrderClassOpts, SEP_NO ) )
-        {};
+        /* nothing */;
     return( true );
 }
 
@@ -1668,12 +1708,12 @@ static parse_entry  OrderOpts[] = {
 static bool ProcOrder( void )
 /***************************/
 {
-    bool    ret;
+    bool            ret;
 
     ret = false;
     CurrOClass = CurrSect->orderlist;
     if( CurrOClass != NULL) {
-        LnkMsg(LOC+LINE+WRN+MSG_DUP_DIRECTIVE, "s", "OPTION");
+        LnkMsg( WRN+LOC+LINE+MSG_DUP_DIRECTIVE, "s", "OPTION" );
     }
     while( ProcOne( OrderOpts, SEP_NO ) ) {
         ret = true;
@@ -1695,16 +1735,16 @@ static parse_entry  OutputOpts[] = {
 static bool ProcOutput( void )
 /****************************/
 {
-   bool     ret;
+    bool            ret;
 
-   FmtData.output_offset = 0L;
-   FmtData.output_hshift = false;
-   FmtData.output_start = false;
-   ret = false;
-   while( ProcOne( OutputOpts, SEP_NO ) ) {
-       ret = true;
-   }
-   return( ret );
+    FmtData.output_offset = 0L;
+    FmtData.output_hshift = false;
+    FmtData.output_start = false;
+    ret = false;
+    while( ProcOne( OutputOpts, SEP_NO ) ) {
+        ret = true;
+    }
+    return( ret );
 }
 #endif
 
@@ -1768,17 +1808,17 @@ static bool ProcSysBegin( void )
  * and store it somewhere
  */
 {
-    char        *sysname;
-    sysblock    *sys;
+    char            *sysname;
+    sysblock        *sys;
 
     if( !GetToken( SEP_NO, TOK_INCLUDE_DOT ) ) {
-        LnkMsg( LOC+LINE+WRN+MSG_VALUE_INCORRECT, "s", "SYSTEM BEGIN" );
+        LnkMsg( WRN+LOC+LINE+MSG_VALUE_INCORRECT, "s", "SYSTEM BEGIN" );
         return( true );
     }
-    sysname = tostring();
+    sysname = getstring();
     sys = FindSysBlock( sysname );
     if( sys != NULL ) {
-        LnkMsg( LOC+LINE+WRN+MSG_SYSTEM_ALREADY_DEFINED, "s", sys->name );
+        LnkMsg( WRN+LOC+LINE+MSG_SYSTEM_ALREADY_DEFINED, "s", sys->name );
         while( !ProcOne( SysEndOptions, SEP_SPACE ) ) {
             Token.thumb = false;
             RestoreParser();
@@ -1786,7 +1826,7 @@ static bool ProcSysBegin( void )
     } else {
         GetCommandBlock( &SysBlocks, sysname, SysEndOptions );
     }
-    _LnkFree( sysname );
+    MemFree( sysname );
     return( true );
 }
 
@@ -1805,10 +1845,10 @@ static bool ProcSystem( void )
  * process the system directive
  */
 {
-    char        *sysname;
-    sysblock    *sys;
-    sysblock    **prev;
-    bool        dodelete;
+    char            *sysname;
+    sysblock        *sys;
+    sysblock        **prev;
+    bool            dodelete;
 
     if( ProcOne( SysBeginOptions, SEP_NO ) )
         return( true );
@@ -1820,10 +1860,10 @@ static bool ProcSystem( void )
     } else {
         Token.thumb = false;
     }
-    sysname = tostring();
+    sysname = getstring();
     sys = FindSystemBlock( sysname );
     if( sys == NULL ) {
-        LnkMsg( LOC+LINE+WRN+MSG_SYSTEM_UNDEFINED, "s", sysname );
+        LnkMsg( WRN+LOC+LINE+MSG_SYSTEM_UNDEFINED, "s", sysname );
     } else {
         if( dodelete ) {
             for( prev = &SysBlocks; *prev != sys; ) {
@@ -1831,15 +1871,15 @@ static bool ProcSystem( void )
             }
             *prev = sys->next;
             if( sys->name != NULL ) {
-                _LnkFree( sys->name );
+                MemFree( sys->name );
             }
-            _LnkFree( sys );
+            MemFree( sys );
         } else {
             RestoreParser();
             NewCommandSource( sys->name, sys->commands, SYSTEM );
         }
     }
-    _LnkFree( sysname );
+    MemFree( sysname );
     return( true );
 }
 
@@ -1889,6 +1929,7 @@ static parse_entry  DbgMods[] = {
     "Watcom",       ProcWatcomDBI,      MK_ALL, 0,
     "Dwarf",        ProcDwarfDBI,       MK_ALL, 0,
     "Codeview",     ProcCodeviewDBI,    MK_ALL, 0,
+    "Hll",          ProcHllDBI,         MK_ALL, 0,
 #ifdef _NOVELL
     "Novell",       ProcNovDBI,         MK_NOVELL, 0,
 #endif
@@ -1898,19 +1939,19 @@ static parse_entry  DbgMods[] = {
 static bool ProcDebug( void )
 /***************************/
 {
-    bool        gotmod;
+    bool            gotmod;
 
     if( CmdFlags & CF_FILES_BEFORE_DBI ) {
-        LnkMsg( LOC+LINE+WRN+MSG_DEBUG_AFTER_FILES, NULL );
+        LnkMsg( WRN+LOC+LINE+MSG_DEBUG_AFTER_FILES, NULL );
     }
     gotmod = ProcOne( DbgMods, SEP_NO );
-    DBIFlag &= ~DBI_MASK;
+    DBIFlag = 0;
     if( ProcOne( PosDbgMods, SEP_NO ) ) {
         while( ProcOne( PosDbgMods, SEP_COMMA ) ) {
-            ; /*null loop*/
+            /* nothing */;
         }
     } else {
-        DBIFlag |= DBI_ALL; //DBI_MASK;
+        DBIFlag |= DBI_ALL;
         if( !gotmod ) {
             return( false );
         }
@@ -1951,31 +1992,32 @@ static parse_entry  MainOptions[] = {
     "REDefsok",     ProcRedefsOK,       MK_ALL, 0,
     "NOREDefsok",   ProcNoRedefs,       MK_ALL, 0,
     "CVPack",       ProcCVPack,         MK_ALL, 0,
+    "HLLPack",      ProcHLLPack,        MK_ALL, 0,
     "INCremental",  ProcIncremental,    MK_ALL, 0,
     "FILLchar",     ProcFillchar,       MK_ALL, 0,
 #if defined( _OS2 ) || defined( _EXE ) || defined( _DOS16M ) || defined( _QNX )
-    "PACKCode",     ProcPackcode,       (MK_OS2_NE | MK_WIN_NE | MK_DOS | MK_QNX | MK_DOS16M), 0,
-    "PACKData",     ProcPackdata,       (MK_OS2_NE | MK_WIN_NE | MK_DOS | MK_QNX | MK_DOS16M), 0,
+    "PACKCode",     ProcPackcode,       (MK_NE | MK_DOS | MK_QNX | MK_DOS16M), 0,
+    "PACKData",     ProcPackdata,       (MK_NE | MK_DOS | MK_QNX | MK_DOS16M), 0,
 #endif
 #if defined( _OS2 ) || defined( _ELF )
-    "Alignment",    ProcAlignment,      (MK_OS2_NE | MK_WIN_NE | MK_OS2_LX | MK_PE | MK_ELF), 0,
+    "Alignment",    ProcAlignment,      (MK_NE | MK_OS2_LX | MK_PE | MK_ELF), 0,
 #endif
 #if defined( _OS2 ) || defined( _PHARLAP ) || defined( _DOS16M )
-    "STUB",         ProcStub,           (MK_OS2 | MK_WIN_NE | MK_PE | MK_WIN_VXD | MK_PHAR_LAP | MK_DOS16M), 0,
+    "STUB",         ProcStub,           (MK_NE | MK_OS2_FLAT | MK_PE | MK_WIN_VXD | MK_PHAR_LAP | MK_DOS16M), 0,
 #endif
 #if defined( _OS2 ) || defined( _NOVELL )
-    "DEscription",  ProcDescription,    MK_OS2 | MK_WIN_NE | MK_PE | MK_WIN_VXD | MK_NOVELL, 0,
+    "DEscription",  ProcDescription,    MK_NE | MK_OS2_FLAT | MK_PE | MK_WIN_VXD | MK_NOVELL, 0,
 #endif
 #if defined( _OS2 ) || defined( _QNX )
-    "Heapsize",     ProcHeapSize,       (MK_OS2 | MK_WIN_NE | MK_QNX | MK_PE), 0,
+    "Heapsize",     ProcHeapSize,       (MK_NE | MK_OS2_FLAT | MK_QNX | MK_PE), 0,
 #endif
 #if defined(_PHARLAP) || defined(_QNX) || defined(_OS2) || defined(_RAW)
     "OFFset",       ProcOffset,         MK_PHAR_FLAT | MK_OS2_FLAT | MK_WIN_VXD | MK_PE | MK_QNX_FLAT | MK_ELF | MK_RAW, 0,
 #endif
 #if defined( _OS2 ) || defined( _NOVELL )
     "VERSion",      ProcVersion,        MK_NOVELL | MK_OS2_FLAT | MK_WIN_VXD | MK_PE | MK_WIN_NE, 0,
-    "IMPLib",       ProcImplib,         MK_NOVELL | MK_OS2 | MK_WIN_NE | MK_PE, 0,
-    "IMPFile",      ProcImpFile,        MK_NOVELL | MK_OS2 | MK_WIN_NE | MK_PE, 0,
+    "IMPLib",       ProcImplib,         MK_NOVELL | MK_NE | MK_OS2_FLAT | MK_PE, 0,
+    "IMPFile",      ProcImpFile,        MK_NOVELL | MK_NE | MK_OS2_FLAT | MK_PE, 0,
 #endif
 #if defined( _DOS16M ) || defined( _QNX ) || defined( _OS2 ) || defined( _ELF )
     "NORelocs",     ProcNoRelocs,       (MK_QNX | MK_DOS16M  | MK_PE | MK_ELF), 0,
@@ -2063,9 +2105,6 @@ static parse_entry  Models[] = {
 #ifdef _ELF
     "ELF",          ProcELFFormat,      MK_ELF, 0,
 #endif
-#ifdef _ZDOS
-    "ZDos",         ProcZdosFormat,     MK_ZDOS, 0,
-#endif
 #ifdef _RDOS
     "RDos",         ProcRdosFormat,     MK_RDOS, 0,
 #endif
@@ -2079,7 +2118,7 @@ static bool ProcFormat( void )
 /****************************/
 {
     if( LinkState & LS_FMT_SPECIFIED ) {
-        LnkMsg( LOC+LINE+FTL + MSG_MULTIPLE_MODES_FOUND, NULL );
+        LnkMsg( FTL+LOC+LINE + MSG_MULTIPLE_MODES_FOUND, NULL );
     }
     LinkState |= LS_FMT_SPECIFIED;
     return( ProcOneSuicide( Models, SEP_NO ) );
@@ -2116,14 +2155,14 @@ static parse_entry  Directives[] = {
 #ifdef _OS2
     "RESource",     ProcResource,       MK_PE,              0,
     "COMmit",       ProcCommit,         MK_PE,              0,
-    "ANONymousexport",ProcAnonExport,   MK_OS2 | MK_WIN_NE, CF_AFTER_INC,
+    "ANONymousexport",ProcAnonExport,   MK_NE | MK_OS2_FLAT, CF_AFTER_INC,
 #endif
 #if defined( _NOVELL ) || defined( _OS2 ) || defined( _ELF )
-    "IMPort",       ProcImport,         (MK_NOVELL | MK_ELF | MK_OS2 | MK_WIN_NE | MK_PE), CF_AFTER_INC,
-    "EXPort",       ProcExport,         (MK_NOVELL | MK_ELF | MK_OS2 | MK_WIN_NE | MK_PE | MK_WIN_VXD), CF_AFTER_INC,
+    "IMPort",       ProcImport,         (MK_NOVELL | MK_ELF | MK_NE | MK_OS2_FLAT | MK_PE), CF_AFTER_INC,
+    "EXPort",       ProcExport,         (MK_NOVELL | MK_ELF | MK_NE | MK_OS2_FLAT | MK_PE | MK_WIN_VXD), CF_AFTER_INC,
 #endif
 #if defined( _OS2 ) || defined( _QNX )
-    "SEGment",      ProcSegment,        (MK_QNX | MK_OS2 | MK_WIN_NE | MK_PE | MK_WIN_VXD ), CF_SUBSET,
+    "SEGment",      ProcSegment,        (MK_QNX | MK_NE | MK_OS2_FLAT | MK_PE | MK_WIN_VXD ), CF_SUBSET,
 #endif
 #ifdef _EXE
     "OVerlay",      ProcOverlay,        MK_OVERLAYS,        0,
@@ -2144,7 +2183,7 @@ static parse_entry  Directives[] = {
     "TRansparent",  Proc16MTransparent, MK_DOS16M,          CF_SUBSET,
 #endif
 #if defined( _OS2 ) || defined( _EXE ) || defined ( _QNX )
-    "NEWsegment",   ProcNewSegment,     (MK_OS2_NE | MK_WIN_NE | MK_DOS | MK_QNX), 0,
+    "NEWsegment",   ProcNewSegment,     (MK_NE | MK_DOS | MK_QNX), 0,
 #endif
 #ifdef DEVBUILD
     "Xdbg",         ProcXDbg,           MK_ALL,             0,

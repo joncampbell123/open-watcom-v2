@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -37,158 +37,52 @@
 #include "yaccins.h"
 #include "alloc.h"
 
-#define PROENTRY(i)     ((i)+1)
+
+#define PROENTRY(x)     ((x)+1)
 
 #define ACCEPT          (-1)
 #define DEFAULT         0
 
-#define VBLENTRY(i)     (3*(i)+1+npro)
-#define TOKENTRY(i)     (3*(i)+2+npro)
-#define OPTENTRY(i)     (3*(i)+3+npro)
+#define VBLENTRY(x)     (3*(x)+1+npro)
+#define TOKENTRY(x)     (3*(x)+2+npro)
+#define OPTENTRY(x)     (3*(x)+3+npro)
 
-static int label;
+extern void     emitins( short, short );
+extern void     writeobj( int );
 
-extern void emitins( unsigned, unsigned );
-extern void writeobj( int );
+static int      label;
 
-void genobj( FILE *fp )
+static int newlabel( void )
 {
-    short *symbol, *target;
-    short *p, *q, *r;
-    short action;
-    set_size *mp;
-    a_sym *sym;
-    a_pro *pro;
-    an_item *item;
-    a_state *state;
-    a_shift_action *tx;
-    a_reduce_action *rx;
-    int i, j;
-    set_size max_savings;
-    set_size savings;
-
-    for( i = nterm; i < nsym; ++i )
-        symtab[i]->token = i - nterm;
-
-    label = OPTENTRY( nstate - 1 );
-
-    emitins( JMP, TOKENTRY( startstate->idx ) );
-
-    target = CALLOC( nsym, short );
-    for( i = 0; i < nsym; ++i )
-        target[i] = DEFAULT;
-    symbol = CALLOC( nsym, short );
-    for( i = 0; i < nstate; ++i ) {
-        state = statetab[i];
-        q = symbol;
-        for( tx = state->trans; (sym = tx->sym) != NULL; ++tx ) {
-            if( sym == eofsym ) {
-                action = ACCEPT;
-            } else if( sym->idx < nterm ) {
-                action = TOKENTRY(tx->state->idx);
-            } else {
-                action = OPTENTRY(tx->state->idx);
-            }
-            *q++ = sym->idx;
-            target[sym->idx] = action;
-        }
-        max_savings = 0;
-        for( rx = state->redun; (pro = rx->pro) != NULL; ++rx ) {
-            if( (savings = (mp = Members( rx->follow )) - setmembers) == 0 )
-                continue;
-            action = PROENTRY( pro->pidx );
-            if( max_savings < savings ) {
-                max_savings = savings;
-                r = q;
-            }
-            while( mp-- != setmembers ) {
-                *q++ = *mp;
-                target[*mp] = action;
-            }
-        }
-        action = DEFAULT;
-        if( max_savings ) {
-            action = target[*r];
-            p = r;
-            while( max_savings-- > 0 ) {
-                target[*p++] = DEFAULT;
-            }
-        }
-
-        emitins( LBL, TOKENTRY( state->idx ) );
-        emitins( SCAN, 0 );
-        emitins( LBL, OPTENTRY( state->idx ) );
-        emitins( CALL, VBLENTRY( state->idx ) );
-        q = symbol;
-        for( j = nterm; j < nsym; ++j ) {
-            if( target[j] != DEFAULT ) {
-                *q++ = j;
-            }
-        }
-        if( q != symbol ) {
-            emitv( symbol, target, q - symbol );
-            for( p = symbol; p < q; ++p ) {
-                target[*p] = DEFAULT;
-            }
-        }
-        emitins( LBL, VBLENTRY( state->idx ) );
-
-        q = symbol;
-        for( j = 0; j < nterm; ++j ) {
-            if( target[j] != DEFAULT ) {
-                *q++ = j;
-            }
-        }
-        emitt( symbol, target, q - symbol, action );
-        for( p = symbol; p < q; ++p ) {
-            target[*p] = DEFAULT;
-        }
-    }
-
-    FREE( target );
-    FREE( symbol );
-
-    for( i = 0; i < npro; ++i ) {
-        pro = protab[i];
-        if( pro != startpro ) {
-            for( item = pro->item; item->p.sym != NULL; ) {
-                ++item;
-            }
-            emitins( LBL, PROENTRY( pro->pidx ) );
-            emitins( ACTION, PROPACK( item - pro->item, i ) );
-            emitins( REDUCE, PROPACK( item - pro->item, pro->sym->token ) );
-        }
-    }
-
-    writeobj( label + 1 );
+    return( ++label );
 }
 
-static emitt( symbol, target, n, redun )
-  short *symbol, *target, redun;
-  unsigned n;
+static void emitt( sym_n *symbol, short *target, sym_n n, short redun )
 {
-    unsigned i, j;
+    sym_n           i;
+    sym_n           sym_idx;
 
     for( i = 0; i < n; ++i ) {
-        j = symbol[i];
-        emitins( TCMP, symtab[j]->token );
-        emitins( JEQ, target[j] );
+        sym_idx = symbol[i];
+        emitins( TCMP, symtab[sym_idx]->token );
+        emitins( JEQ, target[sym_idx] );
     }
     emitins( JMP, redun );
 }
 
-static emitv( symbol, target, n )
-  short *symbol, *target;
-  unsigned n;
+static void emitv( sym_n *symbol, short *target, sym_n n )
 {
-    unsigned m;
-    int l1, l2;
+    sym_n           m;
+    int             l1;
+    int             l2;
 
     if( n == 1 ) {
         emitins( JMP, target[symbol[0]] );
     } else if( n != 0 ) {
         m = n / 2;
         n -= m + 1;
+        l1 = 0;
+        l2 = 0;
         emitins( VCMP, symtab[symbol[m]]->token );
         if( m == 1 ) {
             emitins( JLT, target[symbol[0]] );
@@ -214,7 +108,124 @@ static emitv( symbol, target, n )
     }
 }
 
-static int newlabel( void )
+void genobj( FILE *fp )
 {
-    return( ++label );
+    sym_n           *symbol;
+    sym_n           *p;
+    sym_n           *q;
+    sym_n           *r;
+    short           *target;
+    short           action;
+    bitnum          *mp;
+    a_sym           *sym;
+    a_pro           *pro;
+    an_item         *item;
+    a_state         *state;
+    a_shift_action  *saction;
+    a_reduce_action *raction;
+    action_n        sidx;
+    rule_n          pidx;
+    sym_n           sym_idx;
+    unsigned        max_savings;
+    unsigned        savings;
+
+    /* unused parameters */ (void)fp;
+
+    for( sym_idx = nterm; sym_idx < nsym; ++sym_idx ) {
+        symtab[sym_idx]->token = sym_idx - nterm;
+    }
+    label = OPTENTRY( nstate - 1 );
+
+    emitins( JMP, TOKENTRY( startstate->sidx ) );
+
+    target = MemCAllocSafe( nsym, sizeof( *target ) );
+    for( sym_idx = 0; sym_idx < nsym; ++sym_idx ) {
+        target[sym_idx] = DEFAULT;
+    }
+    symbol = MemCAllocSafe( nsym, sizeof( *symbol ) );
+    for( sidx = 0; sidx < nstate; ++sidx ) {
+        state = statetab[sidx];
+        r = q = symbol;
+        for( saction = state->trans; (sym = saction->sym) != NULL; ++saction ) {
+            if( sym == eofsym ) {
+                action = ACCEPT;
+            } else if( sym->idx < nterm ) {
+                action = TOKENTRY( saction->state->sidx );
+            } else {
+                action = OPTENTRY( saction->state->sidx );
+            }
+            *q++ = sym->idx;
+            target[sym->idx] = action;
+        }
+        max_savings = 0;
+        for( raction = state->redun; (pro = raction->pro) != NULL; ++raction ) {
+            mp = Members( raction->follow );
+            savings = mp - setmembers;
+            if( savings == 0 )
+                continue;
+            action = PROENTRY( pro->pidx );
+            if( max_savings < savings ) {
+                max_savings = savings;
+                r = q;
+            }
+            while( mp-- != setmembers ) {
+                *q++ = *mp;
+                target[*mp] = action;
+            }
+        }
+        action = DEFAULT;
+        if( max_savings ) {
+            action = target[*r];
+            p = r;
+            while( max_savings-- > 0 ) {
+                target[*p++] = DEFAULT;
+            }
+        }
+
+        emitins( LBL, TOKENTRY( state->sidx ) );
+        emitins( SCAN, 0 );
+        emitins( LBL, OPTENTRY( state->sidx ) );
+        emitins( CALL, VBLENTRY( state->sidx ) );
+        q = symbol;
+        for( sym_idx = nterm; sym_idx < nsym; ++sym_idx ) {
+            if( target[sym_idx] != DEFAULT ) {
+                *q++ = sym_idx;
+            }
+        }
+        if( q != symbol ) {
+            emitv( symbol, target, q - symbol );
+            for( p = symbol; p < q; ++p ) {
+                target[*p] = DEFAULT;
+            }
+        }
+        emitins( LBL, VBLENTRY( state->sidx ) );
+
+        q = symbol;
+        for( sym_idx = 0; sym_idx < nterm; ++sym_idx ) {
+            if( target[sym_idx] != DEFAULT ) {
+                *q++ = sym_idx;
+            }
+        }
+        emitt( symbol, target, q - symbol, action );
+        for( p = symbol; p < q; ++p ) {
+            target[*p] = DEFAULT;
+        }
+    }
+
+    MemFree( target );
+    MemFree( symbol );
+
+    for( pidx = 0; pidx < npro; ++pidx ) {
+        pro = protab[pidx];
+        if( pro != startpro ) {
+            for( item = pro->items; item->u.sym != NULL; ) {
+                ++item;
+            }
+            emitins( LBL, PROENTRY( pro->pidx ) );
+            emitins( ACTION, PROPACK( item - pro->items, pidx ) );
+            emitins( REDUCE, PROPACK( item - pro->items, pro->sym->token ) );
+        }
+    }
+
+    writeobj( label + 1 );
 }

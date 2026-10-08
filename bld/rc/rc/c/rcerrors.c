@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -64,7 +64,7 @@ static void RcMsgV( unsigned errornum, OutputSeverity sev, va_list args )
     case ERR_UNEXPECTED_EOF:
     case ERR_READING_FILE:
     case ERR_WRITTING_FILE:
-    case ERR_WRITTING_RES_FILE:
+    case ERR_WRITTING_RES:
         fname = va_arg( args1, char * );
 #if defined( INSIDE_WR )
         if( strcmp( fname, TMPFILE2 ) == 0 ) {
@@ -103,7 +103,7 @@ static void RcMsgV( unsigned errornum, OutputSeverity sev, va_list args )
     case ERR_UNEXPECTED_EOF:
     case ERR_WRITTING_FILE:
     case ERR_READING_FILE:
-    case ERR_WRITTING_RES_FILE:
+    case ERR_WRITTING_RES:
     case ERR_CANT_FIND_FILE:
     case ERR_FILENAME_NEEDED:
     case ERR_NO_OPT_SPECIFIED:
@@ -188,6 +188,46 @@ void RcError( unsigned errornum, ... )
     va_end( args );
 }
 
+bool RcIOError( RcStatus ret, const char *srcname, const char *dstname, int err )
+{
+    switch( ret ) {
+    case RS_OK:
+    case RS_PARAM_ERROR:
+        return( false );
+    case RS_OPEN_ERROR:
+        RcError( ERR_CANT_OPEN_FILE, srcname, strerror( err ) );
+        break;
+    case RS_BAD_FILE_FMT:
+        RcError( ERR_NOT_VALID_EXE, srcname );
+        break;
+    case RS_READ_ERROR:
+        RcError( ERR_READING_FILE, srcname, strerror( err ) );
+        break;
+    case RS_READ_ERROR_EXE:
+        RcError( ERR_READING_EXE, srcname, strerror( err ) );
+        break;
+    case RS_READ_ERROR_TMP:
+        RcError( ERR_READING_TMP, srcname, strerror( err ) );
+        break;
+    case RS_READ_INCMPLT:
+        RcError( ERR_UNEXPECTED_EOF, srcname );
+        break;
+    case RS_WRITE_ERROR:
+        RcError( ERR_WRITTING_FILE, dstname, strerror( err ) );
+        break;
+    case RS_WRITE_ERROR_RES:
+        RcError( ERR_WRITTING_RES, dstname, strerror( err ) );
+        break;
+    case RS_WRITE_ERROR_TMP:
+        RcError( ERR_WRITTING_TMP, dstname, strerror( err ) );
+        break;
+    default:
+        RcError( ERR_INTERNAL, INTERR_UNKNOWN_RCSTATUS );
+        break;
+    }
+    return( true );
+}
+
 void RcFatalError( unsigned int errornum, ... )
 /*********************************************/
 {
@@ -204,4 +244,5 @@ void RcFatalError( unsigned int errornum, ... )
     PP_Fini();
 #endif
     RCSuicide( -1 );
+    /* never return */
 }

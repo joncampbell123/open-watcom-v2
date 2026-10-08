@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -39,8 +39,13 @@
 #include "guifdlg.h"
 
 
+#ifdef __WATCOMC__
 #define WNDAPI              /* public API */
 #define WNDCALLBACK         /* public callback */
+#else
+#define WNDAPI
+#define WNDCALLBACK
+#endif
 
 #define SAVE_SIZE           512
 
@@ -172,7 +177,7 @@ typedef struct wnd_line_piece {
 
 typedef struct wnd_create_struct {
     struct wnd_info     *info;
-    char                *title;
+    const char          *title;
     wnd_class           wndclass;
     void                *extra;
     gui_create_styles   style;
@@ -301,16 +306,16 @@ typedef struct {
     bool        cancel;
 } dlgnew_ctl;
 
-extern bool                 WNDAPI DlgPickWithRtn( const char *title, const void *data_handle, int def_item, GUIPICKGETTEXT *getstring, int num_items, int *choice );
-extern bool                 WNDAPI DlgPickWithRtn2( const char *title, const void *data_handle, int def_item, GUIPICKGETTEXT *getstring, int num_items, WNDPICKER *pickfn, int *choice );
-extern bool                 WNDAPI DlgPick( const char *title, const void *data_handle, int def_item, int num_items, int *choice );
+extern bool                 WNDAPI DlgPickWithRtn( const char *title, data_handle data, int def_item, GUIPICKGETTEXT *getstring, int num_items, int *choice );
+extern bool                 WNDAPI DlgPickWithRtn2( const char *title, data_handle data, int def_item, GUIPICKGETTEXT *getstring, int num_items, WNDPICKER *pickfn, int *choice );
+extern bool                 WNDAPI DlgPick( const char *title, data_handle data, int def_item, int num_items, int *choice );
 extern bool                 WNDAPI DlgNew( const char *title, char *buff, size_t buff_len );
 extern bool                 WNDAPI DlgNewWithCtl( const char *title, char *buff, size_t buff_len, gui_control_info *controls, int num_controls,
                                             GUIEVCALLBACK *gui_call_back, gui_text_ord rows, gui_text_ord cols, gui_text_ord max_cols );
 extern void                 WNDAPI DlgOpen( const char *title, gui_text_ord, gui_text_ord, gui_control_info *, int, GUIEVCALLBACK *, void * );
 extern void                 WNDAPI DlgOpenRes( GUIEVCALLBACK *, void *, int dlg_id );
 extern int                  WNDAPI DlgGetFileName( open_file_name *ofn );
-extern bool                 WNDAPI DlgFileBrowse( char *title, char *filter, char *path, unsigned len, fn_flags flags );
+extern bool                 WNDAPI DlgFileBrowse( const char *title, const char *filter, char *path, unsigned len, fn_flags flags );
 extern int                  WNDAPI DlgSearch( a_window wnd, void *history );
 extern bool                 WNDAPI DlgSearchAll( char **expr, void *history );
 
@@ -322,14 +327,8 @@ extern gui_ord              WndExtentX( a_window, const char * );
 extern void                 WndFreshAll( void );
 extern bool                 WndStopRefresh( bool );
 
-extern void                 WndNoMemory( void );
 extern void                 WndMemInit( void );
 extern void                 WndMemFini( void );
-extern void                 * WNDAPI WndAlloc( size_t );
-extern void                 *WndRealloc( void *, size_t );
-extern void                 WNDAPI WndFree( void * );
-extern void                 *WndMustAlloc( size_t );
-extern void                 *WndMustRealloc( void *, size_t );
 extern void                 WndCreateFloatingPopup( a_window, gui_point *, const gui_menu_items *, gui_ctl_id *id );
 
 extern void                 WndFixedThumb( a_window );
@@ -365,8 +364,8 @@ extern void                 WndInitCreateStruct( wnd_create_struct * );
 extern a_window             WndCreateWithStruct( wnd_create_struct * );
 extern a_window             WndCreateWithStructAndMenuRes( wnd_create_struct *, res_name_or_id menu_id );
 extern void                 WndShrinkToMouse( a_window wnd, wnd_metrics * );
-extern bool                 WndInit( char *title );
-extern bool                 WndInitWithMenuRes( char *title, res_name_or_id menu_id );
+extern bool                 WndInit( const char *title );
+extern bool                 WndInitWithMenuRes( const char *title, res_name_or_id menu_id );
 extern bool                 WndFini( void );
 extern bool                 WndMainMenuProc( a_window, gui_ctl_id id );
 extern GUIEVCALLBACK        WndMainGUIEventProc;
@@ -559,10 +558,6 @@ extern void                 WndGetGadgetSize( wnd_gadget_type type, gui_coord * 
 extern wnd_attr             WndMapTabAttr( wnd_attr );
 extern char                 WndBackgroundChar;
 
-#define PopUp( x )          (sizeof( x ) / sizeof( *(x) )), x
-#define NoPopUp             0, NULL
-
-#define WndMenuFields( x )  (sizeof( x ) / sizeof( *(x) )), x
 extern void                 WndSetMainMenu( gui_menu_items *menus );
 
 /* following function are all window refresh hooks */

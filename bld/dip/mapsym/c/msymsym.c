@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -231,7 +231,13 @@ static search_result DoLookupSym( imp_image_handle *iih,
     len = li->name.len;
     for( s = iih->gbl; s != NULL; s = s->next ) {
         if( s->len == len && scompn( s->name, name, s->len ) == 0 ) {
-            DCSymCreate( iih, d )->p = s;
+            imp_sym_handle  *ish;
+
+            ish = DCSymCreate( iih, d );
+            if( ish == NULL ) {
+                return( SR_FAIL );
+            }
+            ish->p = s;
             return( SR_EXACT );
         }
     }

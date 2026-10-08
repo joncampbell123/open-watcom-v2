@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -32,8 +32,8 @@
 
 #include "dbgdefn.h"
 #include "dbgdata.h"
-#include "dbgmem.h"
-#include "madinter.h"
+#include "memfuncs.h"
+#include "wvmadcli.h"
 #include "dui.h"
 #include "dbgscan.h"
 #include "dbgovl.h"
@@ -41,7 +41,7 @@
 #include "remcore.h"
 #include "dbgmisc.h"
 #include "dipimp.h"
-#include "dipinter.h"
+#include "wvdipcli.h"
 #include "dbgreg.h"
 #include "dbgdot.h"
 
@@ -193,8 +193,8 @@ void PurgeUserNames( void )
     while( (sl = WmonSymLst) != NULL ) {
         WmonSymLst = sl->next;
         if( sl->s.info.ti.kind == TK_STRING )
-            _Free( sl->s.info.v.string );
-        _Free( sl );
+            MemFree( sl->s.info.v.string );
+        MemFree( sl );
     }
 }
 
@@ -233,7 +233,7 @@ bool CreateSym( lookup_item *li, dig_type_info *ti )
     default:
         return( false );
     }
-    new = DbgMustAlloc( sizeof( *new ) + li->name.len );
+    new = MemAllocSafe( sizeof( *new ) + li->name.len );
     new->next = WmonSymLst;
     WmonSymLst = new;
     new->s.info.ti = new_ti;

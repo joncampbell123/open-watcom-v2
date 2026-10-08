@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,7 +35,7 @@
 #include "dbgdefn.h"
 #include "dbgdata.h"
 #include "dbgerr.h"
-#include "dbgmem.h"
+#include "memfuncs.h"
 #include "liteng.h"
 #include "ldsupp.h"
 #include "dui.h"
@@ -46,7 +46,7 @@
 #include "dbgmad.h"
 #include "numscan.h"
 #include "dbgutil.h"
-#include "madinter.h"
+#include "wvmadcli.h"
 #include "madcli.h"
 #include "dbgshow.h"
 #include "dbgparse.h"
@@ -103,14 +103,14 @@ static void SetRadixSpec( const char *str, size_t len, mad_radix value, bool cle
     if( radixstr == NULL || SYM_NAME_LEN( radixstr->string ) != len ) {
         if( clear )
             return;
-        radixstr = DbgMustAlloc( sizeof( radix_str ) + len );
+        radixstr = MemAllocSafe( sizeof( *radixstr ) + len );
         memcpy( SYM_NAME_NAME( radixstr->string ), str, len );
         SET_SYM_NAME_LEN( radixstr->string, len );
         radixstr->next = *owner;
         *owner = radixstr;
     } else if( clear ) {
         *owner = radixstr->next;
-        _Free( radixstr );
+        MemFree( radixstr );
         return;
     }
     radixstr->value = value;
@@ -138,7 +138,7 @@ void FiniScan( void )
 
     while( (radixstr = RadixStrs) != NULL ) {
         RadixStrs = RadixStrs->next;
-        _Free( radixstr );
+        MemFree( radixstr );
     }
 }
 
@@ -223,7 +223,7 @@ static walk_result      FindTypeName( mad_type_handle mth, void *d )
     return( WR_CONTINUE );
 }
 
-static mad_type_handle DoScanType( mad_type_kind tk, char *prefix )
+static mad_type_handle DoScanType( mad_type_kind tk, const char *prefix )
 {
     struct type_name    data;
     size_t              len;
@@ -299,14 +299,17 @@ bool ScanEOC( void )
 }
 
 
-static bool FindToken( const char *table, tokens token,
-                       const char **start, size_t *len )
+static bool FindToken( const char *table, tokens token, const char **start, size_t *len )
 {
+    /*
+     * numbers in PRS file are in little-endian format
+     * read numbers as little-endian unaligned data
+     */
     while( *table != NULLCHAR ) {
         *start = table;
-        for( ; *table != NULLCHAR; ++table )
-            ;
-        if( (tokens)GETWORD( table + 1 ) == token ) {
+        while( *table != NULLCHAR )
+            ++table;
+        if( (tokens)MGET_LE_U16_UN( table + 1 ) == token ) {
             *len = table - *start;
             return( true );
         }
@@ -476,20 +479,33 @@ void FlushEOC( void )
     }
 }
 
+static bool ssl_chreq( const char *table, const char *ptr )
+{
+    return( *table == *ptr );
+}
+
+static bool ssl_chreqi( const char *table, const char *ptr )
+{
+    return( toupper( *(unsigned char *)table ) == toupper( *(unsigned char *)ptr ) );
+}
 
 static bool ScanExprDelim( const char *table )
 {
     const char  *ptr;
+    bool (*ssl_chr_eq)(const char *, const char *);
 
+    /*
+     * numbers in PRS file are in little-endian format
+     * read it as little-endian unaligned data
+     */
+    ssl_chr_eq = ( _IsOn( SW_SSL_CASE_SENSITIVE ) ) ? ssl_chreq : ssl_chreqi;
     for( ; *table != NULLCHAR; table += 3 ) {
-        for( ptr = ScanPtr; ( _IsOn( SW_SSL_CASE_SENSITIVE ) ?
-                *table == *ptr : toupper(*table) == toupper(*ptr) )
-                && *table != NULLCHAR; ptr++, table++ ) {
-            ;
+        for( ptr = ScanPtr; ssl_chr_eq( table, ptr ) && *table != NULLCHAR; ptr++, table++ ) {
+            /* nothing */;
         }
         if( *table == NULLCHAR ) {
             table++;
-            CurrToken = (tokens)GETWORD( table );
+            CurrToken = (tokens)MGET_LE_U16_UN( table );
             ScanPtr = ptr;
             return( true );
         }
@@ -583,12 +599,12 @@ static bool GetNum( unsigned base )
     int         dig;
 
     ok = false;
-    U32ToU64( base, &big_base );
-    U64Clear( num );
+    Set64ValU32( big_base, base );
+    Set64ValZero( num );
     while( (dig = GetDig( base )) >= 0 ) {
-        U32ToU64( dig, &big_dig );
-        U64Mul( &num, &big_base, &num );
-        U64Add( &num, &big_dig, &num );
+        Set64ValU32( big_dig, dig );
+        U64MulEq( &num, &big_base );
+        U64AddEq( &num, &big_dig );
         ++ScanPtr;
         ok = true;
     }
@@ -612,7 +628,7 @@ static bool ScanNumber( void )
     hold_scan = ScanPtr;
     if( ScanCCharNum && (*ScanPtr == '\'') ) {
         if( ScanPtr[1] != NULLCHAR && ScanPtr[2] == '\'' ) {
-            U32ToU64( ScanPtr[1], &TokenVal.int_val );
+            Set64ValU32( TokenVal.int_val, ScanPtr[1] );
             ScanPtr += 3;
             CurrToken = T_INT_NUM;
             return( true );
@@ -701,15 +717,19 @@ static bool ScanKeyword( const char *table )
 {
     size_t  namelen;
     size_t  keylen;
+    int (*ssl_cmp)(const char *, const char *, size_t);
 
+    /*
+     * numbers in PRS file are in little-endian format
+     * read it as little-endian unaligned data
+     */
+    ssl_cmp = ( _IsOn( SW_SSL_CASE_SENSITIVE ) ) ? strncmp : strnicmp;
     namelen = ScanPtr - TokenStart;
     for( ; *table != NULLCHAR; table += (keylen + 3) ) {
          keylen = strlen( table );
-         if( keylen == namelen && ( _IsOn( SW_SSL_CASE_SENSITIVE )  ?
-                strncmp( table, TokenStart, namelen ) == 0 :
-                strnicmp( table, TokenStart, namelen ) == 0 ) ) {
+         if( keylen == namelen && ssl_cmp( table, TokenStart, namelen ) == 0 ) {
              table += (namelen + 1);
-             CurrToken = (tokens)GETWORD( table );
+             CurrToken = (tokens)MGET_LE_U16_UN( table );
              return( true );
          }
     }
@@ -742,9 +762,9 @@ void AddActualChar( char data )
     size_t  len;
 
     len = ++StringLength;
-    _Alloc( hold, len );
+    hold = MemAlloc( len );
     if( hold == NULL ) {
-        _Free( StringStart );
+        MemFree( StringStart );
         Error( ERR_NONE, LIT_ENG( ERR_NO_MEMORY_FOR_EXPR ) );
     }
     walk1 = hold;
@@ -752,7 +772,7 @@ void AddActualChar( char data )
     for( --len; len > 0; --len )
         *walk1++ = *walk2++;
     *walk1 = data;
-    _Free( StringStart );
+    MemFree( StringStart );
     StringStart = hold;
 }
 
@@ -776,7 +796,7 @@ static void RawScan( void )
 {
     if( ScanPtr[-1] == NULLCHAR ) {
         /* missing end quote; scanned past eol -- error */
-        _Free( StringStart );
+        MemFree( StringStart );
         StringStart = NULL;   /* this is necessary */
         StringLength = 0;
         scan_string = false;  /* this is essential */

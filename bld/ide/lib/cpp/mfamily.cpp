@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -46,7 +46,7 @@ WCLASS StrMapItem : public WObject {
         StrMapItem( WString& id, WString& text, bool id2text );
         virtual bool isEqual( const WObject* obj ) const;
         bool isIdEqual( const char* id ) const
-            { return( strcmp( _id, id ) == 0 && _id2text ); }
+            { return( std::strcmp( _id, id ) == 0 && _id2text ); }
         bool isTextEqual( const char* text, int kludge ) const;
 
         WString     _id;
@@ -60,7 +60,7 @@ StrMapItem::StrMapItem( WString& id, WString& text, bool id2text )
     _id = id;
     _text = text;
     _id2text = id2text;
-    _textlen = strlen( text );
+    _textlen = std::strlen( text );
 }
 
 bool StrMapItem::isEqual( const WObject* o ) const
@@ -74,7 +74,7 @@ bool StrMapItem::isTextEqual( const char* text, int kludge ) const
 {
     for( int i = 0; i < _textlen; i++ ) {
         int ct = (unsigned char)_text[i];
-        int cs = (unsigned char)*text++;
+        int cs = *(unsigned char *)text++;
         if( cs == '\0' )
             return( false );
         if( ct == cs )
@@ -84,7 +84,7 @@ bool StrMapItem::isTextEqual( const char* text, int kludge ) const
             if( cs == '-' && ct == ' ' || cs == ' ' && ct == '-' )
                 continue;
             // ignore upper/lower case mismatch
-            if( toupper( cs ) == toupper( ct ) ) {
+            if( std::toupper( cs ) == std::toupper( ct ) ) {
                 continue;
             }
         }
@@ -216,7 +216,7 @@ void MFamily::addSwitches( WVList& list, const char* mask, bool setable )
              */
             if(  /* first switch */ lastSw == NULL
               || /* no ID switch */ sw->id()[0] == '\0'
-              || /* new switch */   strcmp( sw->id(), lastSw->id() ) != 0 ) {
+              || /* new switch */   std::strcmp( sw->id(), lastSw->id() ) != 0 ) {
                 if( sw->addSwitch( list, mask ) ) {
                     /*
                      * save first active switch definition

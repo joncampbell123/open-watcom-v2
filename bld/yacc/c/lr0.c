@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2023      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2023-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -36,17 +36,23 @@
 #include "yacc.h"
 #include "alloc.h"
 
-index_n nbstate;
-index_n nstate;
-index_n nvtrans;
-index_n nredun;
 
-a_state **statetab, *statelist, **statetail, *startstate, *errstate;
+action_n    nbstate;
+action_n    nstate;
+action_n    nvtrans;
+action_n    nredun;
+
+a_state     **statetab;
+a_state     *statelist;
+a_state     **statetail;
+a_state     *startstate;
+a_state     *errstate;
 
 static a_state *addState( a_state **state, an_item **s, an_item **q, a_state *parent )
 {
     a_parent        *add_parent;
-    an_item         **p, **t;
+    an_item         **p;
+    an_item         **t;
     unsigned short  kersize;
 
     for( p = s; p != q; ++p ) {
@@ -70,16 +76,16 @@ static a_state *addState( a_state **state, an_item **s, an_item **q, a_state *pa
         Unmark( *p );
     }
     if( *state == NULL ) {
-        *state = CALLOC( 1, a_state );
+        *state = MemCAllocSafe( 1, sizeof( **state ) );
         *statetail = *state;
         statetail = &(*state)->next;
         (*state)->kersize = kersize;
-        (*state)->items = CALLOC( kersize + 1, an_item * );
+        (*state)->items = MemCAllocSafe( kersize + 1, sizeof( *((*state)->items) ) );
         memcpy( (*state)->items, s, kersize * sizeof( an_item * ) );
-        (*state)->idx = nstate++;
+        (*state)->sidx = nstate++;
     }
     if( parent != NULL ) {
-        add_parent = CALLOC( 1, a_parent );
+        add_parent = MemCAllocSafe( 1, sizeof( *add_parent ) );
         add_parent->state = parent;
         add_parent->next = (*state)->parents;
         (*state)->parents = add_parent;
@@ -92,8 +98,11 @@ static void Sort( void **vec, unsigned n, bool (*lt)( void *, void * ) )
  * Heap Sort.  Reference:  Knuth, Vol. 3, pages 146, 147.
  */
 {
-    unsigned    i, j, l, r;
-    void        *k;
+    unsigned        i;
+    unsigned        j;
+    unsigned        l;
+    unsigned        r;
+    void            *k;
 
     if( n > 1 ) {
         l = n / 2;
@@ -127,21 +136,22 @@ static void Sort( void **vec, unsigned n, bool (*lt)( void *, void * ) )
 
 static bool itemlt( void *_a, void *_b )
 {
-    an_item     *a = _a;
-    an_item     *b = _b;
+    an_item         *a = _a;
+    an_item         *b = _b;
 
-    if( a->p.sym != NULL ) {
-        return( b->p.sym != NULL && a[0].p.sym->idx > b[0].p.sym->idx );
+    if( a->u.sym != NULL ) {
+        return( b->u.sym != NULL && a[0].u.sym->idx > b[0].u.sym->idx );
     } else {
-        return( b->p.sym != NULL || a[1].p.pro->pidx > b[1].p.pro->pidx );
+        return( b->u.sym != NULL || a[1].u.pro->pidx > b[1].u.pro->pidx );
     }
 }
 
 static void Complete( a_state *state, an_item **s )
 {
-    an_item         **p, **q;
-    a_reduce_action *rx;
-    a_shift_action  *tx;
+    an_item         **p;
+    an_item         **q;
+    a_reduce_action *raction;
+    a_shift_action  *saction;
     a_pro           *pro;
     index_n         n;
 
@@ -151,8 +161,8 @@ static void Complete( a_state *state, an_item **s )
         *q++ = *p;
     }
     for( p = s; p < q; ++p ) {
-        if( (*p)->p.sym != NULL ) {
-            for( pro = (*p)->p.sym->pro; pro != NULL; pro = pro->next ) {
+        if( (*p)->u.sym != NULL ) {
+            for( pro = (*p)->u.sym->pro; pro != NULL; pro = pro->next ) {
                 if( !IsMarked( pro->items ) ) {
                     Mark( pro->items );
                     *q++ = pro->items;
@@ -164,51 +174,52 @@ static void Complete( a_state *state, an_item **s )
         Unmark( *p );
     }
     Sort( (void **)s, (unsigned)( q - s ), itemlt );
-    for( p = s; p < q && (*p)->p.sym == NULL; ) {
+    for( p = s; p < q && (*p)->u.sym == NULL; ) {
         ++p;
     }
     n = (index_n)( p - s );
     nredun += n;
-    rx = CALLOC( n + 1, a_reduce_action );
-    state->redun = rx;
-    for( p = s; p < q && (*p)->p.sym == NULL; ++p ) {
-        (rx++)->pro = (*p)[1].p.pro;
+    raction = MemCAllocSafe( n + 1, sizeof( *raction ) );
+    state->redun = raction;
+    for( p = s; p < q && (*p)->u.sym == NULL; ++p ) {
+        raction->pro = (*p)[1].u.pro;
+        ++raction;
     }
     if( p == q ) {
-        state->trans = CALLOC( 1, a_shift_action );
+        state->trans = MemCAllocSafe( 1, sizeof( *(state->trans) ) );
     } else {
         n = 1;
         s = p;
         while( ++p < q ) {
-            if( p[-1]->p.sym != p[0]->p.sym ) {
+            if( p[-1]->u.sym != p[0]->u.sym ) {
                 ++n;
             }
         }
-        tx = CALLOC( n + 1, a_shift_action );
-        state->trans = tx;
+        saction = MemCAllocSafe( n + 1, sizeof( *saction ) );
+        state->trans = saction;
         do {
-            tx->sym = (*s)->p.sym;
-            if( tx->sym->pro != NULL ) {
+            saction->sym = (*s)->u.sym;
+            if( saction->sym->pro != NULL ) {
                 ++nvtrans;
             }
-            for( p = s; p < q && (*p)->p.sym == tx->sym; ++p ) {
+            for( p = s; p < q && (*p)->u.sym == saction->sym; ++p ) {
                 ++*p;
             }
-            tx->state = addState( &tx->sym->state, s, p, state );
+            saction->state = addState( &saction->sym->state, s, p, state );
             s = p;
-            ++tx;
+            ++saction;
         } while( s < q );
     }
 }
 
 void lr0( void )
 {
-    a_state     *state;
-    an_item     **s;
+    a_state         *state;
+    an_item         **s;
 
     nvtrans = 0;
     nredun = 0;
-    s = CALLOC( nitem, an_item * );
+    s = MemCAllocSafe( nitem, sizeof( *s ) );
     statetail = &statelist;
     *s = startsym->pro->items;
     startstate = addState( &startsym->state, s, s + 1, NULL );
@@ -217,34 +228,85 @@ void lr0( void )
     }
     errstate = addState( &errsym->state, s, s, NULL );
     Complete( errstate, s );
-    FREE( s );
+    MemFree( s );
 }
 
 void SetupStateTable( void )
 {
-    a_state     *state;
+    a_state         *state;
 
-    FREE( statetab );
-    statetab = CALLOC( nstate, a_state * );
+    MemFree( statetab );
+    statetab = MemCAllocSafe( nstate, sizeof( *statetab ) );
     for( state = statelist; state != NULL; state = state->next ) {
-        statetab[state->idx] = state;
+        statetab[state->sidx] = state;
+    }
+}
+
+static void FreeState( a_state *state )
+/*************************************/
+{
+    a_parent        *par;
+    a_reduce_action *raction;
+
+    /*
+     * state->look points into the block freed by FreeLalr1Sets()
+     */
+    if( state->items != NULL ) {
+        MemFree( state->items );
+        state->items = NULL;
+    }
+    if( state->trans != NULL ) {
+        MemFree( state->trans );
+        state->trans = NULL;
+    }
+    if( state->redun != NULL ) {
+        /*
+         * deallocate only owned follow sets before array
+         */
+        for( raction = state->redun; raction->pro != NULL; ++raction ) {
+            if( raction->owned_follow ) {
+                MemFreeSet( raction->follow );
+            }
+        }
+        MemFree( state->redun );
+        state->redun = NULL;
+    }
+    while( (par = state->parents) != NULL ) {
+        state->parents = par->next;
+        MemFree( par );
     }
 }
 
 void RemoveDeadStates( void )
 {
-    index_n     old_state_idx;
-    index_n     new_state_idx;
-    a_state     *state;
+    action_n        old_sidx;
+    action_n        new_sidx;
+    a_state         *state;
 
-    new_state_idx = 0;
-    for( old_state_idx = 0; old_state_idx < nstate; old_state_idx++ ) {
-        state = statetab[old_state_idx];
-        if( ! IsDead( state ) ) {
-            state->idx = new_state_idx;
-            statetab[new_state_idx] = state;
-            new_state_idx++;
+    new_sidx = 0;
+    for( old_sidx = 0; old_sidx < nstate; old_sidx++ ) {
+        state = statetab[old_sidx];
+        if( IsDead( state ) ) {
+            FreeState( state );
+        } else {
+            state->sidx = new_sidx;
+            statetab[new_sidx] = state;
+            new_sidx++;
         }
     }
-    nstate = new_state_idx;
+    nstate = new_sidx;
+}
+
+void FreeStateData( void )
+/*************************/
+{
+    a_state     *state;
+
+    while( (state = statelist) != NULL ) {
+        statelist = state->next;
+        FreeState( state );
+        MemFree( state );
+    }
+    MemFree( statetab );
+    statetab = NULL;
 }

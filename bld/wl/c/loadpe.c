@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,7 +35,6 @@
 #include <stdlib.h>
 #include <time.h>
 #include "linkstd.h"
-#include "exeos2.h"
 #include "loados2.h"
 #include "exepe.h"
 #include "exedos.h"
@@ -80,7 +79,7 @@
 #define MINIMUM_SEG_SHIFT       2           /* Corresponds to 2^2 == 4 bytes */
 #define DEFAULT_SEG_SHIFT       9           /* Corresponds to 2^9 == 512 bytes */
 
-#define STUB_ALIGN              8           /* for PE format */
+#define STUB_ALIGN              8U          /* for PE format */
 
 #define PE32_OPT_SIZE           sizeof(pe32_opt_header)
 #define PE64_OPT_SIZE           sizeof(pe64_opt_header)
@@ -119,17 +118,17 @@ static struct {
 } IData;
 
 #define WALK_IMPORT_SYMBOLS(sym) \
-    for( (sym) = HeadSym; (sym) != NULL; (sym) = (sym)->link ) \
-        if( IS_SYM_IMPORTED(sym) && (sym)->p.import != NULL \
+    for( (sym) = HeadSym; (sym) != NULL; (sym) = (sym)->next ) \
+        if( IS_SYM_IMPORTED(sym) && (sym)->p.import_dll != NULL \
             /*&& ((sym)->info & SYM_DEAD) == 0 */)
 
 static offset CalcIDataSize( void )
 /*********************************/
 {
-    struct module_import        *mod;
-    struct import_name          *imp;
-    unsigned_32 iatsize;
-    unsigned_32 size;
+    module_import   *mod;
+    import_name     *imp;
+    unsigned        iatsize;
+    unsigned        size;
 
     iatsize = ( NumImports + NumMods ) * sizeof( pe_va );
     if( 0 == iatsize ) {
@@ -185,8 +184,8 @@ static void CalcImpOff( dll_sym_info *dll, offset *off )
 static void XFerReloc( offset off, group_entry *group, unsigned type, unsigned data )
 /***********************************************************************************/
 {
-    reloc_item  reloc;
-    size_t      size;
+    reloc_item      reloc;
+    size_t          size;
 
     size = sizeof( pe_reloc_item );
     reloc.pe = (( off + group->linear ) & OSF_PAGE_MASK) | type;
@@ -226,9 +225,9 @@ static void *GetTransferGlueCode( void )
 offset FindIATSymAbsOff( symbol *sym )
 /************************************/
 {
-    dll_sym_info        *dll;
+    dll_sym_info    *dll;
 
-    dll = sym->p.import;
+    dll = sym->p.import_dll;
     DbgAssert( IS_SYM_IMPORTED( sym ) && dll != NULL );
     return( dll->iatsym->addr.off );
 }
@@ -308,7 +307,7 @@ static void GenPETransferTable( void )
               {
                 offset dest = FindIATSymAbsOff( sym );
 
-                *(unsigned_32 *)(CoffImportX86Text + 2) = dest;
+                MPUT_32_UN( CoffImportX86Text + 2, dest );
                 if( LinkState & LS_MAKE_RELOCS ) {
                     XFerReloc( sym->addr.off + 2, group, PE_FIX_HIGHLOW, 0 );
                 }
@@ -344,22 +343,22 @@ unsigned DefStackSizePE( void )
     return( PE_EXE_DEF_STACK_SIZE );
 }
 
-static unsigned_32 WriteDataPages( pe_exe_header *pehdr, pe_object *object, unsigned_32 file_align )
-/***************************************************************************************************
+static unsigned WriteDataPages( pe_exe_header *pehdr, pe_object *object, unsigned file_align )
+/*********************************************************************************************
  * write the enumerated data pages
  */
 {
-    group_entry *group;
-    char        *name;
-    unsigned_32 linear;
-    seg_leader  *leader;
-    unsigned_32 size_v;
-    unsigned_32 size_ph;
-    unsigned_32 code_base;
-    unsigned_32 data_base;
-    unsigned_32 entry_rva;
-    unsigned_32 init_data_size;
-    unsigned_32 code_size;
+    group_entry     *group;
+    char            *name;
+    unsigned        linear;
+    seg_leader      *leader;
+    unsigned        size_v;
+    unsigned        size_ph;
+    unsigned        code_base;
+    unsigned        data_base;
+    unsigned        entry_rva;
+    unsigned        init_data_size;
+    unsigned        code_size;
 
     linear = 0;
     entry_rva = 0;
@@ -367,11 +366,12 @@ static unsigned_32 WriteDataPages( pe_exe_header *pehdr, pe_object *object, unsi
     code_size = 0;
     code_base = 0xFFFFFFFFUL;
     data_base = 0xFFFFFFFFUL;
-    for( group = Groups; group != NULL; group = group->next_group) {
+    for( group = Groups; group != NULL; group = group->next) {
         if( group->totalsize == 0 )
             continue;   // DANGER DANGER DANGER <--!!!
         name = group->sym->name.u.ptr;
-        if( name == NULL || name[0] == 0 ) {
+        if( name == NULL
+          || name[0] == 0 ) {
             leader = Ring2First( group->leaders );
             name = leader->segname.u.ptr;
             if( name == NULL ) {
@@ -380,7 +380,8 @@ static unsigned_32 WriteDataPages( pe_exe_header *pehdr, pe_object *object, unsi
         }
         strncpy( object->name, name, PE_OBJ_NAME_LEN );
         size_ph = CalcGroupSize( group );
-        if( group == DataGroup && FmtData.dgroupsplitseg != NULL ) {
+        if( group == DataGroup
+          && FmtData.dgroupsplitseg != NULL ) {
             size_v = group->totalsize;
             if( StackSegPtr != NULL ) {
                 size_v -= StackSize;
@@ -390,7 +391,7 @@ static unsigned_32 WriteDataPages( pe_exe_header *pehdr, pe_object *object, unsi
         }
         linear = __ROUND_UP_SIZE( size_v, FmtData.objalign );
         linear += group->linear;
-        if( StartInfo.addr.seg == group->grp_addr.seg ) {
+        if( StartInfo.addr.seg == group->addr.seg ) {
             entry_rva = group->linear + StartInfo.addr.off;
         }
         object->rva = group->linear;
@@ -455,8 +456,8 @@ static void WalkImportsMods( void (*action)(dll_sym_info *, offset *),
                                                         offset *cookie )
 /**********************************************************************/
 {
-    struct module_import        *mod;
-    struct import_name          *imp;
+    module_import   *mod;
+    import_name     *imp;
 
     for( mod = PEImpList; mod != NULL; mod = mod->next ) {
         for( imp = mod->imports; imp != NULL; imp = imp->next ) {
@@ -469,11 +470,11 @@ static void WalkImportsMods( void (*action)(dll_sym_info *, offset *),
 static void WriteIAT( virt_mem buf, offset linear )
 /*************************************************/
 {
-    struct module_import    *mod;
-    struct import_name      *imp;
-    pe_va                   iat;
-    offset                  pos;
-    offset                  hint_rva ;
+    module_import   *mod;
+    import_name     *imp;
+    pe_va           iat;
+    offset          pos;
+    offset          hint_rva ;
 
     pos = 0;
     hint_rva = IData.hint_off + linear;
@@ -498,16 +499,16 @@ static void WriteIAT( virt_mem buf, offset linear )
 static void WriteImportInfo( void )
 /*********************************/
 {
-    pe_import_directory         dir;
-    unsigned_16                 hint;
-    virt_mem                    buf;
-    offset                      pos;
-    group_entry                 *group;
-    struct module_import        *mod;
-    struct import_name          *imp;
-    unsigned_32                 size;
-    unsigned_32                 mod_name_rva;
-    offset                      linear;
+    pe_import_directory dir;
+    unsigned_16         hint;
+    virt_mem            buf;
+    offset              pos;
+    group_entry         *group;
+    module_import       *mod;
+    import_name         *imp;
+    unsigned            size;
+    unsigned            mod_name_rva;
+    offset              linear;
 
     if( IDataGroup == NULL ) {
         return;
@@ -575,10 +576,10 @@ static int namecmp_exp( const void *pn1, const void *pn2 )
 }
 
 
-static unsigned_32 WriteExportInfo( pe_object *object, unsigned_32 file_align, pe_dir_entry *entry )
-/**************************************************************************************************/
+static unsigned WriteExportInfo( pe_object *object, unsigned file_align, pe_dir_entry *entry )
+/********************************************************************************************/
 {
-    unsigned_32         size;
+    unsigned            size;
     pe_export_directory dir;
     const char          *name;
     size_t              namelen;
@@ -625,7 +626,7 @@ static unsigned_32 WriteExportInfo( pe_object *object, unsigned_32 file_align, p
     dir.num_name_ptrs = num_entries;
     dir.name_ptr_table_rva = dir.address_table_rva + dir.num_eat_entries * sizeof( pe_va );
     dir.ordinal_table_rva = dir.name_ptr_table_rva + num_entries * sizeof( pe_va );
-    _ChkAlloc( sort, sizeof( entry_export * ) * num_entries );
+    sort = MemAllocSafe( sizeof( entry_export * ) * num_entries );
     /* write the export directory table */
     WriteLoad( &dir, sizeof( dir ) );
     /* write the module name (includes null terminator) */
@@ -660,7 +661,7 @@ static unsigned_32 WriteExportInfo( pe_object *object, unsigned_32 file_align, p
         exp = sort[i];
         WriteLoad( exp->name.u.ptr, strlen( exp->name.u.ptr ) + 1 );
     }
-    _LnkFree( sort );
+    MemFree( sort );
     size = eat - object->rva;
     object->physical_size = __ROUND_UP_SIZE( size, file_align );
     entry->size = size;
@@ -668,67 +669,59 @@ static unsigned_32 WriteExportInfo( pe_object *object, unsigned_32 file_align, p
     return( size );
 }
 
-#define PAGE_COUNT( size )  (((size)+(0x1000-1))>>0xC)
-
-static unsigned_32 WriteRelocList( void **reloclist, unsigned_32 size,
-                                   unsigned_32 pagerva, unsigned limit )
-/**********************************************************************/
+static unsigned_32 WriteRelocList( reloc_info reloclist, unsigned_32 size, unsigned_32 pagerva )
+/**********************************************************************************************/
 {
-    unsigned_32 pagesize;
-    bool        padme;
+    unsigned        pagesize;
+    bool            padme;
 
-    for( ; limit > 0; --limit ) {
-        pagesize = RelocSize( *reloclist );
-        if( pagesize != 0 ) {
-            padme = false;
-            if( ( pagesize / sizeof( pe_reloc_item ) ) & 0x1 ) {
-                pagesize += sizeof( pe_reloc_item );
-                padme = true;
-            }
-            pagesize += 2 * sizeof( unsigned_32 );
-            WriteLoadU32( pagerva );
-            WriteLoadU32( pagesize );
-            DumpRelocList( *reloclist );
-            if( padme ) {
-                PadLoad( sizeof( pe_reloc_item ) );
-            }
-            size += pagesize;
+    pagesize = RelocSize( reloclist );
+    if( pagesize != 0 ) {
+        padme = false;
+        if( ( pagesize / sizeof( pe_reloc_item ) ) & 0x1 ) {
+            pagesize += sizeof( pe_reloc_item );
+            padme = true;
         }
-        pagerva += OSF_PAGE_SIZE;
-        reloclist++;
+        pagesize += 2 * sizeof( unsigned_32 );
+        WriteLoadU32( pagerva );
+        WriteLoadU32( pagesize );
+        DumpRelocList( reloclist );
+        if( padme ) {
+            PadLoad( sizeof( pe_reloc_item ) );
+        }
+        size += pagesize;
     }
     return( size );
 }
 
-static unsigned_32 WriteFixupInfo( pe_object *object, unsigned_32 file_align, pe_dir_entry *entry )
-/*************************************************************************************************/
-/* dump the fixup table */
+static unsigned WriteFixupInfo( pe_object *object, unsigned file_align, pe_dir_entry *entry )
+/********************************************************************************************
+ * dump the fixup table
+ */
 {
-    unsigned_32         numpages;
-    unsigned_32         highidx;
-    unsigned_32         pagerva;
-    group_entry         *group;
-    void ***            reloclist;
-    unsigned long       size;
+    unsigned        numpages;
+    unsigned        pagerva;
+    group_entry     *group;
+    reloc_info      *reloclist_array;
+    unsigned long   size;
 
     strncpy( object->name, ".reloc", PE_OBJ_NAME_LEN );
     object->physical_offset = NullAlign( file_align );
     object->flags = PE_OBJ_INIT_DATA | PE_OBJ_READABLE | PE_OBJ_DISCARDABLE;
     size = 0;
-    /* When using non-default object alignment, groups and pages need
+    /*
+     * When using non-default object alignment, groups and pages need
      * not be in sync at all.
      */
-    for( group = Groups; group != NULL; group = group->next_group ) {
-        reloclist = group->g.grp_relocs;
-        if( reloclist != NULL ) {
+    for( group = Groups; group != NULL; group = group->next ) {
+        reloclist_array = group->g.reloclist_array;
+        if( reloclist_array != NULL ) {
             pagerva = group->linear;
-            numpages = PAGE_COUNT( group->size );
-            for( highidx = OSF_RLIDX_HIGH( numpages ); highidx > 0; --highidx ) {
-                size = WriteRelocList( *reloclist, size, pagerva, OSF_RLIDX_MAX );
-                reloclist++;
-                pagerva += OSF_PAGE_SIZE * ((unsigned_32) OSF_RLIDX_MAX);
+            numpages = __ROUND_UP_SIZE_TO_4K( group->size );
+            while( numpages-- > 0 ) {
+                size = WriteRelocList( *reloclist_array++, size, pagerva );
+                pagerva += OSF_PAGE_SIZE;
             }
-            size = WriteRelocList( *reloclist, size, pagerva, OSF_RLIDX_LOW(numpages) );
         }
     }
     PadLoad( sizeof( pe_fixup_header ) );
@@ -739,10 +732,10 @@ static unsigned_32 WriteFixupInfo( pe_object *object, unsigned_32 file_align, pe
     return( size );
 }
 
-static unsigned_32 WriteDescription( pe_object *object, unsigned_32 file_align )
-/******************************************************************************/
+static unsigned WriteDescription( pe_object *object, unsigned file_align )
+/************************************************************************/
 {
-    size_t      desc_len;
+    size_t          desc_len;
 
     desc_len = strlen( FmtData.description );
     strncpy( object->name, ".desc", PE_OBJ_NAME_LEN );
@@ -768,8 +761,11 @@ void CheckDebugOffset( ExeFileInfo *info )
     /* unused parameters */ (void)info;
 }
 
-RcStatus CopyExeData( FILE *in_fp, FILE *out_fp, unsigned_32 length )
-/*******************************************************************/
+RcStatus CopyExeData( FILE *in_fp, FILE *out_fp, unsigned length )
+/*****************************************************************
+ * CopyExeData function is used by resource compiler to write data to executable
+ * there are two implementation one in resource compiler and second in linker
+ */
 {
     /* unused parameters */ (void)out_fp;
 
@@ -785,25 +781,25 @@ RcStatus CopyExeData( FILE *in_fp, FILE *out_fp, unsigned_32 length )
 }
 
 void DoAddResource( char *name )
-/*************************************/
+/******************************/
 {
-    list_of_names       *info;
-    unsigned            len;
+    list_of_names   *info;
+    unsigned        len;
 
     len = strlen( name );
-    _PermAlloc( info, sizeof( list_of_names ) + len );
+    info = _PermAlloc( sizeof( list_of_names ) + len );
     memcpy( info->name, name, len + 1 );
-    info->next_name = FmtData.u.pe.resources;
+    info->next = FmtData.u.pe.resources;
     FmtData.u.pe.resources = info;
 }
 
-static unsigned_32 WritePEResources( pe_exe_header *pehdr, pe_object *object, unsigned_32 file_align )
-/****************************************************************************************************/
+static unsigned WritePEResources( pe_exe_header *pehdr, pe_object *object, unsigned file_align )
+/**********************************************************************************************/
 {
-    ExeFileInfo einfo;
-    ResFileInfo *rinfo;
-    bool        allopen;
-    bool        status;
+    ExeFileInfo     einfo;
+    ResFileInfo     *rinfo;
+    bool            allopen;
+    bool            status;
 
     memset( &einfo, 0, sizeof( einfo ) );
 
@@ -823,12 +819,12 @@ static unsigned_32 WritePEResources( pe_exe_header *pehdr, pe_object *object, un
     return( object->physical_size );
 }
 
-static unsigned_32 WriteDebugTable( pe_object *object, const char *symfilename,
-                unsigned_32 file_align, unsigned_32 time_stamp, pe_dir_entry *entry )
+static unsigned WriteDebugTable( pe_object *object, const char *symfilename,
+                unsigned file_align, unsigned time_stamp, pe_dir_entry *entry )
 /***********************************************************************************/
 {
-    debug_directory     dir;
-    unsigned_32         size;
+    debug_directory dir;
+    unsigned        size;
 
     if( symfilename == NULL ) {
         /* two entries */
@@ -875,16 +871,17 @@ static unsigned_32 WriteDebugTable( pe_object *object, const char *symfilename,
 }
 
 static void CheckNumRelocs( void )
-/********************************/
-// don't want to generate a .reloc section if we don't have any relocs
+/*********************************
+ * don't want to generate a .reloc section if we don't have any relocs
+ */
 {
-    group_entry *group;
-    symbol      *sym;
+    group_entry     *group;
+    symbol          *sym;
 
     if( (LinkState & LS_MAKE_RELOCS) == 0 )
         return;
-    for( group = Groups; group != NULL; group = group->next_group ) {
-        if( group->g.grp_relocs != NULL ) {
+    for( group = Groups; group != NULL; group = group->next ) {
+        if( group->g.reloclist_array != NULL ) {
             return;
         }
     }
@@ -899,7 +896,7 @@ static void CheckNumRelocs( void )
 static seg_leader *SetLeaderTable( const char *name, pe_dir_entry *entry )
 /************************************************************************/
 {
-    seg_leader *leader;
+    seg_leader      *leader;
 
     leader = FindSegment( Root, name );
     if( leader != NULL ) {
@@ -912,18 +909,18 @@ static seg_leader *SetLeaderTable( const char *name, pe_dir_entry *entry )
 static int CmpDesc( virt_mem a, virt_mem b )
 /******************************************/
 {
-    unsigned_32 a32;
-    unsigned_32 b32;
+    unsigned_32     a32;
+    unsigned_32     b32;
 
     GET32INFO( *((virt_mem *)a), a32 );
     GET32INFO( *((virt_mem *)b), b32 );
-    return( (signed_32)a32 - b32 );
+    return( (int)a32 - (int)b32 );
 }
 
 static void SwapDesc( virt_mem a, virt_mem b )
 /********************************************/
 {
-    procedure_descriptor        tmp;
+    procedure_descriptor    tmp;
 
     a = *((virt_mem *)a);
     b = *((virt_mem *)b);
@@ -935,10 +932,10 @@ static void SwapDesc( virt_mem a, virt_mem b )
 static bool SetPDataArray( void *_sdata, void *_array )
 /*****************************************************/
 {
-    segdata    *sdata = _sdata;
-    virt_mem  **array = _array;
-    offset      size;
-    virt_mem    data;
+    segdata         *sdata = _sdata;
+    virt_mem        **array = _array;
+    offset          size;
+    virt_mem        data;
 
     if( !sdata->isdead ) {
         data = sdata->u1.vm_ptr;
@@ -954,11 +951,11 @@ static bool SetPDataArray( void *_sdata, void *_array )
 static void SetMiscTableEntries( pe_exe_header *pehdr )
 /*****************************************************/
 {
-    seg_leader  *leader;
-    virt_mem    *sortarray;
-    virt_mem    *temp;
-    unsigned    numpdatas;
-    symbol      *sym;
+    seg_leader      *leader;
+    virt_mem        *sortarray;
+    virt_mem        *temp;
+    unsigned        numpdatas;
+    symbol          *sym;
 
     SetLeaderTable( IDataGrpName, &PE_DIRECTORY( *pehdr, PE_TBL_IMPORT ) );
     sym = FindISymbol( TLSSym );
@@ -968,20 +965,21 @@ static void SetMiscTableEntries( pe_exe_header *pehdr )
     }
     leader = SetLeaderTable( CoffPDataSegName, &PE_DIRECTORY( *pehdr, PE_TBL_EXCEPTION ) );
     /* The .pdata section may end up being empty if the symbols got optimized out */
-    if( leader != NULL && leader->size ) {
+    if( leader != NULL
+      && leader->size ) {
         numpdatas = leader->size / sizeof( procedure_descriptor );
-        _ChkAlloc( sortarray, numpdatas * sizeof( virt_mem * ) );
+        sortarray = MemAllocSafe( numpdatas * sizeof( virt_mem * ) );
         temp = sortarray;
         RingLookup( leader->pieces, SetPDataArray, &temp );
         VMemQSort( (virt_mem)sortarray, numpdatas, sizeof( virt_mem * ), SwapDesc, CmpDesc );
-        _LnkFree( sortarray );
+        MemFree( sortarray );
     }
 }
 
 static unsigned FindNumObjects( void )
 /************************************/
 {
-    unsigned            num_objects;
+    unsigned        num_objects;
 
     num_objects = NumGroups;
     if( LinkState & LS_MAKE_RELOCS )
@@ -992,26 +990,20 @@ static unsigned FindNumObjects( void )
         ++num_objects;
     if( FmtData.description != NULL )
         ++num_objects;
-    if( FmtData.resource != NULL || FmtData.u.pe.resources != NULL )
+    if( FmtData.resource != NULL
+      || FmtData.u.pe.resources != NULL )
         ++num_objects;
     return( num_objects );
 }
 
-static unsigned long CalcPEChecksum( unsigned long dwInitialCount, unsigned short *pwBuffer, unsigned long dwWordCount )
-/**********************************************************************************************************************/
+static unsigned long CalcPEChecksum( unsigned long __wCrc, unsigned short *__pwBuffer, unsigned long __dwCount )
+/**************************************************************************************************************/
 {
-    unsigned long      __wCrc      = dwInitialCount;
-    unsigned short     *__pwBuffer = pwBuffer;
-    unsigned long      __dwCount   = dwWordCount;
-
-    while( 0 != __dwCount-- ) {
+    while( __dwCount-- > 0 ) {
         __wCrc += *__pwBuffer++;
-
         __wCrc = ( __wCrc & 0x0000FFFF ) + ( __wCrc >> 16 );
     }
-
     __wCrc = ( ( __wCrc >> 16 ) + __wCrc );
-
     return( __wCrc & 0x0000FFFF );
 }
 
@@ -1035,7 +1027,7 @@ static unsigned get_stack_commit_size( unsigned size )
 
 static unsigned get_heap_reserve_size( void )
 {
-    unsigned    size;
+    unsigned        size;
 
     size = FmtData.u.os2fam.heapsize;
     if( size == DEF_VALUE ) {
@@ -1067,18 +1059,19 @@ static unsigned get_heap_commit_size( unsigned size )
 }
 
 void FiniPELoadFile( void )
-/*************************/
-/* make a PE executable file */
+/**************************
+ * make a PE executable file
+ */
 {
     pe_exe_header   pehdr;
-    unsigned_32     stub_len;
+    unsigned        stub_len;
     pe_object       *objects;
     unsigned        num_objects;
     pe_object       *tbl_obj;
     unsigned        head_size;
-    unsigned_32     file_align;
-    unsigned_32     size;
-    unsigned_32     image_size;
+    unsigned        file_align;
+    unsigned        size;
+    unsigned        image_size;
 
     file_align = 1UL << FmtData.u.os2fam.segment_shift;
     CheckNumRelocs();
@@ -1191,7 +1184,7 @@ void FiniPELoadFile( void )
         CurrSect = Root;
         SeekLoad( 0 );
         stub_len = WriteStubFile( STUB_ALIGN );
-        _ChkAlloc( objects, num_objects * sizeof( pe_object ) );
+        objects = MemAllocSafe( num_objects * sizeof( pe_object ) );
         memset( objects, 0, num_objects * sizeof( pe_object ) );
         /* leave space for the header and object table */
         PadLoad( head_size + num_objects * sizeof( pe_object ) );
@@ -1218,7 +1211,8 @@ void FiniPELoadFile( void )
             image_size += __ROUND_UP_SIZE( size, FmtData.objalign );
             ++tbl_obj;
         }
-        if( FmtData.resource != NULL || FmtData.u.pe.resources != NULL ) {
+        if( FmtData.resource != NULL
+          || FmtData.u.pe.resources != NULL ) {
             tbl_obj->rva = image_size;
             size = WritePEResources( &pehdr, tbl_obj, file_align );
             image_size += __ROUND_UP_SIZE( size, FmtData.objalign );
@@ -1234,7 +1228,8 @@ void FiniPELoadFile( void )
         PE64( pehdr ).image_size = image_size;
         PE64( pehdr ).headers_size = objects[0].physical_offset;
     } else {
-        if( FmtData.u.pe.tnt || FmtData.u.pe.subsystem == PE_SS_PL_DOSSTYLE ) {
+        if( FmtData.u.pe.tnt
+          || FmtData.u.pe.subsystem == PE_SS_PL_DOSSTYLE ) {
             pehdr.signature = EXESIGN_PL;
         } else {
             pehdr.signature = EXESIGN_PE;
@@ -1364,7 +1359,7 @@ void FiniPELoadFile( void )
         CurrSect = Root;
         SeekLoad( 0 );
         stub_len = WriteStubFile( STUB_ALIGN );
-        _ChkAlloc( objects, num_objects * sizeof( pe_object ) );
+        objects = MemAllocSafe( num_objects * sizeof( pe_object ) );
         memset( objects, 0, num_objects * sizeof( pe_object ) );
         /* leave space for the header and object table */
         PadLoad( head_size + num_objects * sizeof( pe_object ) );
@@ -1391,7 +1386,8 @@ void FiniPELoadFile( void )
             image_size += __ROUND_UP_SIZE( size, FmtData.objalign );
             ++tbl_obj;
         }
-        if( FmtData.resource != NULL || FmtData.u.pe.resources != NULL ) {
+        if( FmtData.resource != NULL
+          || FmtData.u.pe.resources != NULL ) {
             tbl_obj->rva = image_size;
             size = WritePEResources( &pehdr, tbl_obj, file_align );
             image_size += __ROUND_UP_SIZE( size, FmtData.objalign );
@@ -1423,7 +1419,7 @@ void FiniPELoadFile( void )
     WriteLoad( objects, num_objects * sizeof( pe_object ) );
 
     if( FmtData.u.pe.checksumfile ) {
-        unsigned_32     crc = 0L;
+        unsigned        crc = 0L;
         size_t          buffsize;
         unsigned long   currpos = 0L;
         unsigned long   totalsize = 0L;
@@ -1444,9 +1440,8 @@ void FiniPELoadFile( void )
         totalsize = QFileSize( outfile->handle );
 
 #define CRC_BUFF_SIZE   _16K
-        _ChkAlloc( buffer, CRC_BUFF_SIZE );
-
-        if( buffer ) {
+        buffer = MemAllocSafe( CRC_BUFF_SIZE );
+        if( buffer != NULL ) {
             for( ; currpos < totalsize; currpos += buffsize ) {
                 memset( buffer, 0, CRC_BUFF_SIZE );
                 buffsize = QRead( outfile->handle, buffer, CRC_BUFF_SIZE, outfile->fname );
@@ -1456,7 +1451,7 @@ void FiniPELoadFile( void )
                 crc = CalcPEChecksum( crc, (unsigned short *)buffer, buffsize / sizeof( unsigned short ) );
             }
 
-            _LnkFree( buffer );
+            MemFree( buffer );
             crc += totalsize;
 
             if( LinkState & LS_HAVE_X64_CODE ) {
@@ -1469,43 +1464,42 @@ void FiniPELoadFile( void )
         }
     }
 
-    _LnkFree( objects );
+    MemFree( objects );
 }
 
-static unsigned_32 getStubSize( void )
-/************************************/
-/* return the size of the stub file (unaligned) */
+static unsigned getStubSize( void )
+/**********************************
+ * return the size of the stub file (unaligned)
+ */
 {
-    unsigned_32     stub_len = 0;
+    unsigned        stub_len = 0;
     f_handle        the_file;
     dos_exe_header  dosheader;
-    unsigned_32     read_len;
-    unsigned_32     reloc_size;
-    unsigned_32     code_start;
+    unsigned        read_len;
+    unsigned        reloc_size;
+    unsigned        code_start;
     char            fullname[PATH_MAX];
-    size_t          len;
 
     if( FmtData.u.os2fam.no_stub ) {
         return( 0 );
     }
     stub_len = GetDOSDefStubSize();
-    if( FmtData.u.os2fam.stub_file_name != NULL && stricmp( FmtData.u.os2fam.stub_file_name, Root->outfile->fname ) != 0 ) {
+    if( FmtData.u.os2fam.stub_file_name != NULL
+      && stricmp( FmtData.u.os2fam.stub_file_name, Root->outfile->fname ) != 0 ) {
         the_file = FindPath( FmtData.u.os2fam.stub_file_name, fullname );
         if( the_file == NIL_FHANDLE ) {
             LnkMsg( WRN+MSG_CANT_OPEN_NO_REASON, "s", FmtData.u.os2fam.stub_file_name );
         } else {
-            _LnkFree( FmtData.u.os2fam.stub_file_name );
-            len = strlen( fullname ) + 1;
-            _ChkAlloc( FmtData.u.os2fam.stub_file_name, len );
-            memcpy( FmtData.u.os2fam.stub_file_name, fullname, len );
+            MemFree( FmtData.u.os2fam.stub_file_name );
+            FmtData.u.os2fam.stub_file_name = MemStrdupSafe( fullname );
             QRead( the_file, &dosheader, sizeof( dos_exe_header ), FmtData.u.os2fam.stub_file_name );
             if( dosheader.signature == EXESIGN_DOS ) {
-                code_start = dosheader.hdr_size * 16ul;
-                read_len = dosheader.file_size * 512ul - (-dosheader.mod_size & 0x1ff) - code_start;
+                code_start = dosheader.hdr_size * 16U;
+                read_len = dosheader.file_size * 512U - (-dosheader.mod_size & 0x1ff) - code_start;
                 // make sure reloc_size is a multiple of 16.
-                reloc_size = __ROUND_UP_SIZE_PARA( dosheader.num_relocs * 4ul );
+                reloc_size = __ROUND_UP_SIZE_PARA( dosheader.num_relocs * 4U );
                 dosheader.hdr_size = 4 + reloc_size / 16;
-                stub_len = read_len + dosheader.hdr_size * 16ul;
+                stub_len = read_len + dosheader.hdr_size * 16U;
             }
             QClose( the_file, FmtData.u.os2fam.stub_file_name );
         }
@@ -1514,10 +1508,10 @@ static unsigned_32 getStubSize( void )
 }
 
 unsigned long GetPEHeaderSize( void )
-/******************************************/
+/***********************************/
 {
-    unsigned long       size;
-    unsigned            num_objects;
+    unsigned long   size;
+    unsigned        num_objects;
 
     num_objects = FindNumObjects();
     size = __ROUND_UP_SIZE( getStubSize(), STUB_ALIGN ) + num_objects * sizeof( pe_object );
@@ -1529,16 +1523,16 @@ unsigned long GetPEHeaderSize( void )
     return( __ROUND_UP_SIZE( size, FmtData.objalign ) );
 }
 
-static void ReadExports( unsigned_32 namestart, unsigned_32 nameend,
-                         unsigned_32 ordstart, unsigned numords,
-                         ordinal_t ord_base, f_handle file, char *fname )
-/***********************************************************************/
+static void ReadExports( unsigned namestart, unsigned nameend,
+                         unsigned ordstart, unsigned numords,
+                         ordinal_t ord_base, f_handle file, const char *fname )
+/*****************************************************************************/
 {
-    unsigned_16         *ordbuf;
-    unsigned_16         *ordptr;
-    char                *nameptr;
+    unsigned_16     *ordbuf;
+    unsigned_16     *ordptr;
+    char            *nameptr;
 
-    _ChkAlloc( ordbuf, numords * sizeof( unsigned_16 ) );
+    ordbuf = MemAllocSafe( numords * sizeof( unsigned_16 ) );
     QSeek( file, ordstart, fname );
     QRead( file, ordbuf, numords * sizeof( unsigned_16 ), fname );
     QSeek( file, namestart, fname );
@@ -1552,7 +1546,7 @@ static void ReadExports( unsigned_32 namestart, unsigned_32 nameend,
         nameptr++;
         ordptr++;
     }
-    _LnkFree( ordbuf );
+    MemFree( ordbuf );
 }
 
 void ReadPEExportTable( f_handle file, pe_dir_entry *export_dir )
@@ -1561,20 +1555,20 @@ void ReadPEExportTable( f_handle file, pe_dir_entry *export_dir )
  */
 {
     pe_export_directory table;
-    char                *fname;
-    unsigned_32         *nameptrs;
+    const char          *fname;
+    unsigned            *nameptrs;
     unsigned            nameptrsize;
     unsigned            numentries;
-    unsigned_32         entrystart;
-    unsigned_32         *curr;
-    unsigned_32         namestart;
+    unsigned            entrystart;
+    unsigned            *curr;
+    unsigned            namestart;
 
     fname = FmtData.u.os2fam.old_lib_name;
     QRead( file, &table, sizeof( pe_export_directory ), fname );
     nameptrsize = table.num_name_ptrs * sizeof( unsigned_32 );
     if( nameptrsize == 0 )                      /* NOTE: <-- premature return */
         return;
-    _ChkAlloc( nameptrs, nameptrsize + sizeof( unsigned_32 ) );
+    nameptrs = MemAllocSafe( nameptrsize + sizeof( unsigned_32 ) );
     QSeek( file, table.name_ptr_table_rva - export_dir->rva, fname );
     QRead( file, nameptrs, nameptrsize, fname );
     numentries = 1;
@@ -1594,15 +1588,15 @@ void ReadPEExportTable( f_handle file, pe_dir_entry *export_dir )
         curr++;
     }   /* NOTE! this assumes the name table is at the end */
     ReadExports( namestart, export_dir->size + *nameptrs, entrystart, numentries, table.ordinal_base, file, fname );
-    _LnkFree( nameptrs );
+    MemFree( nameptrs );
 }
 
 static void CreateIDataSection( void )
 /************************************/
 {
-    segdata     *sdata;
-    class_entry *class;
-    byte        bits;
+    segdata         *sdata;
+    class_entry     *class;
+    byte            bits;
 
     PrepareToc();
     if( 0 != CalcIDataSize() ) {
@@ -1624,39 +1618,39 @@ static void CreateIDataSection( void )
     }
 }
 
-static void RegisterImport( dll_sym_info *sym )
+static void RegisterImport( dll_sym_info *dll )
 /*********************************************/
 {
-    struct module_import        *mod;
-    struct import_name          *imp;
-    struct import_name          *chk;
-    struct import_name          **owner;
-    obj_name_list               *os2_imp;
-    int                         cmp;
-    unsigned                    len;
+    module_import   *mod;
+    import_name     *imp;
+    import_name     *chk;
+    import_name     **owner;
+    obj_name_list   *os2_imp;
+    int             cmp;
+    unsigned        len;
 
     for( mod = PEImpList; mod != NULL; mod = mod->next ) {
-        if( mod->mod == sym->m.modnum ) {
+        if( mod->mod == dll->m.modnum ) {
             break;
         }
     }
     if( mod == NULL ) {
         ++NumMods;
-        _PermAlloc( mod, sizeof( struct module_import ) );
+        mod = _PermAlloc( sizeof( module_import ) );
         mod->next = PEImpList;
         PEImpList = mod;
-        mod->mod = sym->m.modnum;
+        mod->mod = dll->m.modnum;
         mod->imports = NULL;
         mod->num_entries = 0;
     }
-    if( !sym->isordinal ) {
-        os2_imp = sym->u.entry;
+    if( !dll->isordinal ) {
+        os2_imp = dll->u.entry;
     } else {
         os2_imp = NULL;
     }
     mod->num_entries++;
-    _PermAlloc( imp, sizeof( struct import_name ) );
-    imp->dll = sym;
+    imp = _PermAlloc( sizeof( import_name ) );
+    imp->dll = dll;
     imp->imp = os2_imp;
     /* keep the list sorted by name for calculating hint values */
     owner = &mod->imports;
@@ -1672,7 +1666,8 @@ static void RegisterImport( dll_sym_info *sym )
                 cmp = memcmp( chk->imp->name.u.ptr, os2_imp->name.u.ptr, len );
                 if( cmp > 0 )
                     break;
-                if( cmp == 0 && len > chk->imp->len ) {
+                if( cmp == 0
+                  && len > chk->imp->len ) {
                     break;
                 }
             }
@@ -1688,16 +1683,16 @@ static void RegisterImport( dll_sym_info *sym )
 
 static void CreateTransferSegment( class_entry *class )
 {
-    offset      size;
-    int         glue_size;
-    symbol      *sym;
-    segdata     *sdata;
+    offset          size;
+    int             glue_size;
+    symbol          *sym;
+    segdata         *sdata;
 
     size = 0;
     glue_size = GetTransferGlueSize();
     WALK_IMPORT_SYMBOLS( sym ) {
         size += glue_size;
-        RegisterImport( sym->p.import );
+        RegisterImport( sym->p.import_dll );
         DBIAddGlobal( sym );
     }
     size += NumLocalImports * sizeof( pe_va );
@@ -1717,12 +1712,12 @@ static void CreateTransferSegment( class_entry *class )
 }
 
 void ChkPEData( void )
-/***************************/
+/********************/
 {
-    class_entry *class;
+    class_entry     *class;
 
     /* find the last code class in the program */
-    for( class = Root->classlist; class != NULL; class = class->next_class ) {
+    for( class = Root->classes; class != NULL; class = class->next ) {
         if( class->flags & CLASS_CODE ) {
             break;
         }
@@ -1737,18 +1732,18 @@ void ChkPEData( void )
 }
 
 void AllocPETransferTable( void )
-/**************************************/
+/*******************************/
 {
-    symbol              *sym;
-    class_entry         *class;
-    group_entry         *group;
-    seg_leader          *lead;
-    segdata             *piece;
-    segdata             *save;
-    offset              off;
-    segment             seg;
-    int                 glue_size;
-    local_import        *loc_imp;
+    symbol          *sym;
+    class_entry     *class;
+    group_entry     *group;
+    seg_leader      *lead;
+    segdata         *piece;
+    segdata         *save;
+    offset          off;
+    segment         seg;
+    int             glue_size;
+    local_import    *loc_imp;
 
     /*
      *  Moved export check here as otherwise flags don't get propagated
@@ -1756,7 +1751,7 @@ void AllocPETransferTable( void )
     if( XFerSegData == NULL ) {
         return;
     }
-    for( class = Root->classlist; class != NULL; class = class->next_class ) {
+    for( class = Root->classes; class != NULL; class = class->next ) {
         if( class->flags & CLASS_TRANSFER ) {
             break;
         }
@@ -1768,8 +1763,8 @@ void AllocPETransferTable( void )
     piece = RingLast( lead->pieces );
     CurrMod = FakeModule;
     group = lead->group;
-    seg = group->grp_addr.seg;
-    off = group->grp_addr.off + group->totalsize;
+    seg = group->addr.seg;
+    off = group->addr.off + group->totalsize;
     // now calc addresses for imported local symbols
     for( loc_imp = PELocalImpList; loc_imp != NULL; loc_imp = loc_imp->next ) {
         off -= sizeof( pe_va );
@@ -1799,8 +1794,8 @@ void AddPEImportLocalSym( symbol *locsym, symbol *iatsym )
 {
     local_import    *imp;
 
-    _ChkAlloc( imp, sizeof( local_import ) );
-    LinkList( &PELocalImpList, imp );
+    imp = MemAllocSafe( sizeof( local_import ) );
+    AppendList( (void **)&PELocalImpList, imp );
     imp->iatsym = iatsym;
     imp->locsym = locsym;
     ++NumLocalImports;
@@ -1821,7 +1816,7 @@ bool ImportPELocalSym( symbol *iatsym )
     if( IS_SYM_IMPORTED( sym ) )
         return( false );
     LnkMsg( WRN+MSG_IMPORT_LOCAL, "s", sym->name.u.ptr );
-    iatsym->info |= SYM_DEFINED | SYM_DCE_REF;
+    iatsym->info |= SYM_DEFINED | SYM_1_DCE_REF;
     if( LinkFlags & LF_STRIP_CODE ) {
         DefStripImpSym( iatsym );
     }

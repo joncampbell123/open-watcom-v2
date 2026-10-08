@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -333,22 +333,23 @@ static bool GetNumberStr( unsigned long *val, const char *s, size_t len )
     unsigned        radix;
     bool            isvalid;
     bool            isdig;
-    char            ch;
+    int             ch;
+    char            c;
 
     value = 0ul;
     radix = 10;
     if( *s == '0' ) {
         --len;
         radix = 8;
-        if( tolower( *++s ) == 'x') {
+        if( (char)tolower( *(unsigned char *)++s ) == 'x') {
             radix = 16;
             ++s;
             --len;
         }
     }
     for( ; len != 0; --len ) {
-        ch = tolower( *s++ );
-        if( ch == 'k' ) {         // constant of the form 64k
+        c = ch = tolower( *(unsigned char *)s++ );
+        if( c == 'k' ) {         // constant of the form 64k
             if( len > 1 ) {
                 return( false );
             } else {
@@ -359,7 +360,9 @@ static bool GetNumberStr( unsigned long *val, const char *s, size_t len )
             if( radix == 10 ) {
                 isvalid = isdig;
             } else if( radix == 8 ) {
-                if( ch == '8' || ch == '9' || !isdig ) {
+                if( c == '8'
+                  || c == '9'
+                  || !isdig ) {
                     isvalid = false;
                 } else {
                     isvalid = true;
@@ -372,9 +375,9 @@ static bool GetNumberStr( unsigned long *val, const char *s, size_t len )
             }
             value *= radix;
             if( isdig ) {
-                value += ch - '0';
+                value += c - '0';
             } else {
-                value += ch - 'a' + 10;
+                value += c - 'a' + 10;
             }
         }
     }
@@ -395,7 +398,8 @@ static void CheckNum( const char *arg )
     unsigned long       value;
 
     /* Check but ignore numeric argument. */
-    if( arg != NULL && !GetNumberStr( &value, arg, strlen( arg ) ) ) {
+    if( arg != NULL
+      && !GetNumberStr( &value, arg, strlen( arg ) ) ) {
         Warning( "invalid numeric value", OPTION_SLOT );
     }
 }
@@ -414,12 +418,14 @@ static bool ProcessKeyList( word_entry *entry, const char *arg, size_t arg_len )
         len = 0;
         plen = arg_len;
         for( ;; ) {
-            if( plen == 0 && len >= entry->minlen ) {
+            if( plen == 0
+              && len >= entry->minlen ) {
                 MultiLine = NULL;               // for processdefcommand.
                 (*entry->rtn)();
                 return( true );
             }
-            if( *key == '\0' || tolower( *ptr ) != *key )
+            if( *key == '\0'
+              || (char)tolower( *(unsigned char *)ptr ) != *key )
                 break;
             ptr++;
             key++;
@@ -511,7 +517,6 @@ static void ProcCode( void )
 {
     char    buffer[CODE_BUFFER_LEN];
     char    *result;
-    size_t  len;
 
     strncpy( buffer, "segment type code", 17 );
     OptionBuffer = buffer + 17;
@@ -520,12 +525,9 @@ static void ProcCode( void )
         Warning( "argument for code statement not valid", OPTION_SLOT );
     } else {    // get the rest of the attributes.
         while( ProcessKeyword( CodeAttributes ) )
-            {}     // NULL statement.
+            /* nothing */;
         if( BufferLeft != CODE_BUFFER_LEN - 18 ) {      // attribute spec'd.
-            len = CODE_BUFFER_LEN - BufferLeft - 1;
-            result = MemAlloc( CODE_BUFFER_LEN - BufferLeft + 1 );
-            strncpy( result, buffer, len );
-            *(result + len) = '\0';
+            result = MemToStringSafe( buffer, CODE_BUFFER_LEN - BufferLeft - 1 );
             AddCommand( result, OPTION_SLOT, false );
         }
     }
@@ -537,7 +539,6 @@ static void ProcData( void )
 {
     char    buffer[CODE_BUFFER_LEN];
     char    *result;
-    size_t  len;
 
     strncpy( buffer, "segment type data", 17 );
     OptionBuffer = buffer + 17;
@@ -546,12 +547,9 @@ static void ProcData( void )
         Warning( "argument for data statement not valid", OPTION_SLOT );
     } else {    // get the rest of the attributes.
         while( ProcessKeyword( DataAttributes ) )
-            {}     // NULL statement.
+            /* nothing */;
         if( BufferLeft != CODE_BUFFER_LEN - 18 ) {      // attribute spec'd.
-            len = CODE_BUFFER_LEN - BufferLeft - 1;
-            result = MemAlloc( CODE_BUFFER_LEN - BufferLeft + 1 );
-            strncpy( result, buffer, len );
-            *(result + len) = '\0';
+            result = MemToStringSafe( buffer, CODE_BUFFER_LEN - BufferLeft - 1 );
             AddCommand( result, OPTION_SLOT, false );
         }
     }
@@ -620,7 +618,7 @@ static void ProcNonConforming( void )
 }
 
 static void ProcMoveable( void )
-/*****************************/
+/******************************/
 {
     AddToBuffer( "moveable", 8 );
     ImplyFormat( FMT_WINDOWS );
@@ -746,7 +744,8 @@ static void GetExport( void )
     }
     value = 0xFFFFF; // arbitrary >64K.
     if( MakeToken( SEP_AT, true ) ) {                               // got an ordinal.
-        if( !GetNumber( &value ) || value > _64KB ) {
+        if( !GetNumber( &value )
+          || value > _64KB ) {
             Warning( "export ordinal value is invalid", OPTION_SLOT );
             return;
         } else {
@@ -757,7 +756,8 @@ static void GetExport( void )
     EatWhite();
     gottoken = MakeToken( SEP_NO, true );
     if( gottoken ) {
-        if( CmdFile->len == 12 && strnicmp( CmdFile->token, "residentname", 12 ) == 0 ) {
+        if( CmdFile->len == 12
+          && strnicmp( CmdFile->token, "residentname", 12 ) == 0 ) {
             isresident = true;
             gottoken = MakeToken( SEP_NO, true );
             toklen += 9;           // length of resident + space.
@@ -772,7 +772,8 @@ static void GetExport( void )
     }
     iopl = 1024;      // arbitrary > 31
     if( gottoken ) {
-        if( !GetNumber( &iopl ) || iopl > 31 ) {
+        if( !GetNumber( &iopl )
+          || iopl > 31 ) {
             Warning( "iopl value is invalid", OPTION_SLOT );
         } else {
             toklen += 3;    // maximum iopl length + space.
@@ -781,7 +782,8 @@ static void GetExport( void )
             gottoken = MakeToken( SEP_NO, true );
         }
     }
-    if( gottoken && !gotnodata ) {
+    if( gottoken
+      && !gotnodata ) {
         if( strnicmp( CmdFile->token, "nodata", 6 ) == 0 ) {
             gotnodata = true;
         } else {
@@ -789,7 +791,7 @@ static void GetExport( void )
         }
     }
     toklen += 8;       // export keyword + space + nullchar;
-    command = MemAlloc( toklen );
+    command = MemAllocSafe( toklen );
     strncpy( command, "export ", 7 );
     currloc = command + 7;
     strncpy( currloc, name, namelen );
@@ -849,7 +851,8 @@ static void ProcHeapsize( void )
         Warning( "argument for heapsize not recognized", OPTION_SLOT );
     } else if( strnicmp( CmdFile->token, "maxval", 6 ) == 0 ) {
         AddNumOption( "heapsize", 0xFFFF );
-    } else if( !GetNumber( &value ) || value >= _64KB ) {
+    } else if( !GetNumber( &value )
+      || value >= _64KB ) {
         Warning( "argument for heapsize not valid", OPTION_SLOT );
     } else {
         AddNumOption( "heapsize", value );
@@ -899,7 +902,7 @@ static void GetImport( void )
         toklen += CmdFile->len + 1;      // string length + dot.
     }
     toklen += 8;       // import keyword + space + nullchar;
-    result = MemAlloc( toklen );
+    result = MemAllocSafe( toklen );
     strncpy( result, "import ", 7 );
     currloc = result + 7;
     if( second != NULL ) {       // got a internal name in first.
@@ -936,8 +939,9 @@ static void ProcImports( void )
 static void ProcInclude ( void )
 /******************************/
 {
-    if( MakeToken( SEP_QUOTE, true ) || MakeToken( SEP_NO, true ) ) {
-        StartNewFile( ToString() );
+    if( MakeToken( SEP_QUOTE, true )
+      || MakeToken( SEP_NO, true ) ) {
+        StartNewFile( MemToStringSafe( CmdFile->token, CmdFile->len ) );
         ParseDefFile();
     } else {
         Warning( "invalid include statement", OPTION_SLOT );
@@ -947,10 +951,12 @@ static void ProcInclude ( void )
 static bool IsInitType( void )
 /****************************/
 {
-    if( CmdFile->len == 10 && strnicmp( CmdFile->token, "initglobal", 10 ) == 0 ) {
+    if( CmdFile->len == 10
+      && strnicmp( CmdFile->token, "initglobal", 10 ) == 0 ) {
         FmtInfo = DLL_INITGLOBAL;
         return( true );
-    } else if( CmdFile->len == 12 && strnicmp( CmdFile->token, "initinstance", 12 ) == 0 ) {
+    } else if( CmdFile->len == 12
+      && strnicmp( CmdFile->token, "initinstance", 12 ) == 0 ) {
         FmtInfo = DLL_INITINSTANCE;
         return( true );
     }
@@ -1097,7 +1103,8 @@ static void GetSegments( void )
     size_t  len;
 
     GotOvl = false;
-    if( MakeToken( SEP_QUOTE, true ) || MakeToken( SEP_NO, true ) ) {
+    if( MakeToken( SEP_QUOTE, true )
+      || MakeToken( SEP_NO, true ) ) {
         DUPBUF_STACK( segname, CmdFile->token, CmdFile->len );    // store it temporarily
         seglen = CmdFile->len;
     } else {
@@ -1109,14 +1116,16 @@ static void GetSegments( void )
     }
     OptionBuffer = buffer;
     BufferLeft = CODE_BUFFER_LEN;
-    if( !ProcessKeyword( SegAttributes ) && !GotOvl ) {
+    if( !ProcessKeyword( SegAttributes )
+      && !GotOvl ) {
         Warning( "no segment attributes specified", OPTION_SLOT );
     } else {    // get the rest of the attributes.
         while( ProcessKeyword( SegAttributes ) )
-            {}     // NULL statement.
-        if( BufferLeft != CODE_BUFFER_LEN && !GotOvl ) { // something spec'd.
+            /* nothing */;
+        if( BufferLeft != CODE_BUFFER_LEN
+          && !GotOvl ) { // something spec'd.
             len = CODE_BUFFER_LEN - BufferLeft;
-            result = MemAlloc( len + seglen + 12 );
+            result = MemAllocSafe( len + seglen + 12 );
             strncpy( result, "segment '", 9 );
             currloc = result + 9;
             strncpy( currloc, segname, seglen );
@@ -1149,7 +1158,8 @@ static void ProcStackSize( void )
 
     if( !MakeToken( SEP_NO, true ) ) {
         Warning( "argument for stacksize is invalid", OPTION_SLOT );
-    } else if( !GetNumber( &value ) || value >= _64KB ) {
+    } else if( !GetNumber( &value )
+      || value >= _64KB ) {
         Warning( "argument for stacksize is invalid", OPTION_SLOT );
     } else {
         AddNumOption( "stack", value );
@@ -1386,7 +1396,7 @@ static void ProcNoIgnoreCase( const char *arg )
 {
     /* unused parameters */ (void)arg;
 
-    AddOption( "caseexact" );
+    NoIgnoreCase = true;
 }
 
 static void ProcNoLogo( const char *arg )
@@ -1451,7 +1461,8 @@ static void ProcPackCode( const char *arg )
     unsigned long   value;
 
     value = 65535;
-    if( arg != NULL && !GetNumberStr( &value, arg, strlen( arg ) ) )
+    if( arg != NULL
+      && !GetNumberStr( &value, arg, strlen( arg ) ) )
         Warning( "invalid numeric value", OPTION_SLOT );
     AddNumOption( "packcode", value );
 }
@@ -1510,7 +1521,8 @@ static void ProcPMType( const char *arg )
         FmtType = FMT_OS2;
         break;
     }
-    if( arg == NULL || !ProcessKeyList( PMTypes, arg, strlen( arg ) ) ) {
+    if( arg == NULL
+      || !ProcessKeyList( PMTypes, arg, strlen( arg ) ) ) {
         Warning( "invalid argument for pmtype option", OPTION_SLOT );
     }
 }
@@ -1613,11 +1625,13 @@ void ProcessOption( const char *opt )
         len = 0;
         plen = opt_len;
         for( ;; ) {
-            if( plen == 0 && len >= entry->minlen ) {
+            if( plen == 0
+              && len >= entry->minlen ) {
                 (*entry->rtn)( arg );
                 return;
             }
-            if( *key == '\0' || tolower( *ptr ) != *key )
+            if( *key == '\0'
+              || (char)tolower( *(unsigned char *)ptr ) != *key )
                 break;
             ptr++;
             key++;

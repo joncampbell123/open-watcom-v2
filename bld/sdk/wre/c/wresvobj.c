@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -99,7 +99,7 @@ bool SaveObject( bool save_into )
     }
 
     if( rdata != NULL ) {
-        WRMemFree( rdata );
+        MemFree( rdata );
     }
 
     WRESetWaitCursor( false );
@@ -143,12 +143,12 @@ bool SaveObjectAs( WRECurrentResInfo *curr, void *rdata )
         idata.data = rdata;
         idata.lang = curr->lang->Info.lang;
         idata.size = size;
-        idata.MemFlags = curr->lang->Info.MemoryFlags;
+        idata.res_flags = curr->lang->Info.res_flags;
         ok = WRSaveObjectAs( fname, ftype, &idata );
     }
 
     if( fname != NULL ) {
-        WRMemFree( fname );
+        MemFree( fname );
     }
 
     return( ok );
@@ -186,7 +186,7 @@ bool SaveObjectInto( WRECurrentResInfo *curr, void *rdata )
         idata.data = rdata;
         idata.lang = curr->lang->Info.lang;
         idata.size = size;
-        idata.MemFlags = curr->lang->Info.MemoryFlags;
+        idata.res_flags = curr->lang->Info.res_flags;
         ok = WRSaveObjectInto( fname, &idata, &dup ) && !dup;
     }
 
@@ -195,7 +195,7 @@ bool SaveObjectInto( WRECurrentResInfo *curr, void *rdata )
     }
 
     if( fname != NULL ) {
-        WRMemFree( fname );
+        MemFree( fname );
     }
 
     return( ok );

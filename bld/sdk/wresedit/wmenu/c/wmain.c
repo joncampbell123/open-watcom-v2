@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -172,6 +172,11 @@ int WINAPI WEP( int parm )
 }
 #endif
 
+static void nomemcb( void )
+{
+    // handle no memory state
+}
+
 void WRESEAPI WMenuInit( void )
 {
     HINSTANCE   inst;
@@ -193,7 +198,7 @@ void WRESEAPI WMenuInit( void )
         InsertNoSub = LoadBitmap( inst, "InsertNoSub");
     }
     if( ref_count == 0 ) {
-        WRInit();
+        WRInit( false, nomemcb );
         SetRCInstance( inst );
         WInit( inst );
         WInitDummyMenuEntry();
@@ -235,7 +240,7 @@ WMenuHandle WRESEAPI WMenuStartEdit( WMenuInfo *info )
 
     if( ok ) {
         if( einfo->info->file_name != NULL ) {
-            einfo->file_name = WStrDup( einfo->info->file_name );
+            einfo->file_name = WStrdup( einfo->info->file_name );
             ok = (einfo->file_name != NULL);
             if( ok ) {
                 einfo->file_type = WRIdentifyFile( einfo->file_name );
@@ -325,7 +330,7 @@ int WRESEAPI WMenuCloseSession( WMenuHandle hndl, int force_exit )
     einfo = (WMenuEditInfo *)WGetEditSessionInfo( hndl );
 
     if( einfo != NULL && einfo->info != NULL ) {
-        if( SendMessage( einfo->win, WM_CLOSE, (WPARAM)force_exit, 0 ) != 0 ) {
+        if( SendMessage( einfo->win, WM_CLOSE, force_exit, 0 ) != 0 ) {
             return( FALSE );
         }
     }
@@ -353,7 +358,7 @@ WMenuInfo *WMenuGetEInfo( WMenuHandle hndl, bool keep )
     if( ok ) {
         if( einfo->info->modified ) {
             if( info->data != NULL ) {
-                WRMemFree( info->data );
+                MemFree( info->data );
                 info->data = NULL;
             }
             info->data_size = 0;
@@ -495,7 +500,7 @@ char *WCreateEditTitle( WMenuEditInfo *einfo )
     offset = WRFindFnOffset( fname );
     fname = &fname[offset];
     len = strlen( fname ) + strlen( text ) + 6;
-    title = (char *)WRMemAlloc( len );
+    title = MemAlloc( len );
     if( title != NULL ) {
         strcpy( title, text );
         strcat( title, " - [" );
@@ -528,7 +533,7 @@ void WSetEditTitle( WMenuEditInfo *einfo )
         if( is_rc ) {
             FreeRCString( title );
         } else {
-            WRMemFree( title );
+            MemFree( title );
         }
     }
 }
@@ -586,7 +591,7 @@ bool WCreateEditWindow( HINSTANCE inst, WMenuEditInfo *einfo )
         if( is_rc ) {
             FreeRCString( title );
         } else {
-            WRMemFree( title );
+            MemFree( title );
         }
     }
 
@@ -631,7 +636,7 @@ bool WCreateEditWindow( HINSTANCE inst, WMenuEditInfo *einfo )
 
     SetFocus( einfo->edit_dlg );
 
-    return( TRUE );
+    return( true );
 }
 
 WMenuEditInfo *WGetCurrentEditInfo( void )
@@ -672,7 +677,7 @@ static void handleSymbols( WMenuEditInfo *einfo )
     WRAddSymbolsToComboBox( einfo->info->symbol_table, einfo->edit_dlg, IDM_MENUEDID, WR_HASHENTRY_ALL );
     if( text != NULL ) {
         WSetEditWithStr( GetDlgItem( einfo->edit_dlg, IDM_MENUEDID ), text );
-        WRMemFree( text );
+        MemFree( text );
     }
 
     WHandleSelChange( einfo );
@@ -688,7 +693,7 @@ static void handleLoadSymbols( WMenuEditInfo *einfo )
     }
 
     if( einfo->info->symbol_file != NULL ) {
-        WRMemFree( einfo->info->symbol_file );
+        MemFree( einfo->info->symbol_file );
     }
     einfo->info->symbol_file = file;
 
@@ -788,7 +793,7 @@ WINEXPORT LRESULT CALLBACK WMainWndProc( HWND hWnd, UINT message, WPARAM wParam,
 
     case WM_SETFOCUS:
         if( einfo != NULL && einfo->preview_window != (HWND)NULL ) {
-            SendMessage( einfo->preview_window, WM_NCACTIVATE, (WPARAM)TRUE, (LPARAM)NULL );
+            SendMessage( einfo->preview_window, WM_NCACTIVATE, TRUE, 0 );
         }
         break;
 
@@ -954,7 +959,7 @@ WINEXPORT LRESULT CALLBACK WMainWndProc( HWND hWnd, UINT message, WPARAM wParam,
 
         case IDM_MENU_MEM_FLAGS:
             WSetStatusByID( einfo->wsb, W_CHANGEMENUMEMFLAGS, 0 );
-            einfo->info->modified |= WChangeMemFlags( einfo->win, &einfo->info->MemFlags,
+            einfo->info->modified |= WChangeMemFlags( einfo->win, &einfo->info->res_flags,
                                                       einfo->info->res_name,
                                                       WGetEditInstance(),
                                                       WMenuHelpRoutine );
@@ -1090,7 +1095,7 @@ bool WQuerySaveRes( WMenuEditInfo *einfo, bool force_exit )
                 FreeRCString( text );
             }
             if( title != NULL ) {
-                WRMemFree( title );
+                MemFree( title );
             }
         }
         if( ret == IDYES ) {
@@ -1100,11 +1105,11 @@ bool WQuerySaveRes( WMenuEditInfo *einfo, bool force_exit )
                 SendMessage( einfo->info->parent, MENU_PLEASE_SAVEME, 0, (LPARAM)einfo->hndl );
             }
         } else if( ret == IDCANCEL ) {
-            return( FALSE );
+            return( false );
         }
     }
 
-    return( TRUE );
+    return( true );
 }
 
 bool WQuerySaveSym( WMenuEditInfo *einfo, bool force_exit )
@@ -1115,11 +1120,11 @@ bool WQuerySaveSym( WMenuEditInfo *einfo, bool force_exit )
     char        *text;
 
     if( einfo == NULL || !einfo->info->stand_alone ) {
-        return( TRUE );
+        return( true );
     }
 
     if( !WRIsHashTableDirty( einfo->info->symbol_table ) ) {
-        return( TRUE );
+        return( true );
     }
 
     if( force_exit ) {
@@ -1135,7 +1140,7 @@ bool WQuerySaveSym( WMenuEditInfo *einfo, bool force_exit )
         FreeRCString( text );
     }
     if( title != NULL ) {
-        WRMemFree( title );
+        MemFree( title );
     }
 
     if( ret == IDYES ) {
@@ -1150,10 +1155,10 @@ bool WQuerySaveSym( WMenuEditInfo *einfo, bool force_exit )
         }
         return( WSaveSymbols( einfo->win, einfo->info->symbol_table, &einfo->info->symbol_file, false ) );
     } else if( ret == IDCANCEL ) {
-        return( FALSE );
+        return( false );
     }
 
-    return( TRUE );
+    return( true );
 }
 
 bool WHandleWM_CLOSE( WMenuEditInfo *einfo, bool force_exit )
@@ -1205,11 +1210,11 @@ static bool WQueryClearRes( WMenuEditInfo *einfo )
             FreeRCString( title );
         }
         if( ret == IDYES ) {
-            return( TRUE );
+            return( true );
         }
     }
 
-    return( FALSE );
+    return( false );
 }
 
 void WHandleClear( WMenuEditInfo *einfo )
@@ -1228,7 +1233,7 @@ void WHandleClear( WMenuEditInfo *einfo )
             WResetPrevWindowMenu( einfo );
             if( einfo->info->stand_alone ) {
                 if( einfo->file_name != NULL ) {
-                    WRMemFree( einfo->file_name );
+                    MemFree( einfo->file_name );
                     einfo->file_name = NULL;
                     WSetEditTitle( einfo );
                 }

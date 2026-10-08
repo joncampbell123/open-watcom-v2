@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,6 +34,7 @@
 #include <string.h>
 #include "substr.h"
 #include "globals.h"
+#include "mem.h"
 
 
 void SubStr_out( const SubStr *s, FILE *o )
@@ -61,6 +62,14 @@ void SubStr_init( SubStr *r, uchar *s, size_t l )
 
 void Str_init( Str *r, const SubStr* s )
 {
-    SubStr_init( r, malloc( s->len ), s->len );
+    SubStr_init( r, MemAlloc( s->len ), s->len );
     memcpy( r->str, s->str, s->len );
+}
+
+void Str_fini( Str *r )
+{
+    if( r->str != NULL ) {
+        MemFree( r->str );
+        r->str = NULL;
+    }
 }

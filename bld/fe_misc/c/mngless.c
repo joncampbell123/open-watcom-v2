@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2023      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2023-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -74,20 +74,20 @@ cmp_result CheckMeaninglessCompare( rel_op rel, int op1_size, int result_size,
     }
     shift = CMPMAXBITSIZE - NumBits( result_size );
     if( NumSign( result_size ) == 0 && shift > 0 ) {
-        U64ShiftR( &HIGH_VAL, shift, &tmp );
-        U64And( &val, &tmp, &val );
+        U64ShiftR( &tmp, &HIGH_VAL, shift );
+        U64AndEq( val, tmp );
     }
     shift = CMPMAXBITSIZE - NumBits( op1_size );
     if( NumSign( op1_size ) ) {
-        I64ShiftR( &LOW_VAL, shift, low );
-        U64Not( low, high );
+        I64ShiftR( low, &LOW_VAL, shift );
+        U64Not( *high, *low );
     } else {
-        U64Set( low, 0, 0 );
-        U64ShiftR( &HIGH_VAL, shift, high );
+        Set64ValZero( *low );
+        U64ShiftR( high, &HIGH_VAL, shift );
     }
-    if( I64Cmp( &val, low ) == 0 ) {
+    if( U64isEq( val, *low ) ) {
         range = CASE_LOW_EQ;
-    } else if( I64Cmp( &val, high ) == 0 ) {
+    } else if( U64isEq( val, *high ) ) {
         range = CASE_HIGH_EQ;
     } else if( shift > 0 ) {                // can't be outside range and
         if( I64Cmp( &val, low ) < 0 ) {     // don't have to do unsigned compare

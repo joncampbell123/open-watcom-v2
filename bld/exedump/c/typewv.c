@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -175,7 +176,13 @@ static void array_index( unsigned_8 *ptr, unsigned_8 size )
 /*********************************************************/
 {
     Wdputs( "          high bound = " );
-    Puthex( *ptr, 2*size );
+    switch (size)
+    {
+    case 1: Puthex( *ptr, 2 ); break;
+    case 2: Puthex( *(unsigned_16 *)ptr, 4 ); break;
+    default: Puthex( *(unsigned_32 *)ptr, 8 ); break;
+    }
+
     base_type_index( ptr+size );
 }
 
@@ -462,7 +469,7 @@ void Dmp_type( int cnt, unsigned_32 *offs )
                 break;
             case PTR_FAR386_DEREF:
                 StartType( "FAR386_DEREF PTR", ++curr_index);
-                Wdputs( "\n       " );
+                Wdputslc( "\n       " );
                 base_type_index( ptr );
                 break;
             case CLIST:
@@ -555,7 +562,7 @@ void Dmp_type( int cnt, unsigned_32 *offs )
                 break;
             case EXT_PARMS:
                 Wdputslc( "EXT_PARMS\n" );
-                param_type_index( (unsigned_8)buff[0]-2, ptr );
+                param_type_index( (unsigned_8)buff[0] - 2, ptr );
                 break;
             case CHAR_BYTE:
                 StartType( "CHAR_BYTE", ++curr_index);
@@ -605,7 +612,7 @@ void Dmp_type( int cnt, unsigned_32 *offs )
                 break;
             }
             coff += buff[0];
-            if( coff >= (offs[i+1] - offs[i]) ) {
+            if( coff >= (offs[i + 1] - offs[i]) ) {
                 break;
             }
         }

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -100,8 +100,9 @@ ic_op_type ICOpTypes[] = {
 #define doReadOpSRC     SrcFileMapIndex
 
 static CGIRELOCFN *relocReadOperand[] = {
-#define ITYPE( typ )    ((CGIRELOCFN*) doReadOp##typ)
-#include "itypes.h"
+    #define ITYPE( typ )    ((CGIRELOCFN*) doReadOp##typ)
+    #include "itypes.h"
+    #undef ITYPE
 };
 
 ExtraRptCtr( ctr_buffers );     // counts buffers
@@ -113,8 +114,8 @@ typedef struct {                // disk transfer code
     DISK_OFFSET offset;         // - disk offset
 } BUFF_XFER;
 
-#define pointXferOffset( ctl, off )     ( (void*)( (ctl)->data + (off)) )
-#define pointXfer( ctl )                ( (void*)( (ctl)->data + (ctl)->free_offset) )
+#define pointXferOffset( ctl, off )     ( (void*)( (ctl)->u.data + (off)) )
+#define pointXfer( ctl )                ( (void*)( (ctl)->u.data + (ctl)->free_offset) )
 
 static BUFFDICT *newDict( void )
 {
@@ -287,7 +288,7 @@ static CGIOBUFF *findRdBuffer(  // FIND A BUFFER FOR READING
     if( ctl == NULL ) {
         ctl = allocateBuffer( block );
         setDirectoryEntry( block, ctl );
-        IoSuppTempRead( block, TMPBLOCK_BSIZE, ctl->data );
+        IoSuppTempRead( block, TMPBLOCK_BSIZE, ctl->u.data );
         ctl->written = true;
         ctl->free_offset = TMPBLOCK_BSIZE;
     }
@@ -335,7 +336,7 @@ static CGIOBUFF *switchToNextBuffer( CGIOBUFF *ctl )
 
     next = findWrBuffer();
     xfer = pointXfer( ctl );
-    xfer->leap_ins.opcode = IC_NEXT;
+    xfer->leap_ins.u.opcode = IC_NEXT;
     xfer->leap_ins.value.pvalue = 0;
     xfer->leap_ins.value.uvalue = next->disk_addr;
     xfer->offset = next->free_offset;
@@ -373,7 +374,7 @@ CGINTER CgioBuffPCHRead(        // READ FROM PCH AND WRITE INTO BUFFER
                 dest = start;
                 stop = pointXferOffset( ctl, MAX_WRITE_AMT );
             }
-            opcode = p_instr->opcode;
+            opcode = p_instr->u.opcode;
             if( icMaskTable[opcode] & ICOPM_PCHREAD ) {
                 ctl->free_offset += ((char*)dest) - (char*)start;
                 *pctl = ctl;
@@ -384,7 +385,7 @@ CGINTER CgioBuffPCHRead(        // READ FROM PCH AND WRITE INTO BUFFER
                     DbgAssert( c <= s_instr );
                     DbgAssert(( s_instr - c ) < CGINTER_BLOCKING );
                     while( c < s_instr ) {
-                        DbgAssert( c->opcode == IC_PCH_PAD );
+                        DbgAssert( c->u.opcode == IC_PCH_PAD );
                         ++c;
                     }
                 }
@@ -397,7 +398,7 @@ CGINTER CgioBuffPCHRead(        // READ FROM PCH AND WRITE INTO BUFFER
             } else {
                 dest->value = p_instr->value;
             }
-            dest->opcode = opcode;
+            dest->u.opcode = opcode;
             ++dest;
             ++p_instr;
         } while( p_instr < s_instr );
@@ -441,8 +442,8 @@ CGIOBUFF *CgioBuffWriteIC(      // WRITE AN IC RECORD
     }
 #endif
 #ifdef DEVBUILD
-    DbgAssert( ins->opcode != IC_EOF );
-    if( icMaskTable[ins->opcode] & ICOPM_BRINFO ) {
+    DbgAssert( ins->u.opcode != IC_EOF );
+    if( icMaskTable[ins->u.opcode] & ICOPM_BRINFO ) {
         if( TOGGLEDBG( browse_emit ) ) {
             DumpCgFront( "BiEm", ctl->disk_addr, ctl->free_offset, ins );
         }
@@ -450,7 +451,7 @@ CGIOBUFF *CgioBuffWriteIC(      // WRITE AN IC RECORD
         if( TOGGLEDBG( dump_emit_ic ) ) {
             DumpCgFront( "Emit", ctl->disk_addr, ctl->free_offset, ins );
         }
-        if( ICOpTypes[ins->opcode] == ICOT_SYM ) {
+        if( ICOpTypes[ins->u.opcode] == ICOT_SYM ) {
             SYMBOL sym = ins->value.pvalue;
             if( sym != NULL && !SymIsCatchAlias( sym ) && SymIsAlias( sym ) ) {
                 if( ErrCount == 0 ) {
@@ -461,7 +462,7 @@ CGIOBUFF *CgioBuffWriteIC(      // WRITE AN IC RECORD
     }
 #endif
     dest = pointXfer( ctl );
-    dest->opcode = ins->opcode;
+    dest->u.opcode = ins->u.opcode;
     dest->value = ins->value;
     ctl->free_offset += sizeof( CGINTER );
 #ifdef DEVBUILD
@@ -469,7 +470,7 @@ CGIOBUFF *CgioBuffWriteIC(      // WRITE AN IC RECORD
      * we will always be able to write an IC_NEXT so this is OK
      */
     ++dest;
-    dest->opcode = IC_NEXT;
+    dest->u.opcode = IC_NEXT;
     dest->value.pvalue = 0;
     dest->value.ivalue = -1;
 #endif
@@ -483,7 +484,7 @@ void CgioBuffWrClose(           // RELEASE BUFFER AFTER WRITING
     CGINTER *p;
 
     p = pointXfer( ctl );
-    p->opcode = IC_EOF;
+    p->u.opcode = IC_EOF;
     p->value.pvalue = 0;
     ctl->free_offset += sizeof( CGINTER );
     finishWrBuffer( ctl );
@@ -505,7 +506,7 @@ static void dumpRead            // DBG: TRACE AN INSTRUCTION READ
 {
     char * prefix = NULL;       // - NULL or prefix when tracing
 
-    if( IC_EOF != curr->opcode && (icMaskTable[curr->opcode] & ICOPM_BRINFO) ) {
+    if( IC_EOF != curr->u.opcode && (icMaskTable[curr->u.opcode] & ICOPM_BRINFO) ) {
         if( TOGGLEDBG( browse_read ) ) {
             prefix = "BiRd";
         }
@@ -515,7 +516,7 @@ static void dumpRead            // DBG: TRACE AN INSTRUCTION READ
         prefix = scan;
     }
     if( NULL != prefix ) {
-        unsigned offset = ((char*)curr) - ctl->data;
+        unsigned offset = ((char*)curr) - ctl->u.data;
         DumpCgFront( prefix, ctl->disk_addr, offset, curr );
     }
 }
@@ -527,7 +528,7 @@ static void dumpRead            // DBG: TRACE AN INSTRUCTION READ
     { \
         BUFF_XFER *xfer = (BUFF_XFER *) __curr; \
         CGIOBUFF *next = findRdBuffer( xfer->leap_ins.value.uvalue ); \
-        __curr = (CGINTER *)( next->data + xfer->offset ); \
+        __curr = (CGINTER *)( next->u.data + xfer->offset ); \
         finishRdBuffer( __ctl ); \
         __ctl = next; \
     }
@@ -540,7 +541,7 @@ CGIOBUFF *CgioBuffReadIC(       // READ A RECORD
     CGINTER *curr;
 
     curr = (*ins) + 1;
-    if( curr->opcode == IC_NEXT ) {
+    if( curr->u.opcode == IC_NEXT ) {
         _NEXT_BLOCK( ctl, curr );
     }
     *ins = curr;
@@ -560,7 +561,7 @@ CGIOBUFF *CgioBuffReadICUntilOpcode(       // READ A RECORD UNTIL OPCODE IS FOUN
     curr = *ins;
     ++curr;
     for(;;) {
-        check_opcode = curr->opcode;
+        check_opcode = curr->u.opcode;
         if( check_opcode == opcode )
             break;
         if( check_opcode == IC_NEXT ) {
@@ -586,7 +587,7 @@ CGIOBUFF *CgioBuffReadICMask(   // READ A RECORD UNTIL OPCODE IN SET IS FOUND
     curr = *ins;
     ++curr;
     for(;;) {
-        opcode = curr->opcode;
+        opcode = curr->u.opcode;
         if( icMaskTable[opcode] & mask )
             break;
         if( opcode == IC_NEXT ) {
@@ -617,7 +618,7 @@ CGIOBUFF *CgioBuffReadICMaskCount(      // READ A RECORD UNTIL OPCODE IN SET IS 
     curr = *ins;
     ++curr;
     for(;;) {
-        opcode = curr->opcode;
+        opcode = curr->u.opcode;
         op_mask = icMaskTable[opcode];
         if( op_mask & count_mask ) {
             ++extra;
@@ -650,7 +651,7 @@ CGIOBUFF *CgioBuffSeek(         // SEEK TO POSITION
         ctl = next;
     }
     DbgAssert( ctl->check == CGIOBUFF_CHECK );
-    curr = (CGINTER *)( ctl->data + posn->offset );
+    curr = (CGINTER *)( ctl->u.data + posn->offset );
     *ins = curr;
     dumpRead( ctl, curr, "Seek", "Seek" );
     return( ctl );
@@ -665,7 +666,7 @@ CGFILE_INS CgioBuffLastRead(    // RETURN POSITION OF LAST READ
 
     // depends on CgioBuffReads leaving the cursor set to last read posn
     DbgAssert( ctl->check == CGIOBUFF_CHECK );
-    posn.offset = (char*)(ins) - ctl->data;
+    posn.offset = (char*)(ins) - ctl->u.data;
     posn.block = ctl->disk_addr;
     return( posn );
 }
@@ -724,7 +725,7 @@ static void cgioBuffReleaseMemory(      // RELEASE MEMORY
     } RingIterEndSafe( curr )
     RingIterBegSafe( list, curr ) {
         if( !curr->written && !CompFlags.compile_failed ) {
-            IoSuppTempWrite( curr->disk_addr, TMPBLOCK_BSIZE, curr->data );
+            IoSuppTempWrite( curr->disk_addr, TMPBLOCK_BSIZE, curr->u.data );
         }
         DbgAssert( *findDirectoryEntry( curr->disk_addr ) == curr );
         setDirectoryEntry( curr->disk_addr, NULL );
@@ -748,7 +749,7 @@ static void cgioBuffReleaseMemory(      // RELEASE MEMORY
                 beingWritten = curr;
                 IoSuppTempWrite( curr->disk_addr
                                , TMPBLOCK_BSIZE
-                               , curr->data );
+                               , curr->u.data );
                 beingWritten = NULL;
             }
             DbgAssert( *findDirectoryEntry( curr->disk_addr ) == curr );
@@ -807,7 +808,7 @@ void CgioBuffZap(               // ZAP A WRITTEN AREA OF A BUFFER
 
     ctl = findRdBuffer( zap.block );
 #ifdef DEVBUILD
-    if( icMaskTable[ins->opcode] & ICOPM_BRINFO ) {
+    if( icMaskTable[ins->u.opcode] & ICOPM_BRINFO ) {
         if( TOGGLEDBG( browse_emit ) ) {
             DumpCgFront( "ZAP ", zap.block, zap.offset, ins );
         }
@@ -818,8 +819,8 @@ void CgioBuffZap(               // ZAP A WRITTEN AREA OF A BUFFER
     }
 #endif
     DbgAssert( ctl->check == CGIOBUFF_CHECK );
-    dest = (CGINTER *)( ctl->data + zap.offset );
-    dest->opcode = ins->opcode;
+    dest = (CGINTER *)( ctl->u.data  + zap.offset );
+    dest->u.opcode = ins->u.opcode;
     dest->value = ins->value;
     ctl->written = false;
     finishRdBuffer( ctl );

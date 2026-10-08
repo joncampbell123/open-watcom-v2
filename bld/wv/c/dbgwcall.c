@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,7 +34,7 @@
 #include "dbgdata.h"
 #include "dbgwind.h"
 #include "dbgtback.h"
-#include "dbgmem.h"
+#include "memfuncs.h"
 #include "dbgchain.h"
 #include "mad.h"
 #include "strutil.h"
@@ -201,7 +201,7 @@ static void CallClose( a_window wnd )
     call_window *call = WndCall( wnd );
 
     FiniTraceBack( &call->tb );
-    WndFree( call );
+    MemFree( call );
 }
 
 
@@ -245,13 +245,13 @@ wnd_info CallInfo = {
     NoNextRow,
     NoNotify,
     ChkUpdate,
-    PopUp( CallMenu )
+    GUI_MENU_ARRAY( CallMenu )
 };
 
 a_window WndCallOpen( void )
 {
     call_window *call;
 
-    call = WndMustAlloc( sizeof( call_window ) );
+    call = MemAllocSafe( sizeof( *call ) );
     return( DbgWndCreate( LIT_DUI( WindowCalls ), &CallInfo, WND_CALL, call, &CallIcon ) );
 }

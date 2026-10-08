@@ -76,7 +76,7 @@ LRESULT CALLBACK PushWinProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam 
         SendMessage( info->parent, WM_COMMAND, info->id, 0L );
         break;
     case WM_DESTROY:
-        CUIMemFree( info );
+        MemFree( info );
         break;
     default:
         return( DefWindowProc( hwnd, msg, wparam, lparam ) );
@@ -93,7 +93,11 @@ bool RegPushWin( HANDLE instance )
     WNDCLASS    wc;
 
     wc.style = CS_HREDRAW | CS_VREDRAW;
+#ifdef __WINDOWS__
     wc.lpfnWndProc = GetWndProc( PushWinProc );
+#else
+    wc.lpfnWndProc = PushWinProc;
+#endif
     wc.cbClsExtra = 0;
     wc.cbWndExtra = sizeof( LONG_PTR );
     wc.hInstance = instance;
@@ -116,7 +120,7 @@ HWND CreatePushWin( HWND parent, char *txt, int id, HFONT font, HANDLE inst )
     size_t              len;
 
     len = strlen( txt ) + 1;
-    info = CUIMemAlloc( sizeof( PushWinInfo ) + len );
+    info = MemAlloc( sizeof( *info ) + len );
     info->id = id;
     info->font = font;
     info->parent = parent;

@@ -12,4 +12,7 @@
     forc arg, <1234567890>
         dd arg
     endm
+    repeat 2
+        dd 1
+    endm
 end

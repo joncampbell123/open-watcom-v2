@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -38,7 +38,7 @@
 #include "dui.h"
 #include "strutil.h"
 #include "dbgscan.h"
-#include "madinter.h"
+#include "wvmadcli.h"
 #include "dbgutil.h"
 #include "dbgsrc.h"
 #include "trapglbl.h"
@@ -61,7 +61,7 @@
 #include "dbgmodfy.h"
 #include "dbgmisc.h"
 #include "dipimp.h"
-#include "dipinter.h"
+#include "wvdipcli.h"
 #include "dbgreg.h"
 #include "dbgevent.h"
 #include "dbgset.h"
@@ -147,10 +147,12 @@ void DebugInit( void )
     if( !LangSetInit() ) {
         FiniTrap();
         StartupErr( LIT_ENG( STARTUP_Loading_PRS ) );
+        /* never return */
     }
     if( !InitCmd() ) {
         FiniTrap();
         StartupErr( LIT_ENG( ERR_NO_MEMORY ) );
+        /* never return */
     }
     InitScan();
     InitLook();
@@ -158,6 +160,7 @@ void DebugInit( void )
     InitSource();
     InitDLLList();
     DUIInit();
+    _SwitchOff( SW_ERROR_STARTUP );
     InitHook();
     VarDisplayInit();
 }
@@ -278,7 +281,7 @@ static void Profile( void )
 {
     if( InvokeFile != NULL ) {
         ProfileInvoke( InvokeFile );
-        _Free( InvokeFile );
+        MemFree( InvokeFile );
         InvokeFile = NULL;
         ProcInput();
     }
@@ -290,7 +293,7 @@ static void PushInitCmdList( void )
 
     if( InitCmdList != NULL ) {
         cmds = AllocCmdList( InitCmdList, strlen( InitCmdList ) );
-        _Free( InitCmdList );
+        MemFree( InitCmdList );
         InitCmdList = NULL;
         PushCmdList( cmds );
         FreeCmdList( cmds );
@@ -375,7 +378,7 @@ void DebugFini( void )
     FiniMADInfo();
     FiniTrace();
     RestoreHandlers();
-    _Free( TrapParms );
+    MemFree( TrapParms );
     FiniLiterals();
     FiniLocalInfo();
 }

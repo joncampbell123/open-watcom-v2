@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -101,7 +102,7 @@ static bool WREGetStrOpt( char *entry, char **opt )
                                    str, _MAX_PATH - 1, WREProfileName );
 
     if( ret ) {
-        ret = ((*opt = WREStrDup( str )) != NULL);
+        ret = ((*opt = WREStrdup( str )) != NULL);
     }
 
     return( ret );
@@ -110,19 +111,19 @@ static bool WREGetStrOpt( char *entry, char **opt )
 void WREOptsShutdown( void )
 {
     if( WRECurrentState.last_filter != NULL ) {
-        WRMemFree( WRECurrentState.last_filter );
+        MemFree( WRECurrentState.last_filter );
     }
     if( WRECurrentState.last_dir != NULL ) {
-        WRMemFree( WRECurrentState.last_dir );
+        MemFree( WRECurrentState.last_dir );
     }
 
-    WRECurrentState.last_dir = WREStrDup( WREGetInitialDir() );
+    WRECurrentState.last_dir = WREStrdup( WREGetInitialDir() );
     WRECurrentState.last_filter = WREGetFileFilter();
 
     WREWriteOpts( &WRECurrentState );
 
     if( WRECurrentState.last_dir != NULL ) {
-        WRMemFree( WRECurrentState.last_dir );
+        MemFree( WRECurrentState.last_dir );
     }
 }
 
@@ -197,7 +198,7 @@ bool WREWriteRectOpt( char *entry, RECT *r )
     str = WRERectToStr( r );
     if( str != NULL ) {
         ret = ( WritePrivateProfileString( WRESectionName, entry, str, WREProfileName ) != 0 );
-        WRMemFree( str );
+        MemFree( str );
     }
 
     return( ret );
@@ -223,7 +224,7 @@ char *WRERectToStr( RECT *r )
 
     sprintf( temp, "%d, %d, %d, %d", r->left, r->top, r->right, r->bottom );
 
-    return( WREStrDup( temp ) );
+    return( WREStrdup( temp ) );
 }
 
 void WREStrToRect( char *str, RECT *r )

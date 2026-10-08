@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -93,7 +94,7 @@ static directory_list initialize_directory_list( const char *items_list )
     directory_list  list;
     char            *p;
 
-    list = mem_strdup( items_list );
+    list = MemStrdupSafe( items_list );
     p = list;
     if( items_list != NULL ) {
         while( *items_list != '\0' ) {
@@ -127,6 +128,8 @@ static FILE *try_open( char *prefix, char *filename )
     FILE        *fp;
     char        buff[_MAX_PATH];
     unsigned    filename_length;
+    char        *p;
+    int         c;
 
     /* Prevent buffer overflow. */
 
@@ -150,12 +153,18 @@ static FILE *try_open( char *prefix, char *filename )
     fp = fopen( buff, "rb" );
 #if defined( __UNIX__ )
     if( fp == NULL ) {
-        strlwr( buff );                 // for the sake of linux try again with lower case filename
+        p = buff;
+        while( (c = *(unsigned char *)p) != '\0' ) {
+            *p++ = tolower( c );
+        }
         fp = fopen( buff, "rb" );
     }
 #else       // DOS, OS/2, Windows
     if( fp != NULL ) {
-        strlwr( buff );                 // to match wgml 4.0
+        p = buff;
+        while( (c = *(unsigned char *)p) != '\0' ) {
+            *p++ = tolower( c );
+        }
     }
 #endif
 
@@ -208,7 +217,7 @@ void ff_setup( void )
 
 void ff_set_incpath( const char *path )
 {
-    mem_free( wgml_inc_dirs );
+    MemFree( wgml_inc_dirs );
     wgml_inc_dirs = initialize_directory_list( path );
 }
 
@@ -218,7 +227,7 @@ void ff_set_incpath( const char *path )
 
 void ff_set_libpath( const char *path )
 {
-    mem_free( wgml_lib_dirs );
+    MemFree( wgml_lib_dirs );
     wgml_lib_dirs = initialize_directory_list( path );
 }
 
@@ -233,22 +242,22 @@ void ff_teardown( void )
     /* directories points to a single block of allocated memory. */
 
     if( cur_dir_list != NULL ) {
-        mem_free( cur_dir_list );
+        MemFree( cur_dir_list );
         cur_dir_list = NULL;
     }
 
     if( wgml_inc_dirs != NULL ) {
-        mem_free( wgml_inc_dirs );
+        MemFree( wgml_inc_dirs );
         wgml_inc_dirs = NULL;
     }
 
     if( wgml_lib_dirs != NULL) {
-        mem_free( wgml_lib_dirs );
+        MemFree( wgml_lib_dirs );
         wgml_lib_dirs = NULL;
     }
 
     if( path_dirs != NULL ) {
-        mem_free( path_dirs );
+        MemFree( path_dirs );
         path_dirs = NULL;
     }
 }
@@ -290,8 +299,8 @@ FILE *search_file_in_dirs( const char *filename, const char *defext, const char 
     unsigned        member_length;
     pgroup2         pg;
     directory_list  *pd;
-    char            c;
     char            *p;
+    int             c;
     char            dir_name[_MAX_PATH];
     FILE            *fp;
 
@@ -332,16 +341,16 @@ FILE *search_file_in_dirs( const char *filename, const char *defext, const char 
 
                 switch( sequence ) {
                 case DSEQ_opt_file:
-                    ext = "." OPT_EXT;
+                    ext = "." FEXT_OPT;
                     break;
                 case DSEQ_doc_spec:
-                    ext = "." GML_EXT;
+                    ext = "." FEXT_GML;
                     break;
                 case DSEQ_bin_lib:
-                    ext = "." COP_EXT;
+                    ext = "." FEXT_COP;
                     break;
                 case DSEQ_lib_src:
-                    ext = "." PCD_EXT;
+                    ext = "." FEXT_PCD;
                     break;
                 default:
                     ext = ".xxx";
@@ -359,7 +368,7 @@ FILE *search_file_in_dirs( const char *filename, const char *defext, const char 
     switch( sequence ) {
     case DSEQ_opt_file:
         if( pg.ext[0] == '\0' )
-            pg.ext = OPT_EXT;
+            pg.ext = FEXT_OPT;
         _makepath( primary_file, NULL, NULL, pg.fname, pg.ext );
         *pd++ = cur_dir_list;
         *pd++ = wgml_lib_dirs;
@@ -373,10 +382,10 @@ FILE *search_file_in_dirs( const char *filename, const char *defext, const char 
                 _makepath( alternate_file, NULL, NULL, pg.fname, altext );
             }
             if( defext == NULL
-              || FNAMECMPSTR( defext, GML_EXT )) {
-                _makepath( default_file, NULL, NULL, pg.fname, GML_EXT );
+              || FNAMECMPSTR( defext, FEXT_GML )) {
+                _makepath( default_file, NULL, NULL, pg.fname, FEXT_GML );
             }
-            pg.ext = GML_EXT;
+            pg.ext = FEXT_GML;
         }
         _makepath( primary_file, NULL, NULL, pg.fname, pg.ext );
         *pd++ = cur_dir_list;
@@ -392,10 +401,10 @@ FILE *search_file_in_dirs( const char *filename, const char *defext, const char 
     case DSEQ_lib_src:
         if( altext == NULL
           || altext[0] == '\0' )
-            altext = FON_EXT;
+            altext = FEXT_FON;
         _makepath( alternate_file, NULL, NULL, pg.fname, altext );
         if( pg.ext[0] == '\0' )
-            pg.ext = PCD_EXT;
+            pg.ext = FEXT_PCD;
         _makepath( primary_file, NULL, NULL, pg.fname, pg.ext );
         *pd++ = cur_dir_list;
         *pd++ = wgml_inc_dirs;
@@ -446,21 +455,27 @@ FILE *search_file_in_dirs( const char *filename, const char *defext, const char 
                     /* Avoid buffer overflow from member_name. */
 
                     if( member_length >= _MAX_PATH - 4 ) {
-                        xx_simple_err_exit_cc( ERR_FILE_MAX, member_name, "." COP_EXT );
+                        xx_simple_err_exit_cc( ERR_FILE_MAX, member_name, "." FEXT_COP );
                         /* never return */
                     }
                     pg.ext = "COP";
                 }
                 _makepath( primary_file, NULL, NULL, member_name, pg.ext );
-                strlwr( primary_file );
+                p = primary_file;
+                while( (c = *(unsigned char *)p) != '\0' ) {
+                    *p++ = tolower( c );
+                }
                 fp = try_open( dir_name, primary_file );
 #ifdef __UNIX__
                 if( fp == NULL ) {
-                    strupr( primary_file );
+                    p = primary_file;
+                    while( (c = *(unsigned char *)p) != '\0' ) {
+                        *p++ = toupper( c );
+                    }
                     fp = try_open( dir_name, primary_file );
                 }
 #endif
-                mem_free( member_name );
+                MemFree( member_name );
 
                 /* Not finding the file is only a problem for DSEQ_bin_lib. */
 

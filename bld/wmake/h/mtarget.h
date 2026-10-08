@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2019 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -74,7 +74,7 @@ struct Target {
 
     /*
      * node.name has been FixName()'d, and includes path.
-     * each target "owns" its name (ie: targ->name = StrDupSafe( name ) )
+     * each target "owns" its name (ie: targ->name = MemStrdupSafe( name ) )
      * name is read only - change with RenameTarget() only!
      */
 
@@ -178,7 +178,7 @@ extern void     TargetInit( void );
 extern void     TargetFini( void );
 
 extern TLIST    *NewTList( void );
-extern TARGET   *NewTarget( const char *name );
+extern TARGET   *NewTarget( char *name );
 extern DEPEND   *NewDepend( void );
 extern NKLIST   *NewNKList( void );
 extern SLIST    *NewSList( void );
@@ -206,6 +206,7 @@ extern CLIST    *DotCList( DotName dot );
 extern void     ResetExecuted( void );
 extern void     CheckNoCmds( void );
 extern bool     WildTList( TLIST **stack, const char *base, bool mentioned, bool expandWildCardPath );
+extern bool     DotTList( TLIST **stack, DotName dot );
 extern void     TargInitAttr( TATTR *attr );
 extern void     TargAttrOrAttr( TATTR *tattr, TATTR attr );
 

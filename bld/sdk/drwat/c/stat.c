@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -40,20 +40,21 @@
 
 /* Local Window callback functions prototypes */
 #ifndef __NT__
-WINEXPORT INT_PTR CALLBACK SegMapDlgProc( HWND hwnd, UINT msg, UINT wparam, DWORD lparam );
+WINEXPORT INT_PTR CALLBACK SegMapDlgProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam );
 #endif
-WINEXPORT INT_PTR CALLBACK StatDialogDlgProc( HWND hwnd, UINT msg, UINT wparam, DWORD lparam );
+WINEXPORT INT_PTR CALLBACK StatDialogDlgProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam );
 
 static ADDRESS          currAddr;
 static ADDRESS          firstAddr;
 static interrupt_struct oldIntData;
 
 #ifdef __NT__
-static HANDLE           processHdl;
+static HANDLE           statProcessHdl;
 static DWORD            processID;
 
-void SetProcessInfo( HANDLE hdl, DWORD procid ) {
-    processHdl = hdl;
+void SetProcessInfo( HANDLE hdl, DWORD procid )
+{
+    statProcessHdl = hdl;
     processID = procid;
 }
 #endif
@@ -282,7 +283,7 @@ static void GetStatRegisters( HWND hwnd )
 } /* GetStatRegisters */
 
 #ifndef __NT__
-WINEXPORT INT_PTR CALLBACK SegMapDlgProc( HWND hwnd, UINT msg, UINT wparam, DWORD lparam )
+WINEXPORT INT_PTR CALLBACK SegMapDlgProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam )
 {
     char        buff[128];
     WORD        i;
@@ -327,7 +328,7 @@ WINEXPORT INT_PTR CALLBACK SegMapDlgProc( HWND hwnd, UINT msg, UINT wparam, DWOR
                 str[4] = '\0';
                 seg = atoi( str );
                 if( DoGlobalEntryModule( &ge, DTTaskEntry.hModule, seg ) ) {
-                    DispMem( Instance, hwnd, ge.hBlock, (ge.dwSize == 1) );
+                    DispMem( Instance, hwnd, (WORD)ge.hBlock, (ge.dwSize == 1), 0, PMGetSelectorSize( (WORD)ge.hBlock ) );
                 }
             }
             ret = true;
@@ -342,12 +343,9 @@ WINEXPORT INT_PTR CALLBACK SegMapDlgProc( HWND hwnd, UINT msg, UINT wparam, DWOR
 /*
  * StatDialogDlgProc - show task status
  */
-WINEXPORT INT_PTR CALLBACK StatDialogDlgProc( HWND hwnd, UINT msg, UINT wparam, DWORD lparam )
+WINEXPORT INT_PTR CALLBACK StatDialogDlgProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam )
 {
     WORD        cmd;
-#ifndef __NT__
-    DLGPROC     dlgproc;
-#endif
     bool        ret;
 
     lparam = lparam;
@@ -376,29 +374,29 @@ WINEXPORT INT_PTR CALLBACK StatDialogDlgProc( HWND hwnd, UINT msg, UINT wparam, 
     case WM_COMMAND:
         cmd = LOWORD( wparam );
         switch( cmd ) {
-#ifndef __NT__
-        case STAT_SEG_MAP:
-            dlgproc = MakeProcInstance_DLG( SegMapDlgProc, Instance );
-            JDialogBox( Instance, "SEG_MAP_DLG", hwnd, dlgproc );
-            FreeProcInstance_DLG( dlgproc );
-            break;
-        case STAT_STACK_TRACE:
-            StartStackTraceDialog( hwnd );
-            break;
-#else
         case STAT_SEG_MAP:
             {
+#ifdef __WINDOWS__
+                DLGPROC dlgproc = MakeProcInstance_DLG( SegMapDlgProc, Instance );
+                JDialogBox( Instance, "SEG_MAP_DLG", hwnd, dlgproc );
+                FreeProcInstance_DLG( dlgproc );
+#else
                 HANDLE                  hdl;
                 DuplicateHandle(
                             GetCurrentProcess(),
-                            processHdl,
+                            statProcessHdl,
                             GetCurrentProcess(),
                             &hdl,
                             0,
                             FALSE,
                             DUPLICATE_SAME_ACCESS );
                 WalkMemory( hwnd, hdl, processID );
+#endif
             }
+            break;
+#ifdef __WINDOWS__
+        case STAT_STACK_TRACE:
+            StartStackTraceDialog( hwnd );
             break;
 #endif
         case STAT_SYMBOLS:
@@ -433,10 +431,12 @@ WINEXPORT INT_PTR CALLBACK StatDialogDlgProc( HWND hwnd, UINT msg, UINT wparam, 
  */
 void DoStatDialog( HWND hwnd )
 {
-    DLGPROC     dlgproc;
-
-    dlgproc = MakeProcInstance_DLG( StatDialogDlgProc, Instance );
+#ifdef __WINDOWS__
+    DLGPROC dlgproc = MakeProcInstance_DLG( StatDialogDlgProc, Instance );
     JDialogBox( Instance, "TASKSTATUS", hwnd, dlgproc );
     FreeProcInstance_DLG( dlgproc );
+#else
+    JDialogBox( Instance, "TASKSTATUS", hwnd, StatDialogDlgProc );
+#endif
 
 } /* DoStatDialog */

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -59,7 +59,7 @@
 #include "dlgnewws.h"
 #include "dbgwvar.h"
 #include "dbgchopt.h"
-#include "dipinter.h"
+#include "wvdipcli.h"
 #include "menudef.h"
 #include "dbgicon.h"
 #include "liteng.h"
@@ -91,7 +91,7 @@ typedef void            VARDIRTRTN( a_window, int );
 
 extern void             WndVarNewWindow( char * );
 
-static char **VarNames[] = {
+static const char **VarNames[] = {
     #define pick(e,name,wndclass,icon)    name,
     #include "_dbgvar.h"
     #undef pick
@@ -218,8 +218,8 @@ static  void    WNDCALLBACK VarModify( a_window wnd, wnd_row row, wnd_piece piec
         break;
     case VAR_PIECE_VALUE:
         if( !VarExpandable( class ) ) {
-            char *value = DbgAlloc( TXT_LEN );
-            char *title = DbgAlloc( TXT_LEN );
+            char *value = MemAllocSafe( TXT_LEN );
+            char *title = MemAllocSafe( TXT_LEN );
             old_radix = VarNewCurrRadix( v );
             ExprValue( ExprSP );
             VarBuildName( &var->i, v, false );
@@ -234,8 +234,8 @@ static  void    WNDCALLBACK VarModify( a_window wnd, wnd_row row, wnd_piece piec
                 VarDoAssign( &var->i, v, value );
             NewCurrRadix( old_radix );
             WndRowDirty( wnd, row );
-            DbgFree( value );
-            DbgFree( title );
+            MemFree( value );
+            MemFree( title );
         }
         break;
     }
@@ -529,7 +529,7 @@ static void WNDCALLBACK VarMenuItem( a_window wnd, gui_ctl_id id, wnd_row row, w
             DIPTypeArrayInfo( ExprSP->th, ExprSP->lc, &ainfo, NULL );
             start = ainfo.low_bound;
             varx.start = start;
-            varx.end = varx.start + ainfo.num_elts - 1;
+            varx.end = varx.start + ainfo.num_elems - 1;
             /* fall through */
         case TK_POINTER:
             {
@@ -549,9 +549,9 @@ static void WNDCALLBACK VarMenuItem( a_window wnd, gui_ctl_id id, wnd_row row, w
         break;
     case MENU_VAR_INSPECT:
         VarBuildName( &var->i, v, false );
-        name = DupStr( TxtBuff );
+        name = MemStrdupSafe( TxtBuff );
         WndInspectExprSP( name );
-        WndFree( name );
+        MemFree( name );
         break;
     case MENU_VAR_WATCH:
         VarAddWatch( &var->i, v );
@@ -741,7 +741,7 @@ static void VarSaveWndToScope( a_window wnd )
 
     wnd_data = var->i.s->wnd_data;
     if( wnd_data == NULL ) {
-        wnd_data = WndMustAlloc( sizeof( var_wnd_data ) );
+        wnd_data = MemAllocSafe( sizeof( *wnd_data ) );
         var->i.s->wnd_data = wnd_data;
     }
     wnd_data->scroll = WndTop( wnd );
@@ -856,7 +856,7 @@ static void VarWndRefreshVisible( var_info *i, int top, int rows, VARDIRTRTN *di
 {
     int             row;
     var_node        *v;
-    char            *value;
+    const char      *value;
     var_gadget_type gadget;
     bool            standout;
     bool            on_top;
@@ -963,7 +963,7 @@ static bool WNDCALLBACK VarWndEventProc( a_window wnd, gui_event gui_ev, void *p
         return( true );
     case GUI_DESTROY :
         VarFiniInfo( &var->i );
-        WndFree( var );
+        MemFree( var );
         return( true );
     }
     return( false );
@@ -1066,7 +1066,7 @@ wnd_info VarInfo = {
     NoNextRow,
     NoNotify,
     ChkUpdate,
-    PopUp( VarMenu )
+    GUI_MENU_ARRAY( VarMenu )
 };
 
 static  a_window        DoWndVarOpen( var_type vtype )
@@ -1074,7 +1074,7 @@ static  a_window        DoWndVarOpen( var_type vtype )
     var_window  *var;
     a_window    wnd;
 
-    var = WndMustAlloc( sizeof( var_window ) );
+    var = MemAllocSafe( sizeof( *var ) );
     var->vtype = vtype;
     wnd = DbgWndCreate( *VarNames[vtype], &VarInfo, VarWndClass[vtype], var, VarIcons[vtype] );
     if( wnd != NULL )

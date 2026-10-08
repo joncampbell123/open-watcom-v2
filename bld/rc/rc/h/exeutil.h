@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -46,8 +46,12 @@
  * otherwise returns 0 (false)
  * note: if mask is 0 it always returns 1 (true)
  */
-#define ARE_BITS_EQUAL( mask, v1, v2 ) (!((mask) & ((v1)^(v2))))
+#define ARE_BITS_EQUAL( mask, v1, v2 ) (((mask) & ((v1)^(v2))) == 0)
 
+/*
+ * CopyExeData function is used by resource compiler to write data to executable
+ * there are two implementation one in resource compiler and second in linker
+ */
 extern RcStatus     CopyExeData( FILE *src_fp, FILE *dst_fp, uint_32 length );
 extern long         AlignAmount( long offset, uint_16 shift_count );
 extern uint_16      FindShiftCount( uint_32 filelen, uint_16 numobjs );

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -189,17 +189,6 @@ int stricmp( const char *a, const char *b )
         ++a;
         ++b;
     }
-}
-
-char *strupr( char *str )
-{
-    char *p = str;
-
-    while( *p != '\0' ) {
-        *p = upper( *p );
-        ++p;
-    }
-    return( str );
 }
 
 char *strcpy( char *dst, const char *src )
@@ -598,7 +587,7 @@ void WriteStdErr( char *str, int len )
 
 extern void __STK( int size );
 extern void __CHK( int size );
-#pragma off (check_stack);
+#pragma off( check_stack );
 void __declspec(naked) __CHK( int size )
 {
     /* unused parameters */ (void)size;
@@ -610,3 +599,4 @@ void __declspec(naked) __CHK( int size )
         ret 4
     }
 }
+#pragma pop( check_stack );

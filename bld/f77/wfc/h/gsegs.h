@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2025-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -28,6 +29,19 @@
 *
 ****************************************************************************/
 
+
+#if _CPU == 8086
+    #define MAX_SEG16_SIZE      0x10000
+#endif
+
+typedef struct global_seg {
+    struct global_seg   *link;
+    segment_id          segid;
+    unsigned_32         size;
+    bool                initialized;
+} global_seg;
+
+extern global_seg   *GlobalSeg;
 
 extern void         InitGlobalSegs( void );
 extern void         FreeGlobalSegs( void );

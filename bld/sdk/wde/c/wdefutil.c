@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -57,7 +57,9 @@
 #include "wdefutil.h"
 #include "wrstrdup.h"
 #include "jdlg.h"
-#include "wclbproc.h"
+#ifdef __WINDOWS__
+    #include "wclbproc.h"
+#endif
 
 
 /****************************************************************************/
@@ -243,7 +245,7 @@ void WdeFreeControlIDs( void )
     if( WdeNextIDList ) {
         WdeListLastElt( WdeNextIDList, &olist );
         for( ; olist != NULL; olist = ListPrev( olist ) ) {
-            WRMemFree( ListElement( olist ) );
+            MemFree( ListElement( olist ) );
         }
         ListFree( WdeNextIDList );
     }
@@ -280,7 +282,7 @@ uint_16 WdeGetNextControlID( void )
                 ids->id++;
             }
         } else {
-            ids = (WdeNextIDStruct *)WRMemAlloc( sizeof( WdeNextIDStruct ) );
+            ids = MemAlloc( sizeof( WdeNextIDStruct ) );
             if( ids != NULL ) {
                 ids->base = base;
                 ids->id = WDE_START_CONTROL_ID;
@@ -487,7 +489,7 @@ char *WdeRectToStr( RECT *r )
 
     sprintf( temp, "%d, %d, %d, %d", r->left, r->top, r->right, r->bottom );
 
-    return( WdeStrDup( temp ) );
+    return( WdeStrdup( temp ) );
 }
 
 void WdeStrToRect( char *str, RECT *r )
@@ -529,9 +531,9 @@ void WdeSetDefineControlInfo( WdeDefineObjectInfo *o_info, HWND hDlg )
         cp2 = WRConvertStringFrom( cp, "\t\n", "tn" );
         if( cp2 != NULL ) {
             WdeSetEditWithStr( cp2, hDlg, IDB_TEXT );
-            WRMemFree( cp2 );
+            MemFree( cp2 );
         }
-        WRMemFree( cp );
+        MemFree( cp );
     }
 
     WdeSetWinStyles( hDlg, GETCTL_STYLE( o_info->info.c.info ), o_info->mask );
@@ -559,12 +561,12 @@ void WdeGetDefineControlInfo( WdeDefineObjectInfo *o_info, HWND hDlg )
         if( cp2 != NULL ) {
             vp = WdeStrToResNameOrOrdinal( cp2 );
             if( GETCTL_TEXT( o_info->info.c.info ) ) {
-                WRMemFree( GETCTL_TEXT( o_info->info.c.info ) );
+                MemFree( GETCTL_TEXT( o_info->info.c.info ) );
             }
             SETCTL_TEXT( o_info->info.c.info, (ResNameOrOrdinal *)vp );
-            WRMemFree( cp2 );
+            MemFree( cp2 );
         }
-        WRMemFree( cp );
+        MemFree( cp );
     }
 
     WdeGetDefineObjectSymbolInfo( o_info, hDlg );
@@ -602,16 +604,16 @@ void WdeSetDefineObjectSymbolInfo( WdeDefineObjectInfo *o_info, HWND hDlg )
             str1 = WResIDToStr( o_info->info.d.name );
             if( str1 != NULL ) {
                 len = strlen( str1 ) + 3;
-                str2 = WRMemAlloc( len );
+                str2 = MemAlloc( len );
                 if( str2 != NULL ) {
                     str2[0] = '"';
                     strcpy( &str2[1], str1 );
                     str2[len - 2] = '"';
                     str2[len - 1] = '\0';
                     WdeSetEditWithStr( str2, hDlg, IDB_SYMBOL );
-                    WRMemFree( str2 );
+                    MemFree( str2 );
                 }
-                WRMemFree( str1 );
+                MemFree( str1 );
             }
             o_info->info.d.id = 0;
             o_info->info.d.use_id = false;
@@ -681,7 +683,7 @@ void WdeGetDefineObjectSymbolInfo( WdeDefineObjectInfo *o_info, HWND hDlg )
     }
 
     if( o_info->symbol != NULL ) {
-        WRMemFree( o_info->symbol );
+        MemFree( o_info->symbol );
     }
     o_info->symbol = NULL;
 
@@ -711,7 +713,7 @@ void WdeGetDefineObjectSymbolInfo( WdeDefineObjectInfo *o_info, HWND hDlg )
     }
 
     if( str[0] == '\0' ) {
-        WRMemFree( str );
+        MemFree( str );
         return;
     }
 
@@ -721,7 +723,7 @@ void WdeGetDefineObjectSymbolInfo( WdeDefineObjectInfo *o_info, HWND hDlg )
     if( o_info->obj_id == DIALOG_OBJ ) {
 
         if( o_info->info.d.name != NULL ) {
-            WRMemFree( o_info->info.d.name );
+            MemFree( o_info->info.d.name );
         }
         o_info->info.d.name = NULL;
 
@@ -731,7 +733,7 @@ void WdeGetDefineObjectSymbolInfo( WdeDefineObjectInfo *o_info, HWND hDlg )
             o_info->info.d.name = WResIDFromNum( ord );
         } else {
             dup = false;
-            o_info->symbol = WdeStrDup( str );
+            o_info->symbol = WdeStrdup( str );
             strupr( o_info->symbol );
             entry = WdeDefAddHashEntry( o_info->res_info->hash_table, str, &dup );
             o_info->info.d.name = WResIDFromNum( entry->value );
@@ -743,7 +745,7 @@ void WdeGetDefineObjectSymbolInfo( WdeDefineObjectInfo *o_info, HWND hDlg )
             SETCTL_ID( o_info->info.c.info, ord );
         } else {
             dup = false;
-            o_info->symbol = WdeStrDup( str );
+            o_info->symbol = WdeStrdup( str );
             strupr( o_info->symbol );
             entry = WdeDefAddHashEntry( o_info->res_info->hash_table, str, &dup );
             if( entry != NULL ) {
@@ -753,7 +755,7 @@ void WdeGetDefineObjectSymbolInfo( WdeDefineObjectInfo *o_info, HWND hDlg )
 
     }
 
-    WRMemFree( str );
+    MemFree( str );
 }
 
 /* JPK - added function for help id */
@@ -772,7 +774,7 @@ void WdeGetDefineObjectHelpSymbolInfo( WdeDefineObjectInfo *o_info, HWND hDlg )
     }
 
     if( o_info->helpsymbol != NULL ) {
-        WRMemFree( o_info->helpsymbol );
+        MemFree( o_info->helpsymbol );
     }
     o_info->helpsymbol = NULL;
 
@@ -802,7 +804,7 @@ void WdeGetDefineObjectHelpSymbolInfo( WdeDefineObjectInfo *o_info, HWND hDlg )
     }
 
     if( str[0] == '\0' ) {
-        WRMemFree( str );
+        MemFree( str );
         return;
     }
 
@@ -815,8 +817,8 @@ void WdeGetDefineObjectHelpSymbolInfo( WdeDefineObjectInfo *o_info, HWND hDlg )
             SETHDR_HELPID( o_info->info.d.header, ord );
         } else {
             dup = true;
-            o_info->helpsymbol = WdeStrDup( str );
-            o_info->info.d.header->helpsymbol = WdeStrDup( str );
+            o_info->helpsymbol = WdeStrdup( str );
+            o_info->info.d.header->helpsymbol = WdeStrdup( str );
             strupr( o_info->helpsymbol );
             ord = GETHDR_HELPID( o_info->info.d.header );
             if( ord > 0 ) {
@@ -835,8 +837,8 @@ void WdeGetDefineObjectHelpSymbolInfo( WdeDefineObjectInfo *o_info, HWND hDlg )
             SETCTL_HELPID( o_info->info.c.info, ord );
         } else {
             dup = false;
-            o_info->helpsymbol = WdeStrDup( str );
-            o_info->info.c.info->helpsymbol = WdeStrDup( str );
+            o_info->helpsymbol = WdeStrdup( str );
+            o_info->info.c.info->helpsymbol = WdeStrdup( str );
             strupr( o_info->helpsymbol );
             ord = GETCTL_HELPID( o_info->info.c.info );
             if( ord > 0 ) {
@@ -850,7 +852,7 @@ void WdeGetDefineObjectHelpSymbolInfo( WdeDefineObjectInfo *o_info, HWND hDlg )
         }
     }
 
-    WRMemFree( str );
+    MemFree( str );
 }
 
 void WdeAddSymbolToObjectHashTable( WdeResInfo *res_info, char *symbol, WRHashValue val )
@@ -936,7 +938,6 @@ bool WdeControlDefine( WdeDefineObjectInfo *o_info )
     char                *helpsymbol;
     char                *dlg_template;
     INT_PTR             redraw;
-    DLGPROC             dlgproc;
     HINSTANCE           app_inst;
     WdeOrderMode        mode;
 
@@ -955,8 +956,8 @@ bool WdeControlDefine( WdeDefineObjectInfo *o_info )
         return( false );
     }
 
-    o_info->symbol = WdeStrDup( symbol );
-    o_info->helpsymbol = WdeStrDup( helpsymbol );
+    o_info->symbol = WdeStrdup( symbol );
+    o_info->helpsymbol = WdeStrdup( helpsymbol );
     o_info->res_info = WdeGetCurrentRes();
 
     if( o_info->win == NULL ) {
@@ -982,13 +983,17 @@ bool WdeControlDefine( WdeDefineObjectInfo *o_info )
     }
 
     redraw = -1;
-
-    dlgproc = MakeProcInstance_DLG( WdeControlDefineDlgProc, app_inst );
-    if( dlgproc != NULL ) {
-        redraw = JDialogBoxParam( app_inst, dlg_template, o_info->win, dlgproc, (LPARAM)o_info );
-        FreeProcInstance_DLG( dlgproc );
+#ifdef __WINDOWS__
+    {
+        DLGPROC dlgproc = MakeProcInstance_DLG( WdeControlDefineDlgProc, app_inst );
+        if( dlgproc != NULL ) {
+            redraw = JDialogBoxParam( app_inst, dlg_template, o_info->win, dlgproc, (LPARAM)o_info );
+            FreeProcInstance_DLG( dlgproc );
+        }
     }
-
+#else
+    redraw = JDialogBoxParam( app_inst, dlg_template, o_info->win, WdeControlDefineDlgProc, (LPARAM)o_info );
+#endif
     if( redraw == -1 ) {
         WdeWriteTrail( "WdeControlDefine: Dialog not created!" );
         return( false );
@@ -1022,12 +1027,12 @@ bool WdeControlDefine( WdeDefineObjectInfo *o_info )
     }
 
     if( o_info->symbol != NULL ) {
-        WRMemFree( o_info->symbol );
+        MemFree( o_info->symbol );
         o_info->symbol = NULL;
     }
 
     if( o_info->helpsymbol != NULL ) {
-        WRMemFree( o_info->helpsymbol );
+        MemFree( o_info->helpsymbol );
         o_info->helpsymbol = NULL;
     }
 
@@ -1310,7 +1315,7 @@ void WdeDefineObjectLookupComboEntry( HWND hDlg, WORD hw, WRHashTable *table )
     // if the string numeric or empty then return
     strtoul( str, &cp, 0 );
     if( *cp == '\0' ) {
-        WRMemFree( str );
+        MemFree( str );
         return;
     }
 
@@ -1321,7 +1326,7 @@ void WdeDefineObjectLookupComboEntry( HWND hDlg, WORD hw, WRHashTable *table )
         }
     }
 
-    WRMemFree( str );
+    MemFree( str );
 }
 
 /* JPK - added for help id support
@@ -1385,7 +1390,7 @@ void WdeDefineObjectLookupHelpComboEntry( HWND hDlg, WORD hw, WRHashTable *table
     // if the string numeric or empty then return
     strtoul( str, &cp, 0 );
     if( *cp == '\0' ) {
-        WRMemFree( str );
+        MemFree( str );
         return;
     }
 
@@ -1396,7 +1401,7 @@ void WdeDefineObjectLookupHelpComboEntry( HWND hDlg, WORD hw, WRHashTable *table
         }
     }
 
-    WRMemFree( str );
+    MemFree( str );
 }
 
 void WdeEXSetDefineInfo( WdeDefineObjectInfo *o_info, HWND hDlg )

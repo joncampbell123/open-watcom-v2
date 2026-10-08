@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2020 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -47,30 +47,22 @@ file_handle     FStdOut = NULL;
 
 static b_file   _FStdOut = {0};
 
-static  int     IOBufferSize = { IO_BUFFER };
-
-void    InitFileIO( uint buff_size )
+void    InitFileIO( void )
 {
     // Initialize stdout i/o.
-    _FStdOut.attrs     = REC_TEXT | WRITE_ONLY;
+    _FStdOut.buffered  = false;
     _FStdOut.fp        = stdout;
-    _FStdOut.buff_size = MIN_BUFFER;
     FSetIOOk( &_FStdOut );
     FStdOut = &_FStdOut;
-    // Initialize i/o buffer size.
-    if( buff_size < MIN_BUFFER ) {
-        buff_size = MIN_BUFFER;
-    }
-    IOBufferSize = buff_size;
 }
 
-b_file  *Openf( const char *f, const char *mode, f_attrs attrs )
+b_file  *Openf( const char *f, const char *mode )
 // Open a file.
 {
     FILE        *fp;
     b_file      *io;
     struct stat info;
-    int         buff_size;
+    bool        buffered;
 
     fp = fopen( f, mode );
     if( fp == NULL ) {
@@ -83,35 +75,25 @@ b_file  *Openf( const char *f, const char *mode, f_attrs attrs )
         return( NULL );
     }
     if( S_ISCHR( info.st_mode ) ) {
-        io = FMemAlloc( offsetof( b_file, read_len ) );
+        io = MemAllocSafe( offsetof( b_file, read_len ) );
         // Turn off truncate just in case we turned it on by accident due to
         // a buggy NT dos box.  We NEVER want to truncate a device.
 //        attrs &= ~TRUNC_ON_WRITE;
 //        attrs |= CHAR_DEVICE;
+        buffered = false;
     } else {
-        attrs |= BUFFERED;
-        buff_size = IOBufferSize;
-        io = FMemAlloc( sizeof( b_file ) + IOBufferSize - MIN_BUFFER );
-        if( ( io == NULL ) && ( IOBufferSize > MIN_BUFFER ) ) {
-            // buffer is too big (low on memory) so use small buffer
-            buff_size = MIN_BUFFER;
-            io = FMemAlloc( sizeof( b_file ) );
-        }
+        io = MemAllocSafe( sizeof( b_file ) );
+        buffered = true;
     }
     if( io == NULL ) {
         fclose( fp );
         FSetErr( FILEIO_NO_MEM, NULL );
     } else {
-        if( mode[0] == 'w' )
-            attrs |= WRITE_ONLY;
-        io->attrs = attrs;
         io->fp = fp;
-        io->phys_offset = 0;
-        if( attrs & BUFFERED ) {
+        io->buffered = buffered;
+        if( buffered ) {
             io->b_curs = 0;
             io->read_len = 0;
-            io->buff_size = buff_size;
-            io->high_water = 0;
         }
         FSetIOOk( io );
     }
@@ -125,6 +107,6 @@ void    Closef( b_file *io )
         FSetSysErr( io );
         return;
     }
-    FMemFree( io );
+    MemFree( io );
     FSetIOOk( NULL );
 }

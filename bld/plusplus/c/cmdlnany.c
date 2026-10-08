@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -366,7 +366,7 @@ char *SetStringOption( char **o, OPT_STRING **h )
     p = NULL;
     if( s != NULL ) {
         if( s->data[0] != '\0' ) {
-            p = CMemStrDup( s->data );
+            p = CMemStrdup( s->data );
         }
         OPT_CLEAN_STRING( h );
     }
@@ -415,13 +415,28 @@ void ConcatBase10( char *buff, unsigned num )
     sprintf( dest, "%u", num );
 }
 
-void SetTargetLiteral( char **n, const char *t )
-/**********************************************/
+void SetTargetLiteral( char **target_name, const char *target )
+/*************************************************************/
 {
-    if( *n != NULL ) {
-        CMemFree( *n );
+    if( *target_name != NULL ) {
+        CMemFree( *target_name );
     }
-    *n = CMemStrDup( t );
+    *target_name = CMemStrdup( target );
+}
+
+void SetTargetNameBT( char **target_name, OPT_STRING **bt_value )
+/***************************************************************/
+{
+    int             c;
+    char            *p;
+
+    if( *target_name != NULL ) {
+        CMemFree( *target_name );
+    }
+    *target_name = p = SetStringOption( NULL, bt_value );
+    while( (c = *(unsigned char *)p) != '\0' ) {
+        *p++ = (char)toupper( c );
+    }
 }
 
 static void procOptions(        // PROCESS AN OPTIONS LINE
@@ -1057,6 +1072,10 @@ static void analyseAnyTargetOptions( OPT_STORAGE *data )
     }
     if( CompFlags.cpp_mode ) {
         CompFlags.cpp_output = true;
+        CompFlags.quiet_mode = true;
+    }
+    if( data->pm ) {
+        CompFlags.cpp_dump_macros = true;
         CompFlags.quiet_mode = true;
     }
     if( data->p_sharp ) {

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -43,7 +43,7 @@
 #include "testcli.h"
 
 
-bool            byte_swap = false;
+bool            big_endian = false;
 
 dw_client       Client;
 
@@ -131,7 +131,8 @@ static void *CLIAlloc( size_t size ) {
     void        *p;
 
     p = malloc( size );
-    if( p == NULL && size != 0 ) {
+    if( p == NULL
+      && size != 0 ) {
         fputs( "out of memory!\n", stderr );
         exit( 1 );
     }
@@ -150,9 +151,10 @@ int  main( void )
 {
     dw_init_info        info;
     dw_loc_handle       seg;
-    dw_cu_info          cuinfo;
+    dw_cu_info          cu_info;
     DWSetRtns( dw_cli_funcs, CLIReloc, CLIWrite, CLISeek, CLITell, CLIAlloc, CLIFree );
 
+    info.big_endian = false;
     info.language = DW_LANG_C89;
     info.compiler_options = DW_CM_BROWSER;
     info.producer_name = "testcli";
@@ -168,16 +170,16 @@ int  main( void )
             return( 1 );
         }
         seg = DWLocFini( Client, DWLocInit( Client ) );
-        memset( &cuinfo, 0, sizeof( cuinfo ));
-        cuinfo.source_filename = "foo.bar";
-        cuinfo.directory = "somewhere\\over\\the\\rainbow";
+        memset( &cu_info, 0, sizeof( cu_info ));
+        cu_info.source_filename = "foo.bar";
+        cu_info.directory = "somewhere\\over\\the\\rainbow";
 
-        DWBeginCompileUnit( Client, &cuinfo );
+        DWBeginCompileUnit( Client, &cu_info );
         Test();
         DWEndCompileUnit( Client );
-        cuinfo.source_filename = "empty.unit";
-        cuinfo.directory = "in\\a\\land\\far\\far\\away";
-        DWBeginCompileUnit( Client, &cuinfo );
+        cu_info.source_filename = "empty.unit";
+        cu_info.directory = "in\\a\\land\\far\\far\\away";
+        DWBeginCompileUnit( Client, &cu_info );
         DWEndCompileUnit( Client );
         DWLocTrash( Client, seg );
         DWFini( Client );

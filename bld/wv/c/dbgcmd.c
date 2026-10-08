@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2024      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2024-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -33,7 +33,7 @@
 #include "dbgdefn.h"
 #include "dbgdata.h"
 #include "dbgerr.h"
-#include "dbgmem.h"
+#include "memfuncs.h"
 #include "liteng.h"
 #include "dbgio.h"
 #include "wspawn.h"
@@ -44,8 +44,10 @@
 #include "dbginit.h"
 
 
-static bool DoneCmd( inp_data_handle buff, inp_rtn_action action )
+static bool DoneCmd( inp_data_handle handle, inp_rtn_action action )
 {
+    char    *buff = (char *)handle;
+
     switch( action ) {
     case INP_RTN_INIT:
         ReScan( buff );
@@ -53,7 +55,7 @@ static bool DoneCmd( inp_data_handle buff, inp_rtn_action action )
     case INP_RTN_EOL:
         return( false );
     case INP_RTN_FINI:
-        DbgFree( buff );
+        MemFree( buff );
         return( true );
     }
     return( false ); // silence compiler
@@ -67,13 +69,13 @@ static void DoOneCmd( void *_cmd )
     if( cmd[0] == NULLCHAR ) {
         DUIDlgTxt( LIT_ENG( Empty ) );
     } else {
-        PushInpStack( cmd, DoneCmd, false );
-        TypeInpStack( INP_DLG_CMD );
+        if( PushInpStack( (inp_data_handle)cmd, DoneCmd, false ) )
+            TypeInpStack( INP_DLG_CMD );
         TBreak();   /* clear any pending terminal interrupts */
     }
 }
 
 void DoCmd( char *cmd )
 {
-    SpawnP( DoOneCmd, cmd );
+    SpawnP( DoOneCmd, (wspawn_parm)cmd );
 }

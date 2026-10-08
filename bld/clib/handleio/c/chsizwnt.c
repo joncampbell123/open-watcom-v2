@@ -32,14 +32,13 @@
 
 
 #include "variety.h"
+#include "seterrno.h"
 #include <unistd.h>
 #include <windows.h>
-#include "rterrno.h"
 #include "iomode.h"
 #include "fileacc.h"
 #include "osver.h"
 #include "rtcheck.h"
-#include "seterrno.h"
 #include "lseek.h"
 #include "thread.h"
 

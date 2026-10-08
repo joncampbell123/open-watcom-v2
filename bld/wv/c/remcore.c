@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,10 +34,10 @@
 #include "dbgdata.h"
 #include "dbgerr.h"
 #include "dbgio.h"
-#include "dbgmem.h"
+#include "memfuncs.h"
 #include "dui.h"
 #include "trapaccs.h"
-#include "madinter.h"
+#include "wvmadcli.h"
 #include "trapglbl.h"
 #include "dbgstk.h"
 #include "dbgexpr.h"
@@ -119,7 +119,7 @@ static size_t MemRead( address addr, void *ptr, size_t size )
 
 void FiniCache( void )
 {
-    _Free( Cache.data );
+    MemFree( Cache.data );
     Cache.data = NULL;
 }
 
@@ -130,7 +130,7 @@ void InitCache( address addr, size_t size )
     if( size == 0 )
         return;
     FiniCache();
-    _Alloc( ptr, size );
+    ptr = MemAlloc( size );
     if( ptr == NULL )
         return;
     Cache.data = ptr;
@@ -577,8 +577,7 @@ unsigned RemoteMachineData( address addr, dig_info_type info_type, dig_elen in_s
         return( 0 );
     len -= sizeof( ret );
     if( len > MData->len ) {
-        new = MData;
-        _Realloc( new, len + sizeof( *MData ) );
+        new = MemRealloc( MData, len + sizeof( *MData ) );
         if( new == NULL )
             return( len );
         MData = new;
@@ -706,7 +705,7 @@ void RemoteGetSysConfig( void )
 bool InitCoreSupp( void )
 {
     if( MData == NULL ) {
-        _Alloc( MData, sizeof( *MData ) );
+        MData = MemAllocSafe( sizeof( *MData ) );
         MData->len = sizeof( MData->data );
         ClearMachineDataCache();
         RemoteGetSysConfig();
@@ -719,6 +718,6 @@ bool InitCoreSupp( void )
 
 void FiniCoreSupp( void )
 {
-    _Free( MData );
+    MemFree( MData );
     MData = NULL;
 }

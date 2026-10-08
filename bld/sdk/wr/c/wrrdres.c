@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -57,12 +58,9 @@ static bool loadResDirFromRES( WRInfo *info, const char *filename, bool *is_wres
     }
 
     if( ok ) {
-        ok = ((info->dir = WResInitDir()) != NULL);
-    }
-
-    if( ok ) {
-        ok = !WResReadDir( fp, info->dir, &dup_discarded );
-        if( ok && dup_discarded ) {
+        if( WResReadDir( fp, &info->dir, &dup_discarded ) ) {
+            ok = false;
+        } else if( dup_discarded ) {
             WRDisplayErrorMsg( WR_DUPRESDISCARD );
         }
     }
@@ -89,7 +87,7 @@ bool WRLoadResourceFromRES( WRInfo *info )
     ok = WRLoadResDirFromRES( info, &is_wres );
 
     if( ok ) {
-        target_os = WResGetTargetOS( info->dir );
+        target_os = info->dir->TargetOS;
         target = WR_INVALID_FILE;
         switch( target_os ) {
         case WRES_OS_WIN16:
@@ -154,7 +152,7 @@ bool WRLoadResourceFrom_RC( WRInfo *info )
     }
 
     if( ok ) {
-        target_os = WResGetTargetOS( info->dir );
+        target_os = info->dir->TargetOS;
         target = WR_INVALID_FILE;
         switch( target_os ) {
         case WRES_OS_WIN16:
@@ -178,7 +176,7 @@ bool WRLoadResourceFrom_RC( WRInfo *info )
     }
 
     if( ok ) {
-        info->internal_filename = WRStrDup( fn_path );
+        info->internal_filename = WRStrdup( fn_path );
         ok = (info->internal_filename != NULL);
     }
 

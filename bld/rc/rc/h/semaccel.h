@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -38,7 +38,7 @@
 
 /**** Semantic structures ****/
 typedef struct FullAccelEntry {
-    bool                Win32;
+    bool                iswin32;
     union {
         AccelTableEntry     entry;
         AccelTableEntry32   entry32;
@@ -83,9 +83,8 @@ extern void                 SemWINWriteAccelEntry( FullAccelEntry entry );
 extern void                 SemWINWriteLastAccelEntry( FullAccelEntry entry );
 
 extern int                  SemOS2StrToAccelEvent( char *string );
-extern FullAccelTableOS2    *SemOS2NewAccelTable( FullAccelEntryOS2 );
 extern FullAccelTableOS2    *SemOS2AddAccelEntry( FullAccelEntryOS2, FullAccelTableOS2 * );
 extern FullAccelEntryOS2    SemOS2MakeAccItem( AccelEvent event, unsigned long idval, FullAccelFlagsOS2 flags );
-extern void                 SemOS2WriteAccelTable( WResID *name, ResMemFlags flags, uint_32 codepage, FullAccelTableOS2 *acctable );
+extern void                 SemOS2WriteAccelTable( WResID *res_id, ResMemFlags res_flags, uint_32 codepage, FullAccelTableOS2 *acctable );
 
 #endif

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -35,14 +35,14 @@
 #include "dbgdata.h"
 #include "dbgwind.h"
 #include "dbgerr.h"
-#include "madinter.h"
+#include "wvmadcli.h"
 #include "namelist.h"
 #include "dbgbrk.h"
 #include "wndsys.h"
 #include "dbgtrace.h"
 #include "dbgmisc.h"
 #include "dipimp.h"
-#include "dipinter.h"
+#include "wvdipcli.h"
 #include "dbgdot.h"
 #include "dbgwfil.h"
 #include "dbgwfunc.h"
@@ -284,7 +284,7 @@ static bool WNDCALLBACK FuncWndEventProc( a_window wnd, gui_event gui_ev, void *
         return( true );
     case GUI_DESTROY :
         NameListFree( NameList( func ) );
-        WndFree( func );
+        MemFree( func );
         return( true );
     }
     return( false );
@@ -313,7 +313,7 @@ wnd_info FuncInfo = {
     NoNextRow,
     NoNotify,
     ChkUpdate,
-    PopUp( FuncMenu )
+    GUI_MENU_ARRAY( FuncMenu )
 };
 
 a_window DoWndFuncOpen( bool is_global, mod_handle mod )
@@ -322,7 +322,7 @@ a_window DoWndFuncOpen( bool is_global, mod_handle mod )
     wnd_class_wv    wndclass;
     const char      *title;
 
-    func = WndMustAlloc( sizeof( func_window ) );
+    func = MemAllocSafe( sizeof( *func ) );
     func->mod = mod;
     if( is_global ) {
         wndclass = WND_GBLFUNCTIONS;

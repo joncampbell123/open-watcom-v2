@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,54 +35,57 @@
 #include "wres.h"
 #include "wresrtns.h"
 
-void __FreeLangList( WResResNode *curres )
+void __FreeLangList( WResResNode *resnode )
+/*****************************************/
 {
-    WResLangNode        *currnode;
-    WResLangNode        *nextnode;
+    WResLangNode        *langnode;
+    WResLangNode        *nextlangnode;
 
-    for( currnode = curres->Head; currnode != NULL; currnode = nextnode ) {
-        nextnode = currnode->Next;
-        WRESFREE( currnode );
+    for( langnode = resnode->Head; langnode != NULL; langnode = nextlangnode ) {
+        nextlangnode = langnode->Next;
+        WRESFREE( langnode );
     }
-    curres->Head = NULL;
-    curres->Tail = NULL;
+    resnode->Head = NULL;
+    resnode->Tail = NULL;
 }
 
-void __FreeResList( WResTypeNode *currtype )
+void __FreeResList( WResTypeNode *typenode )
+/******************************************/
 {
-    WResResNode         *currnode;
-    WResResNode         *nextnode;
+    WResResNode         *resnode;
+    WResResNode         *nextresnode;
 
-    for( currnode = currtype->Head; currnode != NULL; currnode = nextnode ) {
-        nextnode = currnode->Next;
-        __FreeLangList( currnode );
-        WRESFREE( currnode );
+    for( resnode = typenode->Head; resnode != NULL; resnode = nextresnode ) {
+        nextresnode = resnode->Next;
+        __FreeLangList( resnode );
+        WRESFREE( resnode );
     }
 
-    currtype->Head = NULL;
-    currtype->Tail = NULL;
+    typenode->Head = NULL;
+    typenode->Tail = NULL;
 }
 
-void __FreeTypeList( WResDirHead *currdir )
+void __FreeTypeList( WResDir dir )
+/********************************/
 {
-    WResTypeNode        *currtype;
-    WResTypeNode        *nexttype;
+    WResTypeNode        *typenode;
+    WResTypeNode        *nexttypenode;
 
-    for( currtype = currdir->Head; currtype != NULL; currtype = nexttype ) {
-        nexttype = currtype->Next;
-        __FreeResList( currtype );
-        WRESFREE( currtype );
+    for( typenode = dir->Head; typenode != NULL; typenode = nexttypenode ) {
+        nexttypenode = typenode->Next;
+        __FreeResList( typenode );
+        WRESFREE( typenode );
     }
 
-    currdir->Head = NULL;
-    currdir->Tail = NULL;
+    dir->Head = NULL;
+    dir->Tail = NULL;
 }
 
-void WResFreeDir( WResDir currdir )
-/*********************************/
+void WResFreeDir( WResDir dir )
+/*****************************/
 {
-    if( currdir != NULL ) {
-        __FreeTypeList( currdir );
-        WRESFREE( currdir );
+    if( dir != NULL ) {
+        __FreeTypeList( dir );
+        WRESFREE( dir );
     }
 }

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -71,7 +71,7 @@ typedef struct input_queue {
 typedef struct file_list {
     struct file_list    *next;
     union {
-        FILE            *file;
+        FILE            *fp;
         input_queue     *data;
     } u;
     const FNAME         *srcfile;   /* name of include file */
@@ -83,7 +83,6 @@ typedef struct file_list {
 extern void             FreeForceInclude( void );
 
 extern bool             in_prologue;
-extern bool             write_to_file;
 extern bool             CheckSeg;
 extern bool             DefineProc;             // true if the definition of procedure
                                                 // has not ended
@@ -210,7 +209,7 @@ void PushLineQueue( void )
 
     DebugMsg(( "PUSHLINEQUEUE\n" ));
 
-    new = AsmAlloc( sizeof( input_queue ) );
+    new = MemAllocSafe( sizeof( input_queue ) );
     new->next = line_queue;
     new->lines.head = NULL;
     new->lines.tail = NULL;
@@ -233,7 +232,7 @@ bool PopLineQueue( void )
     if( tmp == NULL )
         return( false );
     line_queue = line_queue->next;
-    AsmFree( tmp );
+    MemFree( tmp );
     return( true );
 }
 
@@ -254,12 +253,12 @@ static line_list *enqueue( void )
     line_list   *new;
 
     if( line_queue == NULL ) {
-        line_queue = AsmAlloc( sizeof( input_queue ) );
+        line_queue = MemAllocSafe( sizeof( input_queue ) );
         line_queue->next = NULL;
         line_queue->lines.tail = NULL;
         line_queue->lines.head = NULL;
     }
-    new = AsmAlloc( sizeof( line_list ) );
+    new = MemAllocSafe( sizeof( line_list ) );
     /*
      * add new item to the end of list
      */
@@ -279,7 +278,7 @@ static file_list *push_flist( const char *name, bool is_a_file )
 {
     file_list   *new;
 
-    new = AsmAlloc( sizeof( file_list ) );
+    new = MemAllocSafe( sizeof( file_list ) );
     new->next = file_stack;
     file_stack = new;
     new->line_num = LineNumber;
@@ -344,7 +343,7 @@ void InputQueueLine( const char *line )
 
     DebugMsg(( "QUEUELINE: %s  ( line %lu ) \n", line, LineNumber ));
     new = enqueue();
-    new->line = AsmStrDup( line );
+    new->line = MemStrdupSafe( line );
 }
 
 static FILE *open_file_in_include_path( const char *name, char *fullpath )
@@ -352,7 +351,7 @@ static FILE *open_file_in_include_path( const char *name, char *fullpath )
 {
     char            *path_list;
     char            *p;
-    FILE            *file = NULL;
+    FILE            *fp = NULL;
     char            c;
 
     while( isspace( *name ) )
@@ -374,31 +373,31 @@ static FILE *open_file_in_include_path( const char *name, char *fullpath )
                 *p++ = DIR_SEP;
             }
             strcpy( p, name );
-            file = fopen( fullpath, "r" );
-            if( file != NULL ) {
+            fp = fopen( fullpath, "r" );
+            if( fp != NULL ) {
                 break;
             }
         }
     }
-    return( file );
+    return( fp );
 }
 
 bool InputQueueFile( const char *path )
 /*************************************/
 {
-    FILE        *file;
+    FILE        *fp;
     file_list   *new;
     char        fullpath[ _MAX_PATH ];
     pgroup2     pg;
 
     _splitpath2( path, pg.buffer, &pg.drive, &pg.dir, &pg.fname, &pg.ext );
     _makepath( fullpath, pg.drive, pg.dir, pg.fname, pg.ext );
-    file = fopen( fullpath, "r" );
-    if( file == NULL ) {
+    fp = fopen( fullpath, "r" );
+    if( fp == NULL ) {
         if( IncludePath != NULL ) {
-            file = open_file_in_include_path( path, pg.buffer );
+            fp = open_file_in_include_path( path, pg.buffer );
         }
-        if( file == NULL ) {
+        if( fp == NULL ) {
             AsmErr( CANNOT_OPEN_INCLUDE_FILE, fullpath );
             return( RC_ERROR );
         }
@@ -406,7 +405,7 @@ bool InputQueueFile( const char *path )
     } else {
         new = push_flist( path, true );
     }
-    new->u.file = file;
+    new->u.fp = fp;
     return( RC_OK );
 }
 
@@ -427,8 +426,8 @@ static char *input_get( char *string )
             line_queue->lines.head = inputline->next;
             if( line_queue->lines.head == NULL )
                 line_queue->lines.tail = NULL;
-            AsmFree( inputline->line );
-            AsmFree( inputline );
+            MemFree( inputline->line );
+            MemFree( inputline );
             return( string );
         }
         PopLineQueue();
@@ -437,14 +436,14 @@ static char *input_get( char *string )
     while( file_stack != NULL ) {
         inputfile = file_stack;
         if( inputfile->is_a_file ) {
-            if( get_asmline( string, MAX_LINE_LEN, inputfile->u.file ) ) {
+            if( get_asmline( string, MAX_LINE_LEN, inputfile->u.fp ) ) {
                 LineNumber++;
                 return( string );
             }
             /*
              * EOF is reached
              */
-            fclose( inputfile->u.file );
+            fclose( inputfile->u.fp );
         } else {
             /*
              * this "file" is just a line queue for a macro
@@ -454,16 +453,16 @@ static char *input_get( char *string )
             if( inputline != NULL ) {
                 strcpy( string, inputline->line );
                 inputfile->u.data->lines.head = inputline->next;
-                AsmFree( inputline->line );
-                AsmFree( inputline );
+                MemFree( inputline->line );
+                MemFree( inputline );
                 return( string );
             }
             MacroEnd( false );
-            AsmFree( inputfile->u.data );
+            MemFree( inputfile->u.data );
         }
         file_stack = inputfile->next;
         LineNumber = inputfile->line_num;
-        AsmFree( inputfile );
+        MemFree( inputfile );
     }
     return( NULL );
 }
@@ -482,7 +481,7 @@ char *ReadTextLine( char *string )
     line = input_get( string );
     if( line != NULL )
         return( line );
-    if( !get_asmline( string, MAX_LINE_LEN, AsmFiles.file[ASM] ) ) {
+    if( !get_asmline( string, MAX_LINE_LEN, AsmFiles.fp[ASM] ) ) {
         return( NULL );
     }
     LineNumber++;
@@ -495,6 +494,13 @@ static char *join_multiline_cmds( char *line, size_t max_len )
     size_t  linelen;
     size_t  i;
 
+    /*
+     * Trailing-comma line continuation is accepted in WATCOM and MASM 6
+     * compatible modes. TASM MASM mode follows MASM 5 behavior and treats
+     * the comma as a blank trailing argument (`mymacro 1,`).
+     */
+    if( (Options.mode & (MODE_TASM | MODE_MASM5)) == (MODE_TASM | MODE_MASM5) )
+        return( line );
     linelen = strlen( line );
     /*
      * if the last non-whitespace character is a comma
@@ -584,13 +590,13 @@ void AddItemToIncludePath( const char *path_list, const char *end )
     }
     if( len > 0 ) {
         if( IncludePath == NULL ) {
-            p = IncludePath = AsmAlloc( len + 1 );
+            p = IncludePath = MemAllocSafe( len + 1 );
         } else {
             old_list = IncludePath;
             old_len = strlen( old_list );
-            IncludePath = AsmAlloc( old_len + 1 + len + 1 );
+            IncludePath = MemAllocSafe( old_len + 1 + len + 1 );
             strcpy( IncludePath, old_list );
-            AsmFree( old_list );
+            MemFree( old_list );
             p = IncludePath + old_len;
         }
         do {
@@ -605,7 +611,7 @@ void AddItemToIncludePath( const char *path_list, const char *end )
 void FreeIncludePath( void )
 /**************************/
 {
-    AsmFree( IncludePath );
+    MemFree( IncludePath );
     FreeForceInclude();
 }
 
@@ -639,6 +645,10 @@ static void dbg_output( token_buffer *tokbuf )
                 DebugMsg(( " %d ", tokbuf->tokens[i].u.value ));
                 break;
             case TC_STRING:
+            case TC_STRING_SQUOTE:
+            case TC_STRING_DQUOTE:
+            case TC_STRING_ANGLE:
+            case TC_STRING_BRACE:
                 DebugMsg(( " '%s' ", tokbuf->tokens[i].string_ptr));
                 break;
             case TC_OP_SQ_BRACKET:

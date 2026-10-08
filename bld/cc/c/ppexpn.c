@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -40,42 +40,36 @@
 #include "feprotos.h"
 
 
-#define L                   I64LO32
-#define H                   I64HI32
+#define I64isNegPP(a)       I64isNeg((a).u.sval)
+#define U64isZeroPP(a)      U64isZero((a).u.uval)
+#define U64isntZeroPP(a)    U64isntZero((a).u.uval)
+#define U64isEqPP(a,b)      U64isEq((a).u.uval,(b).u.uval)
 
-#define I64Zero( a )        ( (a).u.uval.u._32[L] == 0 && (a).u.uval.u._32[H] == 0 )
-#define I64NonZero( a )     ( !I64Zero(a) )
-#define U64Zero( a )        ( (a).u.uval.u._32[L] == 0 && (a).u.uval.u._32[H] == 0 )
-#define U64NonZero( a )     ( !U64Zero(a) )
-#define U64Low( a )         ( (a).u.uval.u._32[L] )
-#define U64High( a )        ( (a).u.uval.u._32[H] )
+#define U64LowPP(a)         U64Low((a).u.uval)
 
-#define I64Low( a )         ( (signed_32)(a).u.uval.u._32[L] )
-#define U32ToU64Set( a, b ) U64Set( &((a).u.uval), b, 0 )
+#define Set64ValZeroPP(a)   Set64ValZero((a).u.uval)
+#define Set64Val1mPP(a)     Set64Val1m((a).u.uval)
+#define Set64ValU32PP(a,b)  Set64ValU32((a).u.uval,(b))
 
-#define U64LT( a, b )       ( U64Cmp( &((a).u.uval), &((b).u.uval) ) < 0 )
-#define U64GT( a, b )       ( U64Cmp( &((a).u.uval), &((b).u.uval) ) > 0 )
-#define U64LE( a, b )       ( U64Cmp( &((a).u.uval), &((b).u.uval) ) <= 0 )
-#define U64GE( a, b )       ( U64Cmp( &((a).u.uval), &((b).u.uval) ) >= 0 )
-#define U64EQ( a, b )       ( U64Cmp( &((a).u.uval), &((b).u.uval) ) == 0 )
-#define U64NE( a, b )       ( U64Cmp( &((a).u.uval), &((b).u.uval) ) != 0 )
+#define U64CmpPP(a,b)       U64Cmp(&((a).u.uval),&((b).u.uval))
+#define I64CmpPP(a,b)       I64Cmp(&((a).u.sval),&((b).u.sval))
+#define U64CmpU32PP(a,b)    U64CmpU32((a).u.uval,(b))
 
-#define I64LT( a, b )       ( I64Cmp( &((a).u.sval), &((b).u.sval) ) < 0 )
-#define I64GT( a, b )       ( I64Cmp( &((a).u.sval), &((b).u.sval) ) > 0 )
-#define I64LE( a, b )       ( I64Cmp( &((a).u.sval), &((b).u.sval) ) <= 0 )
-#define I64GE( a, b )       ( I64Cmp( &((a).u.sval), &((b).u.sval) ) >= 0 )
-#define I64EQ( a, b )       ( I64Cmp( &((a).u.sval), &((b).u.sval) ) == 0 )
-#define I64NE( a, b )       ( I64Cmp( &((a).u.sval), &((b).u.sval) ) != 0 )
+#define U64AddEqPP(a,b)     U64AddEq(&((a).u.uval),&((b).u.uval))
+#define U64SubEqPP(a,b)     U64SubEq(&((a).u.uval),&((b).u.uval))
+#define U64MulEqPP(a,b)     U64MulEq(&((a).u.uval),&((b).u.uval))
+#define U64NegEqPP(a)       U64NegEq(&((a).u.uval))
+#define U64AndEqPP(a,b)     U64AndEq((a).u.uval,(b).u.uval)
+#define U64OrEqPP(a,b)      U64OrEq((a).u.uval,(b).u.uval)
+#define U64XorEqPP(a,b)     U64XorEq((a).u.uval,(b).u.uval)
+#define U64NotEqPP(a)       U64NotEq((a).u.uval)
 
-#define U64AddEq(a,b)       U64Add( &((a).u.uval), &((b).u.uval), &((a).u.uval) );
-#define U64SubEq(a,b)       U64Sub( &((a).u.uval), &((b).u.uval), &((a).u.uval) );
-#define U64MulEq(a,b)       U64Mul( &((a).u.uval), &((b).u.uval), &((a).u.uval) );
-#define U64AndEq(a,b)       U64And( &((a).u.uval), &((b).u.uval), &((a).u.uval) );
-#define U64OrEq(a,b)        U64Or(  &((a).u.uval), &((b).u.uval), &((a).u.uval) );
-#define U64XOrEq(a,b)       U64Xor( &((a).u.uval), &((b).u.uval), &((a).u.uval) );
+#define I64ShiftREqPP(a,b)  I64ShiftREq(&((a).u.sval),(b))
+#define U64ShiftREqPP(a,b)  U64ShiftREq(&((a).u.uval),(b))
+#define U64ShiftLEqPP(a,b)  U64ShiftLEq(&((a).u.uval),(b))
 
-#define I64SetZero( a )     ( I32ToI64( 0, &(a).u.sval) );
-#define U64SetZero( a )     ( U32ToU64( 0, &(a).u.uval) );
+#define U64DivPP(a,b,c,d)   U64Div(&((a).u.uval),&((b).u.uval),&((c).u.uval),&((d).u.uval))
+#define I64DivPP(a,b,c,d)   I64Div(&((a).u.sval),&((b).u.sval),&((c).u.sval),&((d).u.sval))
 
 #define LAST_TOKEN_PREC     ARRAY_SIZE( Prec )
 
@@ -95,7 +89,7 @@ typedef struct ppvalue {
         unsigned_64     uval;
         signed_64       sval;
     } u;
-    unsigned            no_sign : 1;
+    bool        no_sign;
 } ppvalue;
 
 typedef struct loc_info {
@@ -271,13 +265,16 @@ static bool PopOperand( ppvalue *p, loc_info *loc )
 static bool CheckToken( TOKEN prev_token )
 /****************************************/
 {
-    if( IS_OPERAND( prev_token ) && IS_OPERAND( CurToken ) ) {
+    if( IS_OPERAND( prev_token )
+      && IS_OPERAND( CurToken ) ) {
         CErr1( ERR_CONSECUTIVE_OPERANDS );  // can't have 2 operands in a row
         return( true );
     }
-    if( ( CurToken == T_PLUS ) || ( CurToken == T_MINUS ) ) {
+    if( ( CurToken == T_PLUS )
+      || ( CurToken == T_MINUS ) ) {
         if( ( prev_token != T_RIGHT_PAREN )
-         && ( !IS_OPERAND( prev_token ) || prev_token == T_START ) ) {
+          && ( !IS_OPERAND( prev_token )
+          || prev_token == T_START ) ) {
             if( CurToken == T_PLUS ) {
                 CurToken = T_UNARY_PLUS;
             } else {
@@ -304,7 +301,7 @@ static bool PpNextToken( void )
 static void unexpectedCurToken( void )
 /************************************/
 {
-    CErr2p( ERR_UNEXPECTED_IN_CONSTANT_EXPRESSION, Tokens[CurToken] );
+    CErr2p( ERR_UNEXPECTED_IN_CONSTANT_EXPRESSION, TokenString[CurToken] );
 }
 
 static double SafeAtof( char *p )
@@ -315,7 +312,8 @@ static double SafeAtof( char *p )
     errno = 0;
     r = atof( p );
     if( errno ) {
-        if( r == 0 && errno == ERANGE ) {
+        if( r == 0
+          && errno == ERANGE ) {
             CErr1( ERR_FLOATING_CONSTANT_UNDERFLOW );
         } else {
             CErr1( ERR_FLOATING_CONSTANT_OVERFLOW );
@@ -333,6 +331,7 @@ static bool COperand( void )
     bool done;
 
     done = false;
+    p.no_sign = false;
     switch( CurToken ) {
     case T_ID:
         loc.locn = SrcFileLoc; // need this to store result
@@ -348,7 +347,7 @@ static bool COperand( void )
                 left_loc = SrcFileLoc;
                 NextToken();    // no need to error check or advance Pos
                 PPControl = old_ppctl;
-                U32ToU64Set( p, MacroLookup( Buffer ) != NULL );
+                Set64ValU32PP( p, MacroLookup( Buffer ) != NULL );
                 NextToken();    // no need to error check or advance Pos
                 if( CurToken != T_RIGHT_PAREN ) {
                     SetErrLoc( &left_loc );
@@ -357,13 +356,12 @@ static bool COperand( void )
                 }
             } else {
                 PPControl = old_ppctl;
-                U32ToU64Set( p, MacroLookup( Buffer ) != NULL );
+                Set64ValU32PP( p, MacroLookup( Buffer ) != NULL );
             }
         } else {
             CWarn2p( ERR_UNDEFD_MACRO_IS_ZERO, Buffer );
-            I64SetZero( p );
+            Set64ValZeroPP( p );
         }
-        p.no_sign = 0;
         if( !done ) {
             PushOperand( p, &loc );
             done = PpNextToken();
@@ -372,8 +370,7 @@ static bool COperand( void )
 #if 0
     case T_FALSE:
     case T_TRUE:
-        I32ToI64( CurToken == T_TRUE, &(p.u.sval) );
-        p.no_sign = 0;
+        Set64ValU32PP( p, CurToken == T_TRUE );
         PushOperandCurLocation( p );
         done = PpNextToken();
         break;
@@ -387,27 +384,18 @@ static bool COperand( void )
             done = true;
             p.u.sval.u._64[0] = (long long)SafeAtof( Buffer );
             // add long double support if available
-            p.no_sign = 0;
             break;
         case TYP_WCHAR:
         case TYP_UCHAR:
         case TYP_USHORT:
         case TYP_UINT:
         case TYP_ULONG:
-            U32ToU64Set( p, Constant );
-            p.no_sign = 1;
-            break;
         case TYP_ULONG64:
-            p.u.uval = Constant64;
-            p.no_sign = 1;
-            break;
-        case TYP_LONG64:
-            p.u.uval = Constant64;
-            p.no_sign = 0;
-            break;
+            p.no_sign = true;
+            /* fall through */
         default:
-            I32ToI64( Constant, &(p.u.sval) );
-            p.no_sign = 0;
+            p.u.uval = Constant64;
+            break;
         }
         if( !done ) {
             PushOperandCurLocation( p );
@@ -416,8 +404,7 @@ static bool COperand( void )
         break;
     default:
         CErr2p( ERR_UNDEFD_MACRO_IS_ZERO, Buffer );
-        I64SetZero( p );
-        p.no_sign = 0;
+        Set64ValZeroPP( p );
         PushOperandCurLocation( p );
         done = PpNextToken();
     }
@@ -472,7 +459,8 @@ static bool CLeftParen( void )
         return( true );
     }
     if( PopOperand( &e1, &e1_info ) ) {
-        if( ( e1_info.pos < Pos ) && ( e1_info.pos > left_info.pos ) ) {
+        if( ( e1_info.pos < Pos )
+          && ( e1_info.pos > left_info.pos ) ) {
             PushOperand( e1, &e1_info );
             return( PpNextToken() );
         }
@@ -500,7 +488,9 @@ static bool CConditional( void )
 
     PopOperator( &op2, &op2_info );
     if( op2 != T_COLON ) {
-        if( ( op2 != T_QUESTION && op2 != T_START ) || CurToken == T_NULL ) {
+        if( ( op2 != T_QUESTION
+          && op2 != T_START )
+          || CurToken == T_NULL ) {
             SetErrLoc( &op2_info.locn );
             CErr1( ERR_CONDITIONAL_MISSING_COLON );
             return( true );
@@ -513,29 +503,34 @@ static bool CConditional( void )
     // always something to pop next, even if its T_START
     PopOperator( &op1, &op1_info );
     if( op1 != T_QUESTION ) {
-        if( ( op1 != T_COLON && op1 != T_START ) || ( CurToken == T_NULL ) ) {
+        if( ( op1 != T_COLON
+          && op1 != T_START )
+          || ( CurToken == T_NULL ) ) {
             SetErrLoc( &op1_info.locn );
             CErr1( ERR_CONDITIONAL_MISSING_QUESTION );
             return( true );
         }
     }
-    if( op2 != T_COLON || op1 != T_QUESTION ) {
+    if( op2 != T_COLON
+      || op1 != T_QUESTION ) {
         PushOperator( op1, &op1_info, Prec[op1] );
         PushOperator( op2, &op2_info, Prec[op2] );
         PushCurToken( Prec[CurToken] );
         return( PpNextToken() );
     }
-    if( PopOperand( &e3, &e3_info ) && ( e3_info.pos > op2_info.pos ) ) {
-        if( PopOperand( &e2, &e2_info ) && ( e2_info.pos < op2_info.pos ) &&
-            ( e2_info.pos > op1_info.pos ) ) {
-            if( PopOperand( &e1, &e1_info ) &&
-                ( e1_info.pos < op1_info.pos ) ) {
-                if( I64NonZero( e1 ) ) {
+    if( PopOperand( &e3, &e3_info )
+      && ( e3_info.pos > op2_info.pos ) ) {
+        if( PopOperand( &e2, &e2_info )
+          && ( e2_info.pos < op2_info.pos )
+          && ( e2_info.pos > op1_info.pos ) ) {
+            if( PopOperand( &e1, &e1_info )
+              && ( e1_info.pos < op1_info.pos ) ) {
+                if( U64isntZeroPP( e1 ) ) {
                     e1.u.sval = e2.u.sval;
                 } else {
                     e1.u.sval = e3.u.sval;
                 }
-                e1.no_sign = e2.no_sign | e3.no_sign;
+                e1.no_sign = e2.no_sign || e3.no_sign;
                 PushOperand( e1, &e1_info );
                 return( false );
             } else {
@@ -563,16 +558,18 @@ static bool Binary( TOKEN *token, ppvalue *e1, ppvalue *e2, loc_info *loc )
 
 
     PopOperator( token, loc );
-    if( PopOperand( e2, &e2_info ) && ( e2_info.pos > loc->pos ) ) {
-        if( PopOperand( e1, &e1_info ) && ( e1_info.pos < loc->pos ) ) {
+    if( PopOperand( e2, &e2_info )
+      && ( e2_info.pos > loc->pos ) ) {
+        if( PopOperand( e1, &e1_info )
+          && ( e1_info.pos < loc->pos ) ) {
             return( true );
         } else {
             SetErrLoc( &loc->locn );
-            CErr2p( ERR_BINARY_MISSING_LEFT_OPERAND, Tokens[*token] );
+            CErr2p( ERR_BINARY_MISSING_LEFT_OPERAND, TokenString[*token] );
         }
     } else {
         SetErrLoc( &loc->locn );
-        CErr2p( ERR_BINARY_MISSING_RIGHT_OPERAND, Tokens[*token] );
+        CErr2p( ERR_BINARY_MISSING_RIGHT_OPERAND, TokenString[*token] );
     }
     return( false );
 }
@@ -588,16 +585,8 @@ static bool CLogicalOr( void )
     TOKEN token;
 
     if( Binary( &token, &e1, &e2, &loc ) ) {
-        if( I64Zero( e1 ) ) {               // e1 is zero, so consider e2
-            if( I64NonZero( e2 ) ) {        // e2 non-zero
-                U32ToU64Set( e1, 1 );       // answer is 1
-            } else {
-                I64SetZero( e1 );
-            }
-        } else {
-            U32ToU64Set( e1, 1 );           // answer is 1
-        }
-        e1.no_sign = 0;
+        Set64ValU32PP( e1, U64isntZeroPP( e1 ) || U64isntZeroPP( e2 ) );
+        e1.no_sign = false;
         PushOperand( e1, &loc );
         return( false );
     }
@@ -615,15 +604,8 @@ static bool CLogicalAnd( void )
     TOKEN token;
 
     if( Binary( &token, &e1, &e2, &loc ) ) {
-        if( I64NonZero( e1 ) ) {            // e1 is non-zero
-            if( I64Zero( e2 ) ) {           // e2 is zero
-                e1.u.sval = e2.u.sval;
-            } else {
-                U32ToU64Set( e1, 1 );       // answer is 1
-            }
-        }
-        // else e1 is already zero
-        e1.no_sign = 0;
+        Set64ValU32PP( e1, U64isntZeroPP( e1 ) && U64isntZeroPP( e2 ) );
+        e1.no_sign = false;
         PushOperand( e1, &loc );
         return( false );
     }
@@ -641,7 +623,7 @@ static bool COr( void )
     TOKEN token;
 
     if( Binary( &token, &e1, &e2, &loc ) ) {
-        U64OrEq( e1, e2 );
+        U64OrEqPP( e1, e2 );
         e1.no_sign |= e2.no_sign;
         PushOperand( e1, &loc );
         return( false );
@@ -660,7 +642,7 @@ static bool CXOr( void )
     TOKEN token;
 
     if( Binary( &token, &e1, &e2, &loc ) ) {
-        U64XOrEq( e1, e2 );
+        U64XorEqPP( e1, e2 );
         e1.no_sign |= e2.no_sign;
         PushOperand( e1, &loc );
         return( false );
@@ -679,7 +661,7 @@ static bool CAnd( void )
     TOKEN token;
 
     if( Binary( &token, &e1, &e2, &loc ) ) {
-        U64AndEq( e1, e2 );
+        U64AndEqPP( e1, e2 );
         e1.no_sign |= e2.no_sign;
         PushOperand( e1, &loc );
         return( false );
@@ -696,16 +678,12 @@ static bool CEquality( void )
     ppvalue e2;
     loc_info loc;
     TOKEN token;
-    int val;
+    bool eq;
 
     if( Binary( &token, &e1, &e2, &loc ) ) {
-        if( token == T_EQ ) {
-            val = I64EQ( e1, e2 );
-        } else {
-            val = I64NE( e1, e2 );
-        }
-        U32ToU64Set( e1, val );
-        e1.no_sign = 0;
+        eq = U64isEqPP( e1, e2 );
+        Set64ValU32PP( e1, ( token == T_EQ ) ? eq : !eq );
+        e1.no_sign = false;
         PushOperand( e1, &loc );
         return( false );
     }
@@ -721,45 +699,31 @@ static bool CRelational( void )
     ppvalue e2;
     loc_info loc;
     TOKEN token;
-    int val;
+    int cmp;
 
     if( Binary( &token, &e1, &e2, &loc ) ) {
+        if( e1.no_sign
+          || e2.no_sign ) {
+            cmp = U64CmpPP( e1, e2 );
+        } else {
+            cmp = I64CmpPP( e1, e2 );
+        }
         switch( token ) {
         case T_LT:
-            if( e1.no_sign || e2.no_sign ) {
-                val = U64LT( e1, e2 );
-            } else {
-                val = I64LT( e1, e2 );
-            }
-            U32ToU64Set( e1, val );
+            Set64ValU32PP( e1, cmp < 0 );
             break;
         case T_LE:
-            if( e1.no_sign || e2.no_sign ) {
-                val = U64LE( e1, e2 );
-            } else {
-                val = I64LE( e1, e2 );
-            }
-            U32ToU64Set( e1, val );
+            Set64ValU32PP( e1, cmp <= 0 );
             break;
         case T_GT:
-            if( e1.no_sign || e2.no_sign ) {
-                val = U64GT( e1, e2 );
-            } else {
-                val = I64GT( e1, e2 );
-            }
-            U32ToU64Set( e1, val );
+            Set64ValU32PP( e1, cmp > 0 );
             break;
         case T_GE:
-            if( e1.no_sign || e2.no_sign ) {
-                val = U64GE( e1, e2 );
-            } else {
-                val = I64GE( e1, e2 );
-            }
-            U32ToU64Set( e1, val );
+            Set64ValU32PP( e1, cmp >= 0 );
             break;
         DbgDefault( "Default in CRelational\n" );
         }
-        e1.no_sign = 0;
+        e1.no_sign = false;
         PushOperand( e1, &loc );
         return( false );
     }
@@ -779,29 +743,25 @@ static bool CShift( void )
     if( Binary( &token, &e1, &e2, &loc ) ) {
         switch( token ) {
         case T_RSHIFT:
-            if( U64Low( e2 ) > 64 || ( U64High( e2 ) != 0 ) ) {
-                if( e1.no_sign ) {
-                    U64SetZero( e1 );
+            if( U64CmpU32PP( e2, 64 ) >= 0 ) {
+                if( !e1.no_sign && I64isNegPP( e1 ) ) {
+                    Set64Val1mPP( e1 );
                 } else {
-                    if( (signed int)U64Low( e1 ) < 0 ) {
-                        U32ToU64Set( e1, -1 );
-                    } else {
-                        U64SetZero( e1 );
-                    }
+                    Set64ValZeroPP( e1 );
                 }
-            } else {
+            } else if( U64isntZeroPP( e2 ) ) {
                 if( e1.no_sign ) {
-                    U64ShiftR( &(e1.u.uval), U64Low( e2 ), &e1.u.uval );
+                    U64ShiftREqPP( e1, U64LowPP( e2 ) );
                 } else {
-                    I64ShiftR( &(e1.u.sval), U64Low( e2 ), &e1.u.sval );
+                    I64ShiftREqPP( e1, U64LowPP( e2 ) );
                 }
             }
             break;
         case T_LSHIFT:
-            if( U64Low( e2 ) > 64 || ( U64High( e2 ) != 0 ) ) {
-                U64SetZero( e1 );
-            } else {
-                U64ShiftL( &(e1.u.uval), U64Low( e2 ), &e1.u.uval );
+            if( U64CmpU32PP( e2, 64 ) >= 0 ) {
+                Set64ValZeroPP( e1 );
+            } else if( U64isntZeroPP( e2 ) ) {
+                U64ShiftLEqPP( e1, U64LowPP( e2 ) );
             }
             break;
         DbgDefault( "Default in CShift\n" );
@@ -825,12 +785,12 @@ static bool CAdditive( void )
     if( Binary( &token, &e1, &e2, &loc ) ) {
         switch( token ) {
         case T_PLUS:
-            U64AddEq( e1, e2 );
+            U64AddEqPP( e1, e2 );
             e1.no_sign |= e2.no_sign;
             break;
         case T_MINUS:
-            U64SubEq( e1, e2 );
-            e1.no_sign = 0;
+            U64SubEqPP( e1, e2 );
+            e1.no_sign = false;
             break;
         DbgDefault( "Default in CAdditive\n" );
         }
@@ -850,32 +810,31 @@ static bool CMultiplicative( void )
     ppvalue e2;
     loc_info loc;
     TOKEN token;
+    ppvalue unused;
 
     if( Binary( &token, &e1, &e2, &loc ) ) {
         switch( token ) {
         case T_TIMES:
-            U64MulEq( e1, e2 );
+            U64MulEqPP( e1, e2 );
             break;
         case T_DIV:
-            if( U64Zero( e2 ) ) {
-                U64SetZero( e1 );
-            } else if( e1.no_sign || e2.no_sign ) {
-                unsigned_64 unused;
-                U64Div( &(e1.u.uval), &(e2.u.uval), &(e1.u.uval), &unused );
+            if( U64isZeroPP( e2 ) ) {
+                Set64ValZeroPP( e1 );
+            } else if( e1.no_sign
+              || e2.no_sign ) {
+                U64DivPP( e1, e2, e1, unused );
             } else {
-                signed_64 unused;
-                I64Div( &((e1).u.sval), &((e2).u.sval), &((e1).u.sval), &unused );
+                I64DivPP( e1, e2, e1, unused );
             }
             break;
         case T_PERCENT:
-            if( U64Zero( e2 ) ) {
-                U64SetZero( e1 );
-            } else if( e1.no_sign || e2.no_sign ) {
-                unsigned_64 unused;
-                U64Div( &(e1.u.uval), &(e2.u.uval), &unused, &e1.u.uval );
+            if( U64isZeroPP( e2 ) ) {
+                Set64ValZeroPP( e1 );
+            } else if( e1.no_sign
+              || e2.no_sign ) {
+                U64DivPP( e1, e2, unused, e1 );
             } else {
-                signed_64 unused;
-                I64Div( &(e1.u.sval), &(e2.u.sval), &unused, &e1.u.sval );
+                I64DivPP( e1, e2, unused, e1 );
             }
             break;
         DbgDefault( "Default in CMultiplicative\n" );
@@ -898,33 +857,29 @@ static bool CUnary( void )
     TOKEN top;
 
     PopOperator( &top, &operator_info );
-    if( PopOperand( &p, &operand_info ) &&
-        ( operator_info.pos < operand_info.pos ) ) {
+    if( PopOperand( &p, &operand_info )
+      && ( operator_info.pos < operand_info.pos ) ) {
         switch( top ) {
         case T_UNARY_PLUS:
             break;
         case T_UNARY_MINUS:
-            U64Neg( &((p).u.uval), &((p).u.uval ) );
+            U64NegEqPP( p );
             break;
         case T_EXCLAMATION:
 //        case T_ALT_EXCLAMATION:
-            if( I64Zero( p ) ) {
-                U32ToU64Set( p, 1 );
-            } else {
-                I64SetZero( p );
-            }
-            p.no_sign = 0;
+            Set64ValU32PP( p, U64isZeroPP( p ) );
+            p.no_sign = false;
             break;
         case T_TILDE:
 //        case T_ALT_TILDE:
-            U64Not( &(p.u.sval), &(p.u.sval) );
+            U64NotEqPP( p );
             break;
         DbgDefault( "Default in CUnary\n" );
         }
         PushOperand( p, &operator_info );
     } else {
         SetErrLoc( &operator_info.locn );
-        CErr2p( ERR_UNARY_OPERATOR_MISSING_OPERAND, Tokens[top] );
+        CErr2p( ERR_UNARY_OPERATOR_MISSING_OPERAND, TokenString[top] );
         return( true );
     }
     return( false );
@@ -951,7 +906,8 @@ static void stringize( char *s )
     d = s;
     while( *s != '\0' ) {
         if( s[0] == '\\' ) {
-            if( s[1] == '\\' || s[1] == '\"' ) {
+            if( s[1] == '\\'
+              || s[1] == '\"' ) {
                 s++;
             }
         }
@@ -969,7 +925,7 @@ TOKEN Process_Pragma( bool internal )
         if( CurToken == T_STRING ) {
             char    *token_buf;
 
-            token_buf = CMemStrDup( Buffer );
+            token_buf = CMemStrdup( Buffer );
             PpNextToken();
             if( CurToken == T_RIGHT_PAREN ) {
                 ppctl_t old_ppctl;
@@ -1031,7 +987,7 @@ static void PrecedenceParse( ppvalue *p )
     loc_info loc;
     unsigned error_info;
 
-    U32ToU64Set( *p, 0 );    //default value
+    Set64ValZeroPP( *p );  // default value 0
 
     if( CurToken == T_NULL ) {
         unexpectedCurToken();
@@ -1058,7 +1014,8 @@ static void PrecedenceParse( ppvalue *p )
             if( CurToken < LAST_TOKEN_PREC ) {
                 prec_token = Prec[CurToken];
                 if( prec_token < prec_operator
-                  || ( ( prec_token == prec_operator ) && ( prec_token != PREC_UNARY ) ) ) {
+                  || ( ( prec_token == prec_operator )
+                  && ( prec_token != PREC_UNARY ) ) ) {
                     done = CExpr[prec_operator](); // reduce
                 } else {
                     PushCurToken( prec_token ); // shift
@@ -1096,7 +1053,7 @@ bool PpConstExpr( void )
     ppvalue val;
 
     PrecedenceParse( &val );
-    return( I64NonZero( val ) );
+    return( U64isntZeroPP( val ) );
 }
 
 void InitPPexpn( void )

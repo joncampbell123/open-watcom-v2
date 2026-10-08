@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2004-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2004-2026 The Open Watcom Contributors. All Rights Reserved.
 *
 *  ========================================================================
 *
@@ -171,14 +171,16 @@ bool process_tag( gtentry *ge, mac_entry * me )
 {
     bool            processed;
     char            longwork[NUM2STR_LENGTH + 1];
-    char        *   p;
-    char        *   p2;
-    char        *   pa;
+    char            *p;
+    char            *p2;
+    char            *pa;
     char            quote;
-    gaentry     *   ga;
-    gavalentry  *   gaval;
-    inp_line    *   pline;
+    gaentry         *ga;
+    gavalentry      *gaval;
+    inp_line        *pline;
     int             rc;
+    char            *p1;
+    int             c1;
     unsigned        len;
     symdict_hdl     loc_dict;   // for preparing local vars
     char            attname[TAG_ATT_NAME_LENGTH + 1];
@@ -213,7 +215,7 @@ bool process_tag( gtentry *ge, mac_entry * me )
                 *p = '\0';
             }
             strcpy( p, pline->value );
-            mem_free( pline );
+            MemFree( pline );
             p = p2;
         }
     } else if( ge->attribs != NULL
@@ -282,7 +284,10 @@ bool process_tag( gtentry *ge, mac_entry * me )
                                 continue;
                             }
                             if( ga->attflags & GAFLG_upper ) {// uppercase option
-                                strupr( token_buf );
+                                p1 = token_buf;
+                                while( (c1 = *(unsigned char *)p1) != '\0' ) {
+                                    *p1++ = toupper( c1 );
+                                }
                             }
 
                             g_scan_err = check_att_value( ga, ge, loc_dict );

@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -32,10 +33,8 @@
 #ifndef SEMMENUW_INCLUDED
 #define SEMMENUW_INCLUDED
 
-extern MenuFlags    SemWINAddFirstMenuOption( YYTOKENTYPE token );
 extern MenuFlags    SemWINAddMenuOption( MenuFlags oldflags, YYTOKENTYPE token );
-extern FullMenu     *SemWINNewMenu( FullMenuItem firstitem );
-extern FullMenu     *SemWINAddMenuItem( FullMenu *currmenu, FullMenuItem curritem );
-extern void         SemWINWriteMenu( WResID *name, ResMemFlags flags, FullMenu *menu, YYTOKENTYPE );
+extern FullMenuWIN  *SemWINAddMenuItem( FullMenuWIN *currmenu, FullMenuItemWIN curritem );
+extern void         SemWINWriteMenu( WResID *res_id, ResMemFlags res_flags, FullMenuWIN *menu, bool );
 
 #endif

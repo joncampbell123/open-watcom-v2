@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -49,7 +49,7 @@
 #include "class.h"
 #include "brinfo.h"
 #include "pragdefn.h"
-#include "dumpapi.h"
+#include "dbg.h"
 
 #include "clibext.h"
 
@@ -109,7 +109,6 @@ void DumpClasses( void )
 
     printf( "---\n" );
     for( data = classDataStack; data != NULL; data = data->next ) {
-        extern void DumpFullType( TYPE );
         printf( "%p: ", data );
         DumpFullType( data->type );
         printf( "'%s' "
@@ -1225,7 +1224,7 @@ static void defineInlineFuncsAndDefArgExprs( CLASS_DATA *data )
     }
     SrcFileSetTokenLocn( &locn );
     CurToken = T_RIGHT_BRACE;
-    strcpy( Buffer, Tokens[T_RIGHT_BRACE] );
+    strcpy( Buffer, TokenString[T_RIGHT_BRACE] );
 }
 
 static void checkClassStatus( CLASS_DATA *data )

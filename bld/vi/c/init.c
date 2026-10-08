@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -94,7 +94,7 @@ char *GetConfigFileName( void )
 
 void FiniConfigFileName( void )
 {
-    _MemFreeArray( cfgFN );
+    MemFree( cfgFN );
 
 } /* FiniConfigFileName */
 
@@ -253,7 +253,7 @@ static void doInitializeEditor( int argc, char *argv[] )
             size_t  len;
 
             len = strlen( watcom );
-            edpath = malloc( len + 7 );
+            edpath = MemAlloc( len + 7 );
             if( edpath != NULL ) {
                 strcpy( edpath, watcom );
                 edpath[len++] = FILE_SEP;
@@ -263,7 +263,7 @@ static void doInitializeEditor( int argc, char *argv[] )
                      * Bail out silently on error, as we will get error message later on.
                      */
                 }
-                free( edpath );
+                MemFree( edpath );
             }
         }
     }
@@ -284,7 +284,7 @@ static void doInitializeEditor( int argc, char *argv[] )
     GetCWD1( &CurrentDirectory );
     SetCWD( StartDirectory );
     if( cfgFN == NULL ) {
-        cfgFN = DupString( CFG_NAME );
+        cfgFN = MemStrdupSafe( CFG_NAME );
     }
 
     argv = ExpandEnv( &argc, argv, VIENV );
@@ -310,10 +310,10 @@ static void doInitializeEditor( int argc, char *argv[] )
      * initial configuration
      */
     strcpy( EditVars.Majick.str, "()~@" );
-    EditVars.FileEndString = DupString( "[END_OF_FILE]" );
+    EditVars.FileEndString = MemStrdupSafe( "[END_OF_FILE]" );
     MatchInit();
     SetGadgetString( NULL );
-    WorkLine = MemAlloc( sizeof( line ) + EditVars.MaxLineLen + 2 );
+    WorkLine = MemAllocSafe( sizeof( line ) + EditVars.MaxLineLen + 2 );
     WorkLine->len = -1;
 
     sline = 0;
@@ -349,21 +349,21 @@ static void doInitializeEditor( int argc, char *argv[] )
      * more misc. setup
      */
     if( EditVars.WordDefn == NULL ) {
-        EditVars.WordDefn = DupString( &WordDefnDefault[6] );
+        EditVars.WordDefn = MemStrdupSafe( &WordDefnDefault[6] );
         InitWordSearch( EditVars.WordDefn );
     }
     if( EditVars.WordAltDefn == NULL ) {
-        EditVars.WordAltDefn = DupString( WordDefnDefault );
+        EditVars.WordAltDefn = MemStrdupSafe( WordDefnDefault );
     }
     if( EditVars.TagFileName == NULL ) {
-        EditVars.TagFileName = DupString( "tags" );
+        EditVars.TagFileName = MemStrdupSafe( "tags" );
     }
-    DotBuffer = _MemAllocArray( vi_key, maxdotbuffer + 2 );
-    AltDotBuffer = _MemAllocArray( vi_key, maxdotbuffer + 2 );
-    DotCmd = _MemAllocArray( vi_key, maxdotbuffer + 2 );
+    DotBuffer = _MemAllocArraySafe( vi_key, maxdotbuffer + 2 );
+    AltDotBuffer = _MemAllocArraySafe( vi_key, maxdotbuffer + 2 );
+    DotCmd = _MemAllocArraySafe( vi_key, maxdotbuffer + 2 );
     SwapBlockInit( EditVars.MaxSwapBlocks );
-    ReadBuffer = _MemAllocArray( char, MAX_IO_BUFFER + 6 );
-    WriteBuffer = _MemAllocArray( char, MAX_IO_BUFFER + 6 );
+    ReadBuffer = _MemAllocArraySafe( char, MAX_IO_BUFFER + 6 );
+    WriteBuffer = _MemAllocArraySafe( char, MAX_IO_BUFFER + 6 );
     HistInit();
     GetClockStart();
     GetSpinStart();
@@ -504,7 +504,7 @@ static void doInitializeEditor( int argc, char *argv[] )
                 break;
             }
         }
-        _MemFreePtrArray( list, ocnt, MemFree );
+        MemFreePtrArray( (void **)list, ocnt, MemFree );
         if( EditFlags.BreakPressed ) {
             ClearBreak();
             break;
@@ -575,7 +575,7 @@ static void doInitializeEditor( int argc, char *argv[] )
         LoadHistory( cmd );
     }
     if( EditVars.GrepDefault == NULL ) {
-        EditVars.GrepDefault = DupString( "*.(c|h)" );
+        EditVars.GrepDefault = MemStrdupSafe( "*.(c|h)" );
     }
     if( goCmd[0] != '\0' ) {
         KeyAddString( goCmd );
@@ -597,7 +597,7 @@ static void doInitializeEditor( int argc, char *argv[] )
     GlobVarAddStr( GLOBVAR_OS386, "1" );
 #endif
     if( EditVars.StatusString == NULL ) {
-        EditVars.StatusString = DupString( "L:$6L$nC:$6C" );
+        EditVars.StatusString = MemStrdupSafe( "L:$6L$nC:$6C" );
     }
     UpdateStatusWindow();
 #ifdef __WIN__

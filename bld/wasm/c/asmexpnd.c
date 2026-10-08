@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -48,7 +48,7 @@
 
 #define    MAX_EQU_NESTING      20
 
-static label_list *label_cmp( char *name, label_list *head )
+static label_list *label_cmp( const char *name, label_list *head )
 {
     label_list  *curr;
 
@@ -61,25 +61,40 @@ static label_list *label_cmp( char *name, label_list *head )
 }
 
 
-void AddTokens( token_buffer *tokbuf, token_idx start, token_idx count )
-/**********************************************************************/
+static void ReplaceTokenAt( token_buffer *tokbuf, token_idx start, const_info *constinfo )
+/****************************************************************************************/
 {
     token_idx   i;
 
-    if( count > 0 ) {
-        for( i = tokbuf->count; i >= start; i-- ) {
-            tokbuf->tokens[i + count] = tokbuf->tokens[i];
-        }
-        tokbuf->count += count;
+    if( tokbuf->count - 1 + constinfo->count > MAX_TOKEN_COUNT ) {
+        Fatal( TOO_MANY_TOKENS );
     }
+    /*
+     * Notes on the following code
+     * - TC_FINAL at the end must also be moved
+     * - token at the start position is not moved, it will be replaced
+     */
+    for( i = tokbuf->count; i > start; --i ) {
+        tokbuf->tokens[i + constinfo->count - 1] = tokbuf->tokens[i];
+    }
+    for( i = 0; i < constinfo->count; i++ ) {
+        tokbuf->tokens[start + i] = constinfo->tokens[i];
+#ifdef DEBUG_OUT
+        if( tokbuf->tokens[start + i].class == TC_NUM ) {
+            DebugMsg(( " %d", tokbuf->tokens[start + i].u.value ));
+        } else {
+            DebugMsg(( " %s", tokbuf->tokens[start + i].string_ptr ));
+        }
+#endif
+    }
+    DebugMsg(( "\n" ));
+    tokbuf->count = tokbuf->count - 1 + constinfo->count;
 }
 
 bool ExpandSymbol( token_buffer *tokbuf, token_idx i, bool early_only, bool *expanded )
 /*************************************************************************************/
 {
     dir_node_handle     dir;
-    token_idx           j;
-    token_idx           count;
 
     *expanded = false;
     /* expand constant */
@@ -88,19 +103,7 @@ bool ExpandSymbol( token_buffer *tokbuf, token_idx i, bool early_only, bool *exp
         if( dir->e.constinfo->expand_early || !early_only ) {
             DebugMsg(( "Expand Constant: %s ->", dir->sym.name ));
             /* insert the pre-scanned data for this constant */
-            count = dir->e.constinfo->count;
-            AddTokens( tokbuf, i, count - 1 );
-            for( j = 0; j < count; j++ ) {
-                tokbuf->tokens[i + j] = dir->e.constinfo->tokens[j];
-#ifdef DEBUG_OUT
-                if( tokbuf->tokens[i + j].class == TC_NUM ) {
-                    DebugMsg(( " %d", tokbuf->tokens[i + j].u.value ));
-                } else {
-                    DebugMsg(( " %s", tokbuf->tokens[i + j].string_ptr ));
-                }
-#endif
-            }
-            DebugMsg(( "\n" ));
+            ReplaceTokenAt( tokbuf, i, dir->e.constinfo );
             Globals.expand_count++;
             if( Globals.expand_count >= MAX_EQU_NESTING ) {
                 AsmError( NESTING_LEVEL_TOO_DEEP );
@@ -121,25 +124,33 @@ bool ExpandProcString( token_buffer *tokbuf, token_idx index, bool *expanded )
     int                 offset;
     token_idx           left_bracket = 0;
     token_idx           right_bracket = 0;
-    char                *string;
-    char                *word;
-    char                *replace = NULL;
+    const char          *word;
+    const char          *replace = NULL;
     char                buffer[MAX_LINE_LEN];
     label_list          *label = NULL;
     proc_info           *info = CurrProc->e.procinfo;
-    size_t              len;
     char                *p;
+    size_t              len;
 
+    *buffer = '\0';
     *expanded = false;
-    strcpy( buffer, tokbuf->tokens[index].string_ptr );
-    wipe_space( buffer );
-    for( word = strtok( buffer, " \t" ); word != NULL; word = strtok( NULL, " \t" ) ) {
+    word = tokbuf->tokens[index].string_ptr;
+    while( *word != '\0' ) {
+        word += strspn( word, " \t" );
+        len = strcspn( word, " \t" );
+        if( len == 0 ) {
+            *buffer = '\0';
+            break;
+        }
         count++;
+        memcpy( buffer, word, len );
+        buffer[len] = '\0';
+        word += len;
 
         /**/myassert( CurrProc != NULL );
-        label = label_cmp( word, info->params.head );
+        label = label_cmp( buffer, info->params.head );
         if( label == NULL ) {
-            label = label_cmp( word, info->locals.head );
+            label = label_cmp( buffer, info->locals.head );
         }
         if( label != NULL ) {
             if( label->replace != NULL ) {
@@ -221,7 +232,7 @@ bool ExpandProcString( token_buffer *tokbuf, token_idx index, bool *expanded )
     if( replace == NULL )
         return( RC_OK );
 
-    DebugMsg(( "ExpandString: %s -> %s \n", word, replace ));
+    DebugMsg(( "ExpandString: %s -> %s \n", buffer, replace ));
 
     /* now we need to build the new line string to pass through the scanner */
     p = buffer;
@@ -235,37 +246,35 @@ bool ExpandProcString( token_buffer *tokbuf, token_idx index, bool *expanded )
                     continue;   /*yes, skip it */
                 }
             }
-            len = strlen( tokbuf->tokens[i].string_ptr );
-            if( tokbuf->tokens[i].class == TC_STRING )
-                *p++ = '<';
-            p = CATSTR( p, tokbuf->tokens[i].string_ptr, len );
-            if( tokbuf->tokens[i].class == TC_STRING ) {
-                *p++ = '>';
+            if( IS_STRING_TOKEN( tokbuf->tokens[i].class ) ) {
+                p += sprintf( p, "<%s>", tokbuf->tokens[i].string_ptr );
+            } else {
+                p += sprintf( p, "%s", tokbuf->tokens[i].string_ptr );
             }
         } else {
             if( tokbuf->tokens[i].class == TC_PERCENT ) {
                 /* don't save the % */
                 i++;
             }
-
             /* copy the string in ... 1 word at a time */
-            len = strlen( tokbuf->tokens[index].string_ptr ) + 1;
-            string = AsmTmpAlloc( len );
-            memcpy( string, tokbuf->tokens[index].string_ptr, len );
-            wipe_space( string );
-            word = strtok( string, " \t" );
-            for( cnt = 1; cnt < count; cnt++ ) {
-                len = strlen( word );
-                p = CATSTR( p, word, len );
-                *p++ = ' ';
-                word = strtok( NULL, " \t" );
-            }
-            len = strlen( replace );
-            p = CATSTR( p, replace, len );
-            for( word = strtok( NULL, " \t" ); word != NULL; word = strtok( NULL, " \t" ) ) {
-                *p++ = ' ';
-                len = strlen( word );
-                p = CATSTR( p, word, len );
+            cnt = 1;
+            word = tokbuf->tokens[index].string_ptr;
+            while( *word != '\0' ) {
+                word += strspn( word, " \t" );
+                len = strcspn( word, " \t" );
+                if( len == 0 )
+                    break;
+                if( cnt != 1 )
+                    *p++ = ' ';
+                if( cnt == count ) {
+                    strcpy( p, replace );
+                    p += strlen( p );
+                } else {
+                    memcpy( p, word, len );
+                    p += len;
+                }
+                word += len;
+                cnt++;
             }
         }
         *p++ = ' ';
@@ -295,10 +304,10 @@ static void FreeConstData( const_info *constinfo )
                 DebugMsg(( "%s ", constinfo->tokens[i].string_ptr ));
             }
 #endif
-            AsmFree( constinfo->tokens[i].string_ptr );
+            MemFree( constinfo->tokens[i].string_ptr );
         }
         DebugMsg(( "\n" ));
-        AsmFree( constinfo->tokens );
+        MemFree( constinfo->tokens );
     }
 }
 
@@ -333,7 +342,7 @@ bool StoreConstantNumber( const char *name, long value, bool redefine )
             return( RC_ERROR );
         }
     }
-    new = AsmAlloc( sizeof( asm_tok ) );
+    new = MemAllocSafe( sizeof( asm_tok ) );
     memset( new[0].u.bytes, 0, sizeof( new[0].u.bytes ) );
     new[0].class = TC_NUM;
     new[0].u.value = value;
@@ -383,7 +392,7 @@ static bool createconstant( const char *name, bool value, token_buffer *tokbuf, 
             dir->e.constinfo->tokens[0].u.value = 1;
         } else {
             /* just define it to be 1 and get out */
-            new = AsmAlloc( sizeof( asm_tok ) );
+            new = MemAllocSafe( sizeof( asm_tok ) );
             memset( new[0].u.bytes, 0, sizeof( new[0].u.bytes ) );
             new[0].class = TC_NUM;
             new[0].u.value = 1;
@@ -408,7 +417,7 @@ static bool createconstant( const char *name, bool value, token_buffer *tokbuf, 
             return( RC_ERROR );
 
         for( counta = 0, i = start; tokbuf->tokens[i].class != TC_FINAL; i++ ) {
-            if( ( tokbuf->tokens[i].class != TC_STRING ) || ( tokbuf->tokens[i].u.value != 0 ) ) {
+            if( !IS_STRING_TOKEN( tokbuf->tokens[i].class ) || ( tokbuf->tokens[i].u.value != 0 ) ) {
                 counta++;
             }
         }
@@ -420,12 +429,16 @@ static bool createconstant( const char *name, bool value, token_buffer *tokbuf, 
         count = 0;
         can_be_redefine = true;
     } else {
-        new = AsmAlloc( counta * sizeof( asm_tok ) );
+        new = MemAllocSafe( counta * sizeof( asm_tok ) );
         can_be_redefine = ( counta > 1 );
     }
     for( i = 0; i < count; i++ ) {
         switch( tokbuf->tokens[start + i].class ) {
         case TC_STRING:
+        case TC_STRING_SQUOTE:
+        case TC_STRING_DQUOTE:
+        case TC_STRING_ANGLE:
+        case TC_STRING_BRACE:
             if( count != 1 && tokbuf->tokens[start + i].u.value == 0 ) {
                 i--;
                 count--;
@@ -458,7 +471,7 @@ static bool createconstant( const char *name, bool value, token_buffer *tokbuf, 
         }
         new[i].class = tokbuf->tokens[start + i].class;
         memcpy( new[i].u.bytes, tokbuf->tokens[start + i].u.bytes, sizeof( new[i].u.bytes ) );
-        new[i].string_ptr = AsmStrDup( tokbuf->tokens[start + i].string_ptr );
+        new[i].string_ptr = MemStrdupSafe( tokbuf->tokens[start + i].string_ptr );
     }
     if( new_constant && can_be_redefine )
         dir->e.constinfo->redefine = true;
@@ -473,7 +486,7 @@ bool DefineConstant( token_buffer *tokbuf, token_idx i, bool redefine, bool expa
  * if expand_early is true, expand before doing any parsing
  */
 {
-    char                *name;
+    const char          *name;
 
     if( i != 0 ) {
         AsmError( SYNTAX_ERROR );

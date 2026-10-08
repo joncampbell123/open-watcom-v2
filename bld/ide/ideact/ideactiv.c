@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2025      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2025-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -36,7 +36,9 @@
 #define INCLUDE_COMMDLG_H
 #include <wwindows.h>
 #include "ideactiv.h"
-#include "wclbproc.h"
+#ifdef __WINDOWS__
+    #include "wclbproc.h"
+#endif
 
 
 /* Local Windows CALLBACK function prototypes */
@@ -67,12 +69,19 @@ WINEXPORT BOOL CALLBACK FindWatIDEHwnd( HWND hwnd, LPARAM lparam )
 void StartIDE( HANDLE instance, bool dospawn )
 {
     bool        found;
-    WNDENUMPROC wndenumproc;
 
     found = false;
-    wndenumproc = MakeProcInstance_WNDENUM( FindWatIDEHwnd, instance );
-    EnumWindows( wndenumproc, (LPARAM)&found );
-    FreeProcInstance_WNDENUM( wndenumproc );
+#ifdef __WINDOWS__
+    {
+        WNDENUMPROC wndenumproc = MakeProcInstance_WNDENUM( FindWatIDEHwnd, instance );
+        EnumWindows( wndenumproc, (LPARAM)&found );
+        FreeProcInstance_WNDENUM( wndenumproc );
+    }
+#else
+    /* unused parameters */ (void)instance;
+
+    EnumWindows( FindWatIDEHwnd, (LPARAM)&found );
+#endif
     if( !found && dospawn ) {
         WinExec( "IDE.EXE", SW_SHOW );
     }

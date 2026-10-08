@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -31,6 +31,8 @@
 
 
 #include "cvars.h"
+#include "i64.h"
+
 
 extern  unsigned SymTypedef;
 
@@ -453,6 +455,9 @@ static void DeclSpecifiers( bool *plain_int, decl_info *info )
         case T___INLINE:
             flags |= FLAG_INLINE;
             break;
+        case T__NORETURN:
+            flags |= FLAG_NORETURN;
+            break;
         case T__PACKED:
             if( packed )
                 CErr1( ERR_REPEATED_MODIFIER );
@@ -550,9 +555,12 @@ static void DeclSpecifiers( bool *plain_int, decl_info *info )
                         } else {
                             info->naked = true;
                         }
-                    } else if( strcmp( Buffer, "aborts" ) == 0 ) {
+                    } else if( strcmp( Buffer, "aborts" ) == 0
+                      || strcmp( Buffer, "__aborts" ) == 0 ) {
                         modifier = FLAG_ABORTS;
-                    } else if( strcmp( Buffer, "noreturn" ) == 0 ) {
+                    } else if( strcmp( Buffer, "noreturn" ) == 0
+                      || strcmp( Buffer, "__noreturn" ) == 0
+                      || strcmp( Buffer, "_Noreturn" ) == 0 ) {
                         modifier = FLAG_NORETURN;
                     } else if( strcmp( Buffer, "farss" ) == 0 ) {
                         modifier = FLAG_FARSS;
@@ -586,11 +594,7 @@ static void DeclSpecifiers( bool *plain_int, decl_info *info )
                     }
                 }
                 if( modifier & FLAG_NORETURN ) {
-                    if( info->decl_mod & FLAG_NORETURN ) {
-                        CErr1( ERR_INVALID_DECLSPEC );
-                    } else {
-                        info->decl_mod |= modifier;
-                    }
+                    info->decl_mod |= modifier;
                 }
                 if( modifier & FLAG_FARSS ) {
                     if( info->decl_mod & FLAG_FARSS ) {
@@ -1095,19 +1099,21 @@ static target_size GetFields( TYPEPTR decl )
                 CheckBitfieldType( typ );
                 NextToken();
                 ConstExprAndType( &cval );
-                bits_width = 0;
-                if( (cval.value.u._32[I64HI32] | cval.value.u._32[I64LO32]) == 0
+                bits_width = bits_total;
+                if( bits_width > TARGET_BITFIELD * CHAR_BIT )
+                    bits_width = TARGET_BITFIELD * CHAR_BIT;
+                if( U64isZero( cval.value )
                   && field != NULL ) {
                     CErr1( ERR_WIDTH_0 );
-                } else if( (int)cval.value.u._32[I64HI32] < 0 ) {
+                    bits_width = 0;
+                } else if( I64isNeg( cval.value ) ) {
                     CErr1( ERR_WIDTH_NEGATIVE );
-                } else if( cval.value.u._32[I64HI32] > 0
-                  || cval.value.u._32[I64LO32] > ( TARGET_BITFIELD * CHAR_BIT )
-                  || cval.value.u._32[I64LO32] > bits_total ) {
+                    bits_width = 0;
+                } else if( U64CmpU32( cval.value, bits_width ) > 0 ) {
                     CErr1( ERR_FIELD_TOO_WIDE );
                     bits_width = TARGET_BITFIELD * CHAR_BIT;
                 } else {
-                    bits_width = cval.value.u._32[I64LO32];
+                    bits_width = U64Low( cval.value );
                 }
                 if( bits_width > bits_available || bits_width == 0 ) {
                     scalar_size = TypeSize( typ );

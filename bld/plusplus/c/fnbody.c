@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -1729,8 +1729,29 @@ void FunctionBodyStartup(       // COMMON START-UP FOR ALL COMPILED FUNCTIONS
     FUNCTION_DATA *f,           // - function data for current function
     enum special_func flags )   // - extra flags
 {
+    TOKEN_LOCN  *locn;
+
     initFunctionData( func, f );
-    doFnStartup( func, f, NULL, &func->locn->tl, flags );
+    if( func->locn != NULL ) {
+        locn = &func->locn->tl;
+    } else {
+        /*
+         * handling internal symbols which have no location in source file
+         * in the future can be defined some derived location
+         * for now this handle missing symbol source file location
+         */
+        locn = NULL;
+    }
+    doFnStartup( func, f, NULL, locn, flags );
+}
+
+void FunctionBodyStartupNoloc(  // START-UP FOR INTERNAL FUNCTIONS
+    SYMBOL func,                // - function being compiled
+    FUNCTION_DATA *f,           // - function data for current function
+    enum special_func flags )   // - extra flags
+{
+    initFunctionData( func, f );
+    doFnStartup( func, f, NULL, NULL, flags );
 }
 
 static void flushToDepth1( FUNCTION_DATA *f )
@@ -1808,10 +1829,10 @@ static TOKEN_LOCN *posnForFunction( // GET SOURCE POSITION FOR FUNCTION
     TOKEN_LOCN *srcposn;        // - source position
 
     tree = dinfo->id;
-    if( tree == NULL ) {
-        srcposn = NULL;
-    } else {
+    if( tree != NULL ) {
         srcposn = &tree->locn;
+    } else {
+        srcposn = NULL;
     }
     return( srcposn );
 }

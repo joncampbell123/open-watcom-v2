@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,22 +35,22 @@
 #include "sslint.h"
 
 
-static void Action( symbol *, instruction * );
+static void Action( symbol *, instruction *lbl );
 
 static void Cycle( symbol *rule )
 {
-    instruction      *top;
-    instruction      *bot;
+    instruction      *lbl_top;
+    instruction      *lbl_bot;
 
     Scan();
-    top = GenNewLbl();
-    GenLabel( top );
-    bot = GenNewLbl();
+    lbl_top = NewLabel();
+    GenLabel( lbl_top );
+    lbl_bot = NewLabel();
     do {
-        Action( rule, bot );
+        Action( rule, lbl_bot );
     } while( CurrToken != T_RITE_BRACE );
-    GenJump( top );
-    GenLabel( bot );
+    GenJump( lbl_top );
+    GenLabel( lbl_bot );
     Scan();
 }
 
@@ -77,16 +78,16 @@ static void SemCall( symbol *call )
 }
 
 
-static void Choice( symbol *rule, instruction *exit )
+static void Choice( symbol *rule, instruction *lbl_exit )
 {
     instruction *choice = NULL;
-    instruction *def_lbl;
+    instruction *lbl_def;
     bool        def;
-    class       typ = 0;
-    unsigned    first_value = 0;
-    instruction *first_lbl;
-    instruction *bot;
-    instruction *lbl;
+    ssl_class   typ = CLASS_INPUT;
+    int         first_value = 0;
+    instruction *lbl_first;
+    instruction *lbl_bot;
+    instruction *lbl_curr;
     symbol      *ret = NULL;
     symbol      *call = NULL;
     symbol      *sym;
@@ -102,7 +103,7 @@ static void Choice( symbol *rule, instruction *exit )
         Scan();
         call = Lookup( CLASS_RULE );
         ret = call->v.rule.ret;
-        if( call->v.rule.defined & (ret == NULL) ) {
+        if( call->v.rule.defined && ( ret == NULL ) ) {
             Error( "rule has no return type" );
         }
         Scan();
@@ -120,32 +121,32 @@ static void Choice( symbol *rule, instruction *exit )
         typ = CLASS_ENUMS;
         break;
     }
-    bot = GenNewLbl();
-    def_lbl = GenNewLbl();
-    GenJump( def_lbl );
+    lbl_bot = NewLabel();
+    lbl_def = NewLabel();
+    GenJump( lbl_def );
     def = false;
-    first_lbl = NULL;
+    lbl_first = NULL;
     while( CurrToken == T_OR ) {
-        lbl = GenNewLbl();
+        lbl_curr = NewLabel();
         Scan();
         for( ;; ) {
             if( CurrToken == T_STAR ) {
                 if( def )
                     Error( "default case already processed" );
                 def = true;
-                GenLabel( def_lbl );
+                GenLabel( lbl_def );
             } else {
                 sym = Lookup( typ );
                 if( typ == CLASS_INPUT ) {
-                    GenTblLabel( choice, lbl, sym->v.token );
-                    if( first_lbl == NULL ) {
-                        first_lbl = lbl;
+                    GenTblLabel( choice, lbl_curr, sym->v.token );
+                    if( lbl_first == NULL ) {
+                        lbl_first = lbl_curr;
                         first_value = sym->v.token;
                     }
                 } else if( sym->v.enums.type == ret ) {
-                    GenTblLabel( choice, lbl, sym->v.enums.value );
-                    if( first_lbl == NULL ) {
-                        first_lbl = lbl;
+                    GenTblLabel( choice, lbl_curr, sym->v.enums.value );
+                    if( lbl_first == NULL ) {
+                        lbl_first = lbl_curr;
                         first_value = sym->v.enums.value;
                     }
                 } else if( ret == NULL ) {
@@ -162,29 +163,29 @@ static void Choice( symbol *rule, instruction *exit )
             Scan();
         }
         WantColon();
-        GenLabel( lbl );
+        GenLabel( lbl_curr );
         while( CurrToken != T_OR && CurrToken != T_RITE_BRACKET ) {
-            Action( rule, exit );
+            Action( rule, lbl_exit );
         }
         if( CurrToken == T_RITE_BRACKET )
             break;
-        GenJump( bot );
+        GenJump( lbl_bot );
     }
     if( !def ) {
-        GenJump( bot );
-        GenLabel( def_lbl );
+        GenJump( lbl_bot );
+        GenLabel( lbl_def );
         if( typ == CLASS_INPUT ) {
             GenInput( first_value );
-            GenJump( first_lbl );
+            GenJump( lbl_first );
         } else {
             GenKill();
         }
     }
-    GenLabel( bot );
+    GenLabel( lbl_bot );
     Scan();
 }
 
-static void Action( symbol *rule, instruction *exit )
+static void Action( symbol *rule, instruction *lbl_exit )
 {
     symbol      *sym;
     symbol      *call;
@@ -223,13 +224,13 @@ static void Action( symbol *rule, instruction *exit )
         Cycle( rule );
         break;
     case T_GT:
-        if( exit == NULL )
+        if( lbl_exit == NULL )
             Error( "no cycle to exit from" );
-        GenJump( exit );
+        GenJump( lbl_exit );
         Scan();
         break;
     case T_LEFT_BRACKET:
-        Choice( rule, exit );
+        Choice( rule, lbl_exit );
         break;
     case T_AT:
         Scan();
@@ -257,7 +258,7 @@ static void Action( symbol *rule, instruction *exit )
     }
 }
 
-void Rules(void)
+void Rules( void )
 {
     symbol      *sym;
     symbol      *ret;
@@ -269,7 +270,7 @@ void Rules(void)
         if( sym->v.rule.defined ) {
             Error( "multiple definitions" );
         }
-        sym->v.rule.defined = 1;
+        sym->v.rule.defined = true;
         Scan();
         if( CurrToken == T_GT_GT ) {
             Scan();
@@ -285,7 +286,7 @@ void Rules(void)
         WantColon();
         if( CurrToken == T_COLON ) {
             Scan();
-            sym->v.rule.exported = 1;
+            sym->v.rule.exported = true;
             exported = true;
         }
         if( exported ) {
@@ -304,4 +305,4 @@ void Rules(void)
         }
         exported = false;
     } while( CurrToken != T_EOF );
-  }
+}

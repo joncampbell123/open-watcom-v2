@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -64,13 +64,14 @@ void SetQNXFmt( void )
 void FreeQNXFmt( void )
 /*********************/
 {
-    FreeSegFlags( (xxx_seg_flags *)FmtData.u.qnx.seg_flags );
+    FreeSegFlags( FmtData.u.qnx.seg_flags );
 }
 
 void CmdQNXFini( void )
 /*********************/
 {
-    if( !FmtData.u.qnx.gen_linear_relocs && !FmtData.u.qnx.gen_seg_relocs ) {
+    if( !FmtData.u.qnx.gen_linear_relocs
+      && !FmtData.u.qnx.gen_seg_relocs ) {
         LinkState &= ~LS_MAKE_RELOCS;
     }
 }
@@ -96,8 +97,9 @@ static bool ProcPrivilege( void )
     if( !HaveEquals( TOK_NORMAL ) )
         return( false );
     ret = getatoi( &value );
-    if( ret != ST_IS_ORDINAL || value > 3 ) {
-        LnkMsg( LOC+LINE+WRN+MSG_VALUE_INCORRECT, "s", "PRIVILEGE" );
+    if( ret != ST_IS_ORDINAL
+      || value > 3 ) {
+        LnkMsg( WRN+LOC+LINE+MSG_VALUE_INCORRECT, "s", "PRIVILEGE" );
     } else {
         FmtData.u.qnx.priv_level = value;
     }
@@ -140,8 +142,9 @@ bool ProcQNXHeapSize( void )
     if( !HaveEquals( TOK_NORMAL ) )
         return( false );
     ret = getatol( &value );
-    if( ret != ST_IS_ORDINAL || value == 0 ) {
-        LnkMsg( LOC+LINE+WRN+MSG_VALUE_INCORRECT, "s", "HEAPSIZE" );
+    if( ret != ST_IS_ORDINAL
+      || value == 0 ) {
+        LnkMsg( WRN+LOC+LINE+MSG_VALUE_INCORRECT, "s", "HEAPSIZE" );
     } else {
         FmtData.u.qnx.heapsize = value;
     }
@@ -205,20 +208,21 @@ static parse_entry  QNXSegModel[] = {
 static bool getSegFlags( void )
 /*****************************/
 {
-    bool            isclass;
-    qnx_seg_flags   *entry;
+    bool                isclass;
+    seg_flags_struct    *seg_flags;
 
     Token.thumb = true;
     isclass = ProcOne( QNXSegDesc, SEP_NO );
     if( !GetToken( SEP_NO, TOK_INCLUDE_DOT ) ){
         return( false );
     }
-    _ChkAlloc( entry, sizeof( qnx_seg_flags ) );
-    entry->flags = 0;
-    entry->name = tostring();
-    entry->type = ( isclass ) ? SEGFLAG_CLASS : SEGFLAG_SEGMENT;
-    entry->next = FmtData.u.qnx.seg_flags;
-    FmtData.u.qnx.seg_flags = entry;
+    seg_flags = MemAllocSafe( sizeof( seg_flags_struct ) );
+    seg_flags->specified = SEG_NONE;
+    seg_flags->flags = SEG_NONE;
+    seg_flags->name = getstring();
+    seg_flags->type = ( isclass ) ? SEGFLAG_CLASS : SEGFLAG_SEGMENT;
+    seg_flags->next = FmtData.u.qnx.seg_flags;
+    FmtData.u.qnx.seg_flags = seg_flags;
     return( ProcOne( QNXSegModel, SEP_NO ) );
 }
 

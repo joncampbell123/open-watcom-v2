@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -34,7 +34,7 @@
 #include "dbgdefn.h"
 #include "dbgdata.h"
 #include "liteng.h"
-#include "dbgmem.h"
+#include "memfuncs.h"
 #include "dbgrep.h"
 #include "dbgevent.h"
 #include "dui.h"
@@ -70,9 +70,9 @@ static void FreeOneEvent( event_record *junk )
     owner = FindOwner( junk );
     *owner = junk->next;
     FreeCmdList( junk->cmd );
-    _Free( junk->addr_string );
-    _Free( junk->cue );
-    _Free( junk );
+    MemFree( junk->addr_string );
+    MemFree( junk->cue );
+    MemFree( junk );
 }
 
 void RecordInit( void )
@@ -125,7 +125,7 @@ static void AddEvent( const char *start, size_t len, address ip )
     event_record        *new;
 
     owner = FindOwner( NULL );
-    _Alloc( new, sizeof( *new ) );
+    new = MemAllocSafe( sizeof( *new ) );
     new->addr_string = NULL;
     new->cue = NULL;
     new->next = NULL;
@@ -168,14 +168,16 @@ void RecordStart( void )
     RecordPointStart();
 }
 
-static bool DoneRadix( inp_data_handle parm, inp_rtn_action action )
+static bool DoneRadix( inp_data_handle handle, inp_rtn_action action )
 {
+    mad_radix   radix = (mad_radix)handle;
+
     switch( action ) {
     case INP_RTN_INIT:
     case INP_RTN_FINI:
         return( true );
     case INP_RTN_EOL:
-        NewCurrRadix( (mad_radix)(pointer_uint)parm );
+        NewCurrRadix( radix );
         return( false );
     default:
         return( false );
@@ -185,8 +187,9 @@ static bool DoneRadix( inp_data_handle parm, inp_rtn_action action )
 
 static void PushRadixChange( mad_radix radix )
 {
-    PushInpStack( (inp_data_handle)(pointer_uint)radix, DoneRadix, false );
-    TypeInpStack( INP_NO_CMD );
+    if( PushInpStack( (inp_data_handle)(pointer_uint)radix, DoneRadix, false ) ) {
+        TypeInpStack( INP_NO_CMD );
+    }
 }
 
 void ReplayTo( event_record *ev )
@@ -201,8 +204,8 @@ void ReplayTo( event_record *ev )
             for( ev = EventList; ev->next != NULL; ev = ev->next ) ;
         }
         for( ;; ) {
-            PushCmdList( ev->cmd );
-            TypeInpStack( INP_REPLAYED );
+            if( PushCmdList( ev->cmd ) )
+                TypeInpStack( INP_REPLAYED );
             PushRadixChange( ev->radix );
             TypeInpStack( INP_REPLAYED );
             if( ev == EventList )

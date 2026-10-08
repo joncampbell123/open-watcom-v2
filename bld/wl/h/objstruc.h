@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -32,14 +32,219 @@
 
 #include "orl.h"
 #include "hash.h"
+#include "exeos2.h"
 
 
-typedef unsigned_16             overlay_ref;
+typedef enum {
+    INSTAT_USE_LIBPATH  = 0x0001,   // use libpath for this file.
+    INSTAT_LIBRARY      = 0x0002,   // file is a library
+    INSTAT_IOERR        = 0x0004,   // problem reading this file
+    INSTAT_IN_USE       = 0x0008,   // file in use.
+    INSTAT_OPEN_WARNING = 0x0010,   // only give a warning if can't open
+    INSTAT_FULL_CACHE   = 0x0020,   // read entire file.
+    INSTAT_PAGE_CACHE   = 0x0040,   // read in "paged"
+    INSTAT_GOT_MODTIME  = 0x0080,
+    INSTAT_NO_WARNING   = 0x0100
+} infile_status;
+
+#define INSTAT_SET_CACHE (INSTAT_FULL_CACHE | INSTAT_PAGE_CACHE)
+#define INSTAT_LIB_SEARCH (INSTAT_USE_LIBPATH | INSTAT_LIBRARY)
+
+/*  Object file formats & flags */
+
+/* NOTE:  these are also stored into the
+ * mod_entry->modinfo field, so if new object file formats are added, make
+ * sure there isn't a conflict there!
+*/
+
+typedef enum {
+    #define pick(en,skip,pass1) en,
+    #include "objfmts.h"
+    #undef pick
+} file_format;
+
+typedef enum {
+    /* bits 0..4 reserved for DBI_xxxx symbols */
+    DBI_LINE            = 0x0001,
+    DBI_TYPE            = 0x0002,
+    DBI_LOCAL           = 0x0004,
+    DBI_ONLY_EXPORTS    = 0x0008,
+    DBI_STATICS         = 0x0010,
+} dbi_flags;
+
+#define DBI_ALL         (DBI_LINE | DBI_TYPE | DBI_LOCAL | DBI_STATICS)
+
+typedef enum {
+    /* bits 0..4 reserved for DBI_xxxx symbols are also stored here */
+    /* bits 5..max available (bits 5..7 reserved for FMT_xxxx symbols, not used here) */
+    STAT_HAS_CHANGED    = 0x0020,
+    STAT_OMF_LIB        = 0x0040,
+    STAT_AR_LIB         = 0x0080,
+    STAT_LAST_SEG       = 0x0100,    // set by newsegment option
+    STAT_TRACE_SYMS     = 0x0200,
+    STAT_LIB_FIXED      = 0x0400,
+    STAT_OLD_LIB        = 0x0800,
+    STAT_LIB_USED       = 0x1000,
+    STAT_SEEN_LIB       = 0x2000,
+    STAT_HAS_MEMBER     = 0x4000,
+    STAT_USER_SPECD     = 0x8000
+} file_flags;
+
+#define STAT_IS_LIB     (STAT_AR_LIB | STAT_OMF_LIB)
+
+typedef enum {
+    /* bits 0..4 reserved for DBI_xxxx symbols are also stored here */
+    /* bits 5..7 reserved for FMT_xxxx symbols are also stored here */
+    /* bits 8..max available */
+    MOD_DBI_SEEN        = 0x00000100U,   // true if dbi segment seen in this mod.
+    MOD_FIXED           = 0x00000200U,   // true if mod must stay in spec'd section
+    MOD_VISITED         = 0x00000400U,   // true if visited in call graph analysis.
+    MOD_NEED_PASS_2     = 0x00000800U,   // true if pass 2 needed for this module.
+    MOD_LAST_SEG        = 0x00001000U,   // true if this module should end a group
+    MOD_IMPORT_LIB      = 0x00002000U,   // ORL: true if this is an import lib.
+    MOD_KILL            = 0x00004000U,   // module should be removed from list
+    MOD_FLATTEN_DBI     = 0x00008000U,   // flatten DBI found in this mod.
+    MOD_DONE_PASS_1     = 0x00010000U,   // module been through pass 1 already.
+    MOD_IS_FREE         = 0x80000000U,  // used for marking carve free blocks
+} module_flags;
+
+#define MOD_CLEAR_ON_INC    /* flags to clear when incremental linking. */ \
+    (MOD_DONE_PASS_1)
+
+#define MOD_NOT_DEBUGGABLE(mod) ( ((mod)->flags_mod & MOD_NEED_PASS_2) == 0 || \
+                                    ((mod)->flags_mod & MOD_IMPORT_LIB) )
+
+/*
+ * overlay manager library priority         0
+ * default library priority                 1-8 (OMF)
+ * default library priority                 8   (coff/elf)
+ * compiler user specified library priority 9
+ * WLINK user specified library priority    10
+ */
+typedef enum {
+    LIB_PRIORITY_MIN    = 0,
+    LIB_PRIORITY_MID    = 5,
+    LIB_PRIORITY_MAX    = 10
+} lib_priority;
+
+// OMF debug information formats
+typedef enum {
+    OMF_DBG_UNKNOWN,
+    OMF_DBG_CODEVIEW,
+    OMF_DBG_HLL_03,
+    OMF_DBG_HLL_04,
+    OMF_DBG_HLL_06
+} omf_dbg_type;
+
+typedef enum {
+    CLASS_NONE          = 0x0000,
+    CLASS_TRANSFER      = 0x0001,   /* used for PE import transfer code */
+    CLASS_MS_TYPE       = 0x0002,
+    CLASS_MS_LOCAL      = 0x0004,
+    CLASS_DWARF         = 0x0008,
+    CLASS_CODE          = 0x0010,
+    CLASS_LXDATA_SEEN   = 0x0020,
+    CLASS_READ_ONLY     = 0x0040,
+    CLASS_STACK         = 0x0080,
+    CLASS_IDATA         = 0x0100,
+    CLASS_FIXED         = 0x1000,   // Class should load at specified address
+    CLASS_COPY          = 0x2000,   // Class should use data from DupClass
+    CLASS_NOEMIT        = 0x4000,   // Class should not generate output
+    CLASS_HLL_LINE      = 0x8000,   // HLL Line Number (debug info)
+} class_status;
+
+#define CLASS_DEBUG_INFO    (CLASS_MS_TYPE | CLASS_MS_LOCAL | CLASS_DWARF | CLASS_HLL_LINE)
+
+#define EMIT_CLASS(c)       (((c)->flags & CLASS_NOEMIT) == 0)
+
+/***********************************************************************
+ *
+ *        The info field is used as follows:
+ *
+ *  n = bit used in segnode only        b = used in both segnode and leader
+ *  l = bit used in leader only
+ *
+ *  b            l b b        b b              n b
+ *  x x x x      x x x x      x x x x      x x x x
+ *  | | | |      | | |        | |              | |
+ *  | | | |      | | |        | |              | +---> seg. is absolute
+ *  | | | |      | | |        | |              +-----> seg. is comdat (ORL)
+ *  | | | |      | | |        | +--------------------> seg. in ovl. class
+ *  | | | |      | | |        +--(leader)------------> generate an addr_info.
+ *  | | | |      | | |        +--(node)--------------> segdef dead (terminated)
+ *  | | | |      | | +-------------------------------> seg. is code.
+ *  | | | |      | +---------------------------------> 32-bit segment.
+ *  | | | |      +-(leader)--------------------------> last segment in group
+ *  | | | +-(leader)---------------------------------> Segment should load at specified address
+ *  | | +---(leader)---------------------------------> Segment should use data copied from DupSeg
+ *  | +-----(leader)---------------------------------> Segment should not generate output
+ *  +------------------------------------------------> LxDATA seen for this seg.
+ ***********************************************************************/
+
+/*
+ * bits in "info" field of "seg_entry" struct && the "seg_leader" struct.
+ * Note that there are bits in this which are only used in the seg_entry->info
+ * field, so the two words have overlapping bits.
+ */
+
+typedef enum seg_info_type {
+    SEGINF_NONE         = 0x0000,
+    SEGINF_ABSOLUTE     = 0x0001,
+    SEGINF_COMDAT       = 0x0002,   /* seg is a comdat */
+    SEGINF_OVERLAYED    = 0x0040,   /* segment belongs to an overlay class */
+    SEGINF_MAKE_ADDR    = 0x0080,   /* set if making an addr info next time */
+    SEGINF_DEAD         = 0x0080,   /* mark a segdef as being "dead"(pass 2) */
+    SEGINF_CODE         = 0x0200,   /* segment is a code segment.         */
+    SEGINF_USE_32       = 0x0400,   /* segment uses 32 bit addresses      */
+    SEGINF_LAST_SEGMENT = 0x0800,   /* force last segment in a code group */
+    SEGINF_FIXED        = 0x1000,   /* Segment should start at seg_addr, not next addr */
+    SEGINF_NOEMIT       = 0x2000,   /* Segment should not generate output */
+    SEGINF_LXDATA_SEEN  = 0x8000,   /* LxDATA rec. seen for this segment */
+    SEGINF_BOTH_MASK    = 0x8641,   /* flags common to both structures */
+} seg_info_type;
+
+#define EMIT_SEG(s)     (((s)->info & SEGINF_NOEMIT) == 0)
+
+enum {
+    NOT_DEBUGGING_INFO  = 0x0000,
+    MS_TYPE             = 0x0001,   /* microsoft type information         */
+    MS_LOCAL            = 0x0002,   /* microsoft local symbol information */
+    DWARF_DEBUG_INFO    = 0x0003,   /* various types of dwarf debug segments */
+    DWARF_DEBUG_ABBREV  = 0x0004,
+    DWARF_DEBUG_LINE    = 0x0005,
+    DWARF_DEBUG_ARANGE  = 0x0006,
+    DWARF_DEBUG_OTHER   = 0x0007,
+    HLL_LINE            = 0x0008    /* IBM HLL line numbers. */
+};
+
+enum {
+    COMBINE_INVALID     = 0,
+    COMBINE_ADD         = 1,
+    COMBINE_COMMON      = 2,
+    COMBINE_STACK       = 3,
+};
+
+#define IS_DBG_DWARF( x ) ((x)->dbgtype >= DWARF_DEBUG_INFO)
+#define IS_DBG_INFO( x ) ((x)->dbgtype != NOT_DEBUGGING_INFO)
+
+enum {
+    BITS_16     = 0x00,
+    BITS_32     = 0x01,
+    BITS_64     = 0x02
+};
+
+typedef enum {
+    SEGFLAG_SEGMENT,
+    SEGFLAG_CLASS,
+    SEGFLAG_CODE,
+    SEGFLAG_DATA
+} segflag_type;
+
 
 typedef struct file_list        FILE_LIST;
 typedef struct path_entry       PATH_ENTRY;
 typedef struct mod_entry        MOD_ENTRY;
-typedef struct ovl_area         OVL_AREA;
+typedef struct areasect         AREASECT;
 typedef struct section          SECTION;
 typedef struct group_entry      GROUP_ENTRY;
 typedef struct class_entry      CLASS_ENTRY;
@@ -55,27 +260,34 @@ typedef struct infilelist       INFILELIST;
 typedef struct member_list      MEMBER_LIST;
 typedef struct segdata          SEGDATA;
 typedef struct pubdeflist       PUBDEFLIST;
-typedef struct ovl_area {
-    OVL_AREA    *next_area;
+typedef struct areasect {
+    AREASECT    *next;
     SECTION     *sections;
-} ovl_area;
+} areasect;
 typedef struct order_class      ORDER_CLASS;
 typedef struct order_segment    ORDER_SEGMENT;
 
+typedef struct reloc_info_struct *reloc_info;
+
+typedef struct {
+    reloc_info          externals; /* external and segment style fixups */
+    reloc_info          internals; /* internal, non-segment fixups */
+} os2_reloc_header;
+
 typedef struct section {
-    SECTION             *next_sect;
+    SECTION             *next;
     FILE_LIST           *files;
     pHTable             modFilesHashed;
     MOD_ENTRY           *mods;
-    CLASS_ENTRY         *classlist;
+    CLASS_ENTRY         *classes;
     ORDER_CLASS         *orderlist;     // Link to data for ordering, if used
-    targ_addr           sect_addr;
+    addr_type           sect_addr;
     overlay_ref         ovlref;
-    OVL_AREA            *areas;
+    areasect            *areas;
     SECTION             *parent;
     unsigned_32         relocs;
     unsigned_32         size;
-    void                *reloclist;
+    reloc_info          reloclist;
     union {
         unsigned_32     file_loc;
         MOD_ENTRY       *dist_mods;
@@ -101,21 +313,6 @@ typedef struct outfilelist {
     unsigned long       origin;
 } outfilelist;
 
-typedef enum {
-    INSTAT_USE_LIBPATH  = 0x0001,   // use libpath for this file.
-    INSTAT_LIBRARY      = 0x0002,   // file is a library
-    INSTAT_IOERR        = 0x0004,   // problem reading this file
-    INSTAT_IN_USE       = 0x0008,   // file in use.
-    INSTAT_OPEN_WARNING = 0x0010,   // only give a warning if can't open
-    INSTAT_FULL_CACHE   = 0x0020,   // read entire file.
-    INSTAT_PAGE_CACHE   = 0x0040,   // read in "paged"
-    INSTAT_GOT_MODTIME  = 0x0080,
-    INSTAT_NO_WARNING   = 0x0100
-} infile_status;
-
-#define INSTAT_SET_CACHE (INSTAT_FULL_CACHE | INSTAT_PAGE_CACHE)
-#define INSTAT_LIB_SEARCH (INSTAT_USE_LIBPATH | INSTAT_LIBRARY)
-
 typedef struct infilelist {
     INFILELIST          *next;
     const PATH_ENTRY    *path_list;
@@ -129,85 +326,25 @@ typedef struct infilelist {
     infile_status       status;
 } infilelist;
 
-typedef enum {
-    /* bits 0..4 reserved for DBI_xxxx symbols */
-    DBI_LINE            = 0x0001,
-    DBI_TYPE            = 0x0002,
-    DBI_LOCAL           = 0x0004,
-    DBI_ONLY_EXPORTS    = 0x0008,
-    DBI_STATICS         = 0x0010,
-} dbi_flags;
-
-#define DBI_ALL         (DBI_LINE | DBI_TYPE | DBI_LOCAL | DBI_STATICS)
-#define DBI_MASK        (DBI_ALL | DBI_ONLY_EXPORTS)
-
-typedef enum {
-    /* bits 0..4 reserved for DBI_xxxx symbols are also stored here */
-    /* bits 5..max available (bits 5..7 reserved for FMT_xxxx symbols, not used here) */
-    STAT_HAS_CHANGED    = 0x0020,
-    STAT_OMF_LIB        = 0x0040,
-    STAT_AR_LIB         = 0x0080,
-    STAT_LAST_SEG       = 0x0100,    // set by newsegment option
-    STAT_TRACE_SYMS     = 0x0200,
-    STAT_LIB_FIXED      = 0x0400,
-    STAT_OLD_LIB        = 0x0800,
-    STAT_LIB_USED       = 0x1000,
-    STAT_SEEN_LIB       = 0x2000,
-    STAT_HAS_MEMBER     = 0x4000,
-    STAT_USER_SPECD     = 0x8000
-} file_flags;
-
-#define STAT_IS_LIB     (STAT_AR_LIB | STAT_OMF_LIB)
-
-/*
- * overlay manager library priority         0
- * default library priority                 1-8 (OMF)
- * default library priority                 8   (coff/elf)
- * compiler user specified library priority 9
- * WLINK user specified library priority    10
- */
-typedef enum {
-    LIB_PRIORITY_MIN    = 0,
-    LIB_PRIORITY_MID    = 5,
-    LIB_PRIORITY_MAX    = 10
-} lib_priority;
-
 typedef struct file_list {
-    FILE_LIST           *next_file;
+    FILE_LIST           *next;
     infilelist          *infile;
     union {
         union dict_entry    *dict;
         MEMBER_LIST         *member;
     } u;
     char                *strtab;    /* for AR format */
-    file_flags          flags;
+    dbi_flags           flags_dbi;
+    file_flags          flags_file;
     lib_priority        priority;   /* for libraries */
     overlay_ref         ovlref;     /* for fixed libraries */
     unsigned                     : 0;
 } file_list;
 
-typedef enum {
-    /* bits 0..4 reserved for DBI_xxxx symbols are also stored here */
-    /* bits 5..7 reserved for FMT_xxxx symbols are also stored here */
-    /* bits 8..max available */
-    MOD_DBI_SEEN        = CONSTU32( 0x00000100 ),   // true if dbi segment seen in this mod.
-    MOD_FIXED           = CONSTU32( 0x00000200 ),   // true if mod must stay in spec'd section
-    MOD_VISITED         = CONSTU32( 0x00000400 ),   // true if visited in call graph analysis.
-    MOD_NEED_PASS_2     = CONSTU32( 0x00000800 ),   // true if pass 2 needed for this module.
-    MOD_LAST_SEG        = CONSTU32( 0x00001000 ),   // true if this module should end a group
-    MOD_IMPORT_LIB      = CONSTU32( 0x00002000 ),   // ORL: true if this is an import lib.
-    MOD_KILL            = CONSTU32( 0x00004000 ),   // module should be removed from list
-    MOD_FLATTEN_DBI     = CONSTU32( 0x00008000 ),   // flatten DBI found in this mod.
-    MOD_DONE_PASS_1     = CONSTU32( 0x00010000 ),   // module been through pass 1 already.
-    MOD_IS_FREE         = CONSTU32( 0x80000000 ),   // used for marking carve free blocks
-} module_flags;
-
-#define MOD_CLEAR_ON_INC    /* flags to clear when incremental linking. */ \
-    (MOD_DONE_PASS_1)
-
 typedef struct member_list {
     MEMBER_LIST         *next;
-    module_flags        flags;      //dbi & newseg flags to be xferred to mod entry
+    dbi_flags           flags_dbi;
+    module_flags        flags_mod;
     char                name[1];
 } member_list;
 
@@ -247,23 +384,17 @@ typedef struct obj_name_list {
 typedef struct odbimodinfo      ODBIMODINFO;    // defd in dbg information hdrs
 typedef struct dwarfmodinfo     DWARFMODINFO;
 typedef struct cvmodinfo        CVMODINFO;
-
-// OMF debug information formats
-typedef enum {
-    OMF_DBG_UNKNOWN,
-    OMF_DBG_CODEVIEW,
-    OMF_DBG_HLL
-} omf_dbg_type;
+typedef struct hllmodinfo       HLLMODINFO;
 
 typedef struct mod_entry {
     union {
-        MOD_ENTRY       *next_mod;  // regular next pointer
+        MOD_ENTRY       *next;      // regular next pointer
         section         *sect;      // when distributing - section of current mod.
-    } n;
+    } u;
     union {
         FILE_LIST       *source;
         name_strtab     fname;
-    } f;
+    } u1;
     name_strtab         name;
     unsigned_32         location;
     symbol              *publist;
@@ -271,63 +402,49 @@ typedef struct mod_entry {
     time_t              modtime;
     size_t              relocs;
     size_t              sizerelocs;
-    module_flags        modinfo;
+    dbi_flags           flags_dbi;
+    module_flags        flags_mod;
+    file_format         flags_fmt;
     void                *lines;
     omf_dbg_type        omfdbg;
     union {
         arcdata         *arclist;   // segment definition data.
         MOD_ENTRY       *next;      // for keeping track of modules when distrib
-    } x;
+    } u2;
     union {
         ODBIMODINFO     *o;
         DWARFMODINFO    *d;
         CVMODINFO       *cv;
-    } d;                        // union used for debugging information
+        HLLMODINFO      *hll;
+    } u3;                           // union used for debugging information
 } mod_entry;
 
-typedef enum {
-    CLASS_TRANSFER      = 0x0001,   /* used for PE import transfer code */
-    CLASS_MS_TYPE       = 0x0002,
-    CLASS_MS_LOCAL      = 0x0004,
-    CLASS_DWARF         = 0x0008,
-    CLASS_CODE          = 0x0010,
-    CLASS_LXDATA_SEEN   = 0x0020,
-    CLASS_READ_ONLY     = 0x0040,
-    CLASS_STACK         = 0x0080,
-    CLASS_IDATA         = 0x0100,
-    CLASS_FIXED         = 0x1000,   // Class should load at specified address
-    CLASS_COPY          = 0x2000,   // Class should use data from DupClass
-    CLASS_NOEMIT        = 0x4000,   // Class should not generate output
-} class_status;
-
-#define CLASS_DEBUG_INFO    (CLASS_MS_TYPE | CLASS_MS_LOCAL | CLASS_DWARF)
-
-#define EMIT_CLASS(c)       (((c)->flags & CLASS_NOEMIT) == 0)
-
 typedef struct class_entry {
-    CLASS_ENTRY         *next_class;
+    CLASS_ENTRY         *next;
     SEG_LEADER          *segs;
     name_strtab         name;
     class_status        flags;
     byte                bits;           // segment bitnese
     section             *section;
-    targ_addr           BaseAddr;       // Fixed location to of this class for loadfile
+    addr_type           BaseAddr;       // Fixed location to of this class for loadfile
     CLASS_ENTRY         *DupClass;      // Class to get data from for output
 } class_entry;
 
 typedef struct group_entry {
-    GROUP_ENTRY         *next_group;
+    GROUP_ENTRY         *next;
     SEG_LEADER          *leaders;
     symbol              *sym;
     section             *section;
-    targ_addr           grp_addr;
-    unsigned_16         segflags;
+    addr_type           addr;
+    seg_flags_type      segflags;
     offset              size;
     offset              totalsize;
     offset              linear;         // preferred base address
     union {
-        void            *grp_relocs;    // OS2/ELF only.
-        class_entry     *class;         // CV (during addr calc )
+        reloc_info      *reloclist_array;   // PE only
+        os2_reloc_header *pagelist_array;   // OS/2 flat and Windows 3.x VxD only.
+        reloc_info      reloclist;          // others
+        class_entry     *class;         // debug info CV (during addr calc )
     } g;
     union {
         unsigned        qnxflags;       // QNX
@@ -340,23 +457,13 @@ typedef struct group_entry {
     unsigned            num;
 } group_entry;
 
-// this is a bit in the segflags field. This is also defined in exeos2.h
-
-#define SEG_DATA        1
-#define SEG_READ_ONLY   0x80
-
-// the default value to initialize group flags to. This is the same as
-// SEG_LEVEL_3 in exeos2.h.
-
-#define DEFAULT_GRP_FLAGS (0xC00 | SEG_READ_ONLY)
-
 // flags used under OS/2 to indicate special information about a segment
 
-#define SEG_16_ALIAS    1
+#define OS2_SEG_16_ALIAS    1
 
 typedef struct seg_leader {
-    SEG_LEADER          *next_seg;
-    SEG_LEADER          *grp_next;
+    SEG_LEADER          *next;
+    SEG_LEADER          *next_by_group; /* Ring2... */
     name_strtab         segname;
     SEGDATA             *pieces;
     group_entry         *group;
@@ -365,88 +472,14 @@ typedef struct seg_leader {
     offset              size;               // total size of segment
     offset              vsize;              // total virtual size of segment
     SEG_LEADER          *DupSeg;            // Segment to get data from for output
-    unsigned_16         info;
+    seg_info_type       info;
     unsigned_16         align   : 5;        // alignment of seg (power of 2)
-    unsigned_16         dbgtype : 3;        // debugging type of seg
+    unsigned_16         dbgtype : 4;        // debugging type of seg
     unsigned_16         combine : 2;        // combine val. of seg
     unsigned_32         num;                // # of addrinfos to output (video)
-    targ_addr           seg_addr;           // address of segment.
-    unsigned_16         segflags;           // format specific segment flags
+    addr_type           seg_addr;           // address of segment.
+    seg_flags_type      segflags;           // format specific segment flags
 } seg_leader;
-
-/***********************************************************************
- *
- *        The info field is used as follows:
- *
- *  n = bit used in segnode only        b = used in both segnode and leader
- *  l = bit used in leader only
- *
- *  b            l b b        b b              n b
- *  x x x x      x x x x      x x x x      x x x x
- *  | | | |      | | |        | |              | |
- *  | | | |      | | |        | |              | +---> seg. is absolute
- *  | | | |      | | |        | |              +-----> seg. is comdat (ORL)
- *  | | | |      | | |        | +--------------------> seg. in ovl. class
- *  | | | |      | | |        +--(leader)------------> generate an addr_info.
- *  | | | |      | | |        +--(node)--------------> segdef dead (terminated)
- *  | | | |      | | +-------------------------------> seg. is code.
- *  | | | |      | +---------------------------------> 32-bit segment.
- *  | | | |      +-(leader)--------------------------> last segment in group
- *  | | | +-(leader)---------------------------------> Segment should load at specified address
- *  | | +---(leader)---------------------------------> Segment should use data copied from DupSeg
- *  | +-----(leader)---------------------------------> Segment should not generate output
- *  +------------------------------------------------> LxDATA seen for this seg.
- ***********************************************************************/
-
-/*
- * bits in "info" field of "seg_entry" struct && the "seg_leader" struct.
- * Note that there are bits in this which are only used in the seg_entry->info
- * field, so the two words have overlapping bits.
- */
-
-enum {
-    SEG_ABSOLUTE        = 0x0001,
-    SEG_COMDAT          = 0x0002,   /* seg is a comdat */
-    SEG_OVERLAYED       = 0x0040,   /* segment belongs to an overlay class */
-    MAKE_ADDR_INFO      = 0x0080,   /* set if making an addr info next time */
-    SEG_DEAD            = 0x0080,   /* mark a segdef as being "dead"(pass 2) */
-    SEG_CODE            = 0x0200,   /* segment is a code segment.         */
-    USE_32              = 0x0400,   /* segment uses 32 bit addresses      */
-    LAST_SEGMENT        = 0x0800,   /* force last segment in a code group */
-    SEG_FIXED           = 0x1000,   /* Segment should start at seg_addr, not next addr */
-    SEG_NOEMIT          = 0x2000,   /* Segment should not generate output */
-    SEG_LXDATA_SEEN     = 0x8000,   /* LxDATA rec. seen for this segment */
-    SEG_BOTH_MASK       = 0x8641,   /* flags common to both structures */
-};
-
-#define EMIT_SEG(s)     (((s)->segflags & SEG_NOEMIT) == 0)
-
-enum {
-    NOT_DEBUGGING_INFO  = 0x0000,
-    MS_TYPE             = 0x0001,   /* microsoft type information         */
-    MS_LOCAL            = 0x0002,   /* microsoft local symbol information */
-    DWARF_DEBUG_INFO    = 0x0003,   /* various types of dwarf debug segments */
-    DWARF_DEBUG_ABBREV  = 0x0004,
-    DWARF_DEBUG_LINE    = 0x0005,
-    DWARF_DEBUG_ARANGE  = 0x0006,
-    DWARF_DEBUG_OTHER   = 0x0007
-};
-
-enum {
-    COMBINE_INVALID     = 0,
-    COMBINE_ADD         = 1,
-    COMBINE_COMMON      = 2,
-    COMBINE_STACK       = 3,
-};
-
-#define IS_DBG_DWARF( x ) ((x)->dbgtype >= DWARF_DEBUG_INFO)
-#define IS_DBG_INFO( x ) ((x)->dbgtype != NOT_DEBUGGING_INFO)
-
-enum {
-    BITS_16     = 0x00,
-    BITS_32     = 0x01,
-    BITS_64     = 0x02
-};
 
 /*
  * these are used to keep track of each individual contribution to a segment.
@@ -456,7 +489,7 @@ enum {
 
 typedef struct segdata {
     SEGDATA             *next;
-    SEGDATA             *mod_next;      // next segdata in module list.
+    SEGDATA             *next_by_mod;   // Ring2... next segdata in module list.
     offset              length;         // length of segment in current module.
     virt_mem_ptr        u1;             // virtual memory pointer to data for this segment
     virt_mem            vm_data;        // virtual memory pointer to data for class copy data
@@ -503,11 +536,11 @@ typedef struct {
     void                *entry;
 } node;
 
-#define NOT_IMP_BY_ORDINAL ((ordinal_t)-1)
+#define IMP_BY_NAME     ((ordinal_t)-1)
 
 typedef signed_32       ordinal_t;
 
-typedef struct {
+typedef struct dll_sym_info {
     union {
         obj_name_list   *modnum;        /* # of DLL in imported names table */
         name_strtab     modname;
@@ -522,21 +555,13 @@ typedef struct {
     symbol              *iatsym;        // NT: symbol for address in iat
 } dll_sym_info;
 
-typedef enum {
-    SEGFLAG_SEGMENT,
-    SEGFLAG_CLASS,
-    SEGFLAG_CODE,
-    SEGFLAG_DATA
-} segflag_type;
-
-// this structure used for processing segment flags for various executable types
-// structures qnx_seg_flags and os2_seg_flags depend on this declaration
-typedef struct xxx_seg_flags {
-    struct xxx_seg_flags    *next;
-    unsigned_16             flags;
-    char                    *name;
-    segflag_type            type;   // as above.
-} xxx_seg_flags;
+typedef struct seg_flags_struct {
+    struct seg_flags_struct *next;
+    seg_flags_type      flags;
+    char                *name;
+    segflag_type        type;
+    seg_flags_type      specified;      // used for enforcing mutual exclusion
+} seg_flags_struct;
 
 typedef struct {
     symbol              *entry;
@@ -554,18 +579,18 @@ typedef struct {
     SEGDATA             *entry;
     orl_sec_handle      handle;     // ORL: handle for the segment.
     unsigned_8          *contents;  // ORL: pointer to contents of segment.
-    unsigned            info;
+    seg_info_type       info;
 } segnode;
 
 typedef struct list_of_names {
-    LIST_OF_NAMES       *next_name;
+    LIST_OF_NAMES       *next;
     char                name[1];
 } list_of_names;
 
 typedef struct {
     segdata             *seg;
     offset              obj_offset; // pass 1: delta for fixup offsets
-    targ_addr           addr;
+    addr_type           addr;
     unsigned_8          *data;
 } lobject_data;
 
@@ -579,7 +604,7 @@ typedef struct order_class {
     class_entry         *Ring;  // Used for sorting
     char                *Name;
     char                *SrcName;
-    targ_addr           Base;
+    addr_type           Base;
     ORDER_SEGMENT       *SegList;
     boolbit             FixedAddr   : 1;
     boolbit             NoEmit      : 1;
@@ -589,7 +614,7 @@ typedef struct order_class {
 typedef struct order_segment {
     ORDER_SEGMENT       *NextSeg;
     char                *Name;
-    targ_addr           Base;
+    addr_type           Base;
     boolbit             FixedAddr   : 1;
     boolbit             NoEmit      : 1;
 } order_segment;

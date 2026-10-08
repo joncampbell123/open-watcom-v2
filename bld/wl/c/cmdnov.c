@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -49,8 +49,6 @@
 /*
 //  should move these somewhere more suitable
 */
-#define IS_NUMBER(ptr)     ((*ptr >= '0') && (*ptr <= '9'))
-#define IS_WHITESPACE(ptr) (*(ptr) == ' ' || *(ptr) =='\t' || *(ptr) == '\r')
 
 void SetNovFmt( void )
 /********************/
@@ -61,17 +59,17 @@ void SetNovFmt( void )
 void FreeNovFmt( void )
 /*********************/
 {
-    _LnkFree( FmtData.description );
-    _LnkFree( FmtData.u.nov.screenname );
-    _LnkFree( FmtData.u.nov.checkfn );
-    _LnkFree( FmtData.u.nov.exitfn );
-    _LnkFree( FmtData.u.nov.customdata );
-    _LnkFree( FmtData.u.nov.threadname );
-    _LnkFree( FmtData.u.nov.copyright );
-    _LnkFree( FmtData.u.nov.messages );
-    _LnkFree( FmtData.u.nov.help );
-    _LnkFree( FmtData.u.nov.rpcdata );
-    _LnkFree( FmtData.u.nov.sharednlm );
+    MemFree( FmtData.description );
+    MemFree( FmtData.u.nov.screenname );
+    MemFree( FmtData.u.nov.checkfn );
+    MemFree( FmtData.u.nov.exitfn );
+    MemFree( FmtData.u.nov.customdata );
+    MemFree( FmtData.u.nov.threadname );
+    MemFree( FmtData.u.nov.copyright );
+    MemFree( FmtData.u.nov.messages );
+    MemFree( FmtData.u.nov.help );
+    MemFree( FmtData.u.nov.rpcdata );
+    MemFree( FmtData.u.nov.sharednlm );
 /*  FreeList( FmtData.u.nov.exp.export );
     FreeList( FmtData.u.nov.exp.module );  Permalloc'd now */
 }
@@ -84,7 +82,9 @@ void CmdNovFini( void )
 static bool IsNetWarePrefix( const char *token, size_t tokenlen )
 /***************************************************************/
 {
-    if( ( token != NULL ) && ( token[0] == '(' ) && ( token[tokenlen - 1] == ')' ) )
+    if( ( token != NULL )
+      && ( token[0] == '(' )
+      && ( token[tokenlen - 1] == ')' ) )
         return( true );
     return( false );
 }
@@ -92,16 +92,22 @@ static bool IsNetWarePrefix( const char *token, size_t tokenlen )
 static bool NetWareSplitSymbol( const char *token, size_t tokenlen, const char **name, size_t *namelen, const char **prefix, size_t *prefixlen )
 /**********************************************************************************************************************************************/
 {
-    const char  *findAt = token;
+    const char  *findAt;
     size_t      len;
 
-    if( (NULL == token) || (0 == tokenlen) || (NULL == name) || (NULL == namelen) || (NULL == prefix) || (NULL == prefixlen) )
+    findAt = token;
+    if( (NULL == token)
+      || (0 == tokenlen)
+      || (NULL == name)
+      || (NULL == namelen)
+      || (NULL == prefix)
+      || (NULL == prefixlen) )
         return( false );
 
     *name = *prefix = NULL;
     *namelen = *prefixlen = 0;
 
-    for( len = tokenlen; len; len-- ) {
+    for( len = tokenlen; len > 0; len-- ) {
         if( '@' == *findAt )
             break;
         if( '\0' == *findAt ) {
@@ -123,7 +129,7 @@ static bool NetWareSplitSymbol( const char *token, size_t tokenlen, const char *
      *  a function name with a numeric character (I believe)
      */
 
-    if( IS_NUMBER( &findAt[1] ) ) {
+    if( isdigit( ((unsigned char *)findAt)[1] ) ) {
         *name = token;
         *namelen = tokenlen;
         return( true );
@@ -144,17 +150,17 @@ static bool SetCurrentPrefix( const char *str, size_t len )
 /*********************************************************/
 {
     const char  *s;
-    char        *p;
 
     /*
      *  Always delete
      */
     if( CmdFile->symprefix != NULL ) {
-        _LnkFree( CmdFile->symprefix );
+        MemFree( CmdFile->symprefix );
         CmdFile->symprefix = NULL;
     }
 
-    if( ( NULL == str ) || ( len == 0 ) ) {
+    if( ( NULL == str )
+      || ( len == 0 ) ) {
         return( true );
     }
     /* it suppose string format as "(.....)" */
@@ -162,7 +168,7 @@ static bool SetCurrentPrefix( const char *str, size_t len )
     len--;  /* and record that */
 
     for( ; len > 0; --len, ++str ) {
-        if( !IS_WHITESPACE( str ) ) {
+        if( !isspace( *(unsigned char *)str ) ) {
             break;
         }
     }
@@ -174,7 +180,7 @@ static bool SetCurrentPrefix( const char *str, size_t len )
         return( false );
 
     for( s = str + len - 1; len > 0; --len, --s ) {
-        if( !IS_WHITESPACE( s ) ) {
+        if( !isspace( *(unsigned char *)s ) ) {
             break;
         }
     }
@@ -182,10 +188,7 @@ static bool SetCurrentPrefix( const char *str, size_t len )
         return( false );
 
     /* convert to C string */
-    _LnkAlloc( p, len + 1 );
-    memcpy( p, str, len );
-    p[len] = '\0';
-    CmdFile->symprefix = p;
+    CmdFile->symprefix = MemToStringSafe( str, len );
     return( true );
 }
 
@@ -201,11 +204,12 @@ static bool DoWeNeedToSkipASeparator( bool CheckDirectives )
 {
     const char  *parse;
 
-    if( ( Token.next == NULL ) || ( *Token.next == '\0' ) )
+    if( ( Token.next == NULL )
+      || ( *Token.next == '\0' ) )
         return( false );
 
     for( parse = Token.next; *parse != '\0'; parse++ ) {
-        if( !IS_WHITESPACE( parse ) ) {
+        if( !isspace( *(unsigned char *)parse ) ) {
             break;
         }
     }
@@ -219,25 +223,29 @@ static bool DoWeNeedToSkipASeparator( bool CheckDirectives )
     /*
     //  skip cr-lf
     */
-    if( ( *parse == '\n' ) || ( *parse == '\r' ) )
+    if( ( *parse == '\n' )
+      || ( *parse == '\r' ) )
         parse++;
-    if( ( *parse == '\n' ) || ( *parse == '\r' ) )
+    if( ( *parse == '\n' )
+      || ( *parse == '\r' ) )
         parse++;
 
     /*
     //  always skip to the next token if the next available token is not a comma
     //  this will allow individual tokens without commas which isn't a big deal
     */
-    if( ( *parse != '\0' ) && ( *parse != ',' ) ) {
+    if( ( *parse != '\0' )
+      && ( *parse != ',' ) ) {
         /*
         //  If the next token is __not__ a comma then we need to check that it is not a directive
         //  before allowing the skip!
         */
         if( CheckDirectives ) {
-            size_t      len = 0;
+            size_t      len;
             const char  *t;
 
-            for( t = parse; !IS_WHITESPACE(t); ++t ) {
+            len = 0;
+            for( t = parse; !isspace( *(unsigned char *)t ); ++t ) {
                 len++;
             }
 
@@ -253,7 +261,7 @@ static bool DoWeNeedToSkipASeparator( bool CheckDirectives )
 void SetNovImportSymbol( symbol *sym )
 /************************************/
 {
-    sym->p.import = DUMMY_IMPORT_PTR;
+    sym->p.import_nov = DUMMY_IMPORT_PTR;
 }
 
 static bool GetNovSymbolImportExport( bool import )
@@ -261,8 +269,8 @@ static bool GetNovSymbolImportExport( bool import )
 {
     symbol      *sym;
     const char  *name;
-    const char  *prefix;
     size_t      namelen;
+    const char  *prefix;
     size_t      prefixlen;
     bool        result;
 
@@ -291,24 +299,27 @@ static bool GetNovSymbolImportExport( bool import )
         return( false );
     }
 
-    if( ( prefix == NULL || ( 0 == prefixlen ) ) && ( NULL != CmdFile->symprefix ) ) {
+    if( ( prefix == NULL
+      || ( 0 == prefixlen ) )
+      && ( NULL != CmdFile->symprefix ) ) {
         prefix = CmdFile->symprefix;
         prefixlen = strlen( prefix );
     }
     if( import ) {
         sym = SymOpNWPfx( ST_CREATE_DEFINE_NOALIAS, name, namelen, prefix, prefixlen );
-        if( sym == NULL || sym->p.import != NULL ) {
+        if( sym == NULL
+          || sym->p.import_nov != NULL ) {
             return( true );
         }
 #ifdef DEVBUILD
         printf( "imported %s from %s\n", sym->name.u.ptr, ( sym->prefix != NULL ) ? sym->prefix : "(NONE)" );
 #endif
         SET_SYM_TYPE( sym, SYM_IMPORTED );
-        sym->info |= SYM_DCE_REF;   // make sure we don't try to get rid of these.
+        sym->info |= SYM_1_DCE_REF; // make sure we don't try to get rid of these.
         SetNovImportSymbol( sym );
     } else {
         sym = SymOpNWPfx( ST_CREATE_REFERENCE, name, namelen, prefix, prefixlen );
-        sym->info |= SYM_DCE_REF | SYM_EXPORTED;
+        sym->info |= SYM_1_DCE_REF | SYM_EXPORTED;
         AddNameTable( name, namelen, true, &FmtData.u.nov.exp.export );
     }
     Token.skipToNext = DoWeNeedToSkipASeparator( true );
@@ -328,12 +339,12 @@ static bool ProcScreenName( void )
         return( false );
     }
     if( Token.len > MAX_SCREEN_NAME_LENGTH ) {
-        LnkMsg( LOC+LINE+WRN+MSG_VALUE_TOO_LARGE, "s", "SCREENNAME" );
+        LnkMsg( WRN+LOC+LINE+MSG_VALUE_TOO_LARGE, "s", "SCREENNAME" );
     } else {
         if( FmtData.u.nov.screenname != NULL ) {
-            _LnkFree( FmtData.u.nov.screenname );  // assume second is correct.
+            MemFree( FmtData.u.nov.screenname );  // assume second is correct.
         }
-        FmtData.u.nov.screenname = tostring();
+        FmtData.u.nov.screenname = getstring();
     }
     return( true );
 }
@@ -344,7 +355,7 @@ static bool ProcCheck( void )
     if( !GetToken( SEP_EQUALS, TOK_INCLUDE_DOT ) ) {
         return( false );
     }
-    FmtData.u.nov.checkfn = tostring();
+    FmtData.u.nov.checkfn = getstring();
     return( true );
 }
 
@@ -401,7 +412,7 @@ static bool ProcCustom( void )
     if( !GetToken( SEP_EQUALS, TOK_IS_FILENAME ) ) {
         return( false );
     }
-    FmtData.u.nov.customdata = tostring();         // no default extension.
+    FmtData.u.nov.customdata = getstring();         // no default extension.
     return( true );
 }
 
@@ -411,7 +422,7 @@ static bool ProcMessages( void )
     if( !GetToken( SEP_EQUALS, TOK_IS_FILENAME ) ) {
         return( false );
     }
-    FmtData.u.nov.messages = tostring();           // no default extension.
+    FmtData.u.nov.messages = getstring();           // no default extension.
     return( true );
 }
 
@@ -421,7 +432,7 @@ static bool ProcHelp( void )
     if( !GetToken( SEP_EQUALS, TOK_IS_FILENAME ) ) {
         return( false );
     }
-    FmtData.u.nov.help = tostring();       // no default extension.
+    FmtData.u.nov.help = getstring();       // no default extension.
     return( true );
 }
 
@@ -431,7 +442,7 @@ static bool ProcXDCData( void )
     if( !GetToken( SEP_EQUALS, TOK_IS_FILENAME ) ) {
         return( false );
     }
-    FmtData.u.nov.rpcdata = tostring();    // no default extension.
+    FmtData.u.nov.rpcdata = getstring();    // no default extension.
     return( true );
 }
 
@@ -451,7 +462,7 @@ static bool ProcExit( void )
     if( !GetToken( SEP_EQUALS, TOK_INCLUDE_DOT ) ) {
         return( false );
     }
-    FmtData.u.nov.exitfn = tostring();
+    FmtData.u.nov.exitfn = getstring();
     return( true );
 }
 
@@ -461,9 +472,9 @@ static bool ProcThreadName( void )
     if( !GetToken( SEP_NO, TOK_INCLUDE_DOT ) ) {
         return( false );
     } else if( Token.len > MAX_THREAD_NAME_LENGTH ) {
-        LnkMsg( LOC+LINE+WRN+MSG_VALUE_TOO_LARGE, "s", "THREADNAME" );
+        LnkMsg( WRN+LOC+LINE+MSG_VALUE_TOO_LARGE, "s", "THREADNAME" );
     } else {
-        FmtData.u.nov.threadname = tostring();
+        FmtData.u.nov.threadname = getstring();
     }
     return( true );
 }
@@ -481,11 +492,12 @@ static bool ProcCopyright( void )
     unsigned        year;
     char            *copy_year;
 
-    if( !GetToken( SEP_EQUALS, TOK_INCLUDE_DOT ) && !GetToken( SEP_NO, TOK_INCLUDE_DOT ) ) {
+    if( !GetToken( SEP_EQUALS, TOK_INCLUDE_DOT )
+      && !GetToken( SEP_NO, TOK_INCLUDE_DOT ) ) {
         if( FmtData.u.nov.copyright != NULL ) {
-            _LnkFree( FmtData.u.nov.copyright );  // assume second is correct.
+            MemFree( FmtData.u.nov.copyright );  // assume second is correct.
         }
-        _ChkAlloc( FmtData.u.nov.copyright, DEFAULT_COPYRIGHT_LENGTH + 1 );
+        FmtData.u.nov.copyright = MemAllocSafe( DEFAULT_COPYRIGHT_LENGTH + 1 );
         memcpy(FmtData.u.nov.copyright,DEFAULT_COPYRIGHT,DEFAULT_COPYRIGHT_LENGTH+1);
         copy_year = FmtData.u.nov.copyright + YEAR_OFFSET;
         thetime = time( NULL );
@@ -496,12 +508,12 @@ static bool ProcCopyright( void )
         }
     } else {
         if( Token.len > MAX_COPYRIGHT_LENGTH ) {
-            LnkMsg( LOC+LINE+WRN+MSG_VALUE_TOO_LARGE, "s", "COPYRIGHT" );
+            LnkMsg( WRN+LOC+LINE+MSG_VALUE_TOO_LARGE, "s", "COPYRIGHT" );
         } else {
             if( FmtData.u.nov.copyright != NULL ) {
-                _LnkFree( FmtData.u.nov.copyright );  // assume second is correct.
+                MemFree( FmtData.u.nov.copyright );  // assume second is correct.
             }
-            FmtData.u.nov.copyright = tostring();
+            FmtData.u.nov.copyright = getstring();
         }
     }
     return( true );
@@ -634,7 +646,7 @@ bool ProcNovDBI( void )
     LinkFlags |= LF_NOVELL_DBI_FLAG;
     if( ProcOne( NovDBIOptions, SEP_NO ) ) {
         while( ProcOne( NovDBIOptions, SEP_COMMA ) ) {
-            ; /*null loop*/
+            /* nothing */;
         }
     }
     return( true );
@@ -799,7 +811,7 @@ bool ProcNovFormat( void )
         }
     }
     if( GetToken( SEP_QUOTE, TOK_INCLUDE_DOT ) ) {  // get description
-        FmtData.description = tostring();
+        FmtData.description = getstring();
     }
     return( true );
 }

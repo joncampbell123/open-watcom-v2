@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -139,33 +139,10 @@ void ClearBit( byte *array, unsigned num )
     *array &= ~mask;
 }
 
-char *ChkStrDup( const char *str )
-/********************************/
-{
-    size_t      len;
-    char        *copy;
-
-    len = strlen( str ) + 1;
-    _ChkAlloc( copy, len );
-    memcpy( copy, str, len );
-    return( copy );
-}
-
-char *ChkToString( const void *mem, size_t len )
-/**********************************************/
-{
-    char        *str;
-
-    _ChkAlloc( str, len + 1 );
-    memcpy( str, mem, len );
-    str[len] = '\0';
-    return( str );
-}
-
 static void WalkModsList( mod_entry *list, mods_walk_fn *cbfn )
 /*************************************************************/
 {
-    for( ; list != NULL; list = list->n.next_mod ) {
+    for( ; list != NULL; list = list->u.next ) {
         cbfn( list );
     }
 }
@@ -222,7 +199,7 @@ void SectWalkClass( section *sect, class_walk_fn *cbfn )
     class_entry         *class;
 
     CurrSect = sect;
-    for( class = sect->classlist; class != NULL; class = class->next_class ) {
+    for( class = sect->classes; class != NULL; class = class->next ) {
         WalkClass( class, cbfn );
     }
 }
@@ -233,7 +210,7 @@ static void _SectWalkClass( section *sect, void *class_walk_cb )
     class_entry     *class;
 
     CurrSect = sect;
-    for( class = sect->classlist; class != NULL; class = class->next_class ) {
+    for( class = sect->classes; class != NULL; class = class->next ) {
         WalkClass( class, ((class_walk_data *)class_walk_cb)->cbfn );
     }
 }
@@ -260,10 +237,10 @@ seg_leader *FindSegment( section *sect, const char *name )
     static class_entry  *class = NULL;
 
     if( sect != NULL ) {
-        class = sect->classlist;
+        class = sect->classes;
         seg = NULL;
     }
-    for( ; class != NULL; class = class->next_class ) {
+    for( ; class != NULL; class = class->next ) {
         while( (seg = RingStep( class->segs, seg )) != NULL ) {
             if( stricmp( seg->segname.u.ptr, name ) == 0 ) {
                 return( seg );
@@ -273,17 +250,16 @@ seg_leader *FindSegment( section *sect, const char *name )
     return( seg );
 }
 
-void LinkList( void *in_head, void *newnode )
-/*******************************************/
-/* Link a new node into a linked list (new node goes at the end of the list) */
+void AppendList( void **in_head, void *newnode )
+/**********************************************
+ * Link a new node into a linked list (new node goes at the end of the list)
+ */
 {
     node    **owner;
 
-    owner = in_head;
+    for( owner = (node **)in_head; *owner != NULL; owner = (node **)&(*owner)->next )
+        /* nothing */;
     ((node *)newnode)->next = NULL;
-    while( *owner != NULL ) {
-        owner = (node **)&(*owner)->next;
-    }
     *owner = newnode;
 }
 
@@ -296,7 +272,7 @@ void FreeList( void *_curr )
 
     for( curr = _curr; curr != NULL; curr = next ) {
         next = curr->next;
-        _LnkFree( curr );
+        MemFree( curr );
     }
 }
 
@@ -310,14 +286,15 @@ obj_name_list *AddNameTable( const char *name, size_t len, bool is_mod, obj_name
     index = 1;
     off = 1;
     for( imp = *owner; imp != NULL; imp = imp->next ) {
-        if( len == imp->len && memcmp( imp->name.u.ptr, name, len ) == 0 )
+        if( len == imp->len
+          && memcmp( imp->name.u.ptr, name, len ) == 0 )
             break;
         off += imp->len + 1;
         ++index;
         owner = &imp->next;
     }
     if( imp == NULL ) {
-        _PermAlloc( imp, sizeof( obj_name_list ) );
+        imp = _PermAlloc( sizeof( obj_name_list ) );
         imp->next = NULL;
         imp->len = len;
         imp->name.u.ptr = AddSymbolStringTable( &PermStrings, name, len );
@@ -451,7 +428,8 @@ void VMemQSort( virt_mem base, size_t n, size_t width,
                     p1 += width;
                 }
                 /* special check to see if all values compared are equal */
-                if( ( count == n - 1 ) && ( last_non_equal_count == 0 ) )
+                if( ( count == n - 1 )
+                  && ( last_non_equal_count == 0 ) )
                     break;
                 if( count != 0 ) {  /* store pivot in right spot */
                     swapfn( base, p2 );
@@ -537,9 +515,10 @@ void InitEnvVars( void )
 #else
         path_list = GetEnvString( "PATH" );
 #endif
-        if( path_list != NULL && *path_list != '\0' ) {
+        if( path_list != NULL
+          && *path_list != '\0' ) {
             len = strlen( path_list );
-            _ChkAlloc( ExePath, len + 1 );
+            ExePath = MemAllocSafe( len + 1 );
             p = ExePath;
             do {
                 if( p != ExePath )
@@ -548,15 +527,16 @@ void InitEnvVars( void )
             } while( *path_list != '\0' );
             *p = '\0';
         } else {
-            _ChkAlloc( ExePath, 1 );
+            ExePath = MemAllocSafe( 1 );
             *ExePath = '\0';
         }
     }
     if( LibPath == NULL ) {
         path_list = GetEnvString( "LIB" );
-        if( path_list != NULL && *path_list != '\0' ) {
+        if( path_list != NULL
+          && *path_list != '\0' ) {
             len = strlen( path_list );
-            _ChkAlloc( LibPath, len + 1 );
+            LibPath = MemAllocSafe( len + 1 );
             p = LibPath;
             do {
                 if( p != LibPath )
@@ -565,7 +545,7 @@ void InitEnvVars( void )
             } while( *path_list != '\0' );
             *p = '\0';
         } else {
-            _ChkAlloc( LibPath, 1 );
+            LibPath = MemAllocSafe( 1 );
             *LibPath = '\0';
         }
     }
@@ -575,11 +555,11 @@ void FiniEnvVars( void )
 /**********************/
 {
     if( ExePath != NULL ) {
-        _LnkFree( ExePath );
+        MemFree( ExePath );
         ExePath = NULL;
     }
     if( LibPath != NULL ) {
-        _LnkFree( LibPath );
+        MemFree( LibPath );
         LibPath = NULL;
     }
 }
@@ -594,7 +574,8 @@ f_handle FindPath( const char *name, char *fullname )
 
     strcpy( fullpath, name );
     file = QObjOpen( fullpath );
-    if( file == NIL_FHANDLE && ExePath != NULL ) {
+    if( file == NIL_FHANDLE
+      && ExePath != NULL ) {
         for( path_list = ExePath; *path_list != '\0'; ) {
             strcpy( MakePath( fullpath, &path_list ), name );
             file = QObjOpen( fullpath );
@@ -603,7 +584,8 @@ f_handle FindPath( const char *name, char *fullname )
             }
         }
     }
-    if( file != NIL_FHANDLE && fullname != NULL ) {
+    if( file != NIL_FHANDLE
+      && fullname != NULL ) {
         strcpy( fullname, fullpath );
     }
     return( file );
@@ -614,27 +596,27 @@ group_entry *FindGroup( segment seg )
 {
     group_entry *group;
 
-    for( group = Groups; group != NULL; group = group->next_group ) {
-        if( group->grp_addr.seg == seg ) {
+    for( group = Groups; group != NULL; group = group->next ) {
+        if( group->addr.seg == seg ) {
             break;
         }
     }
     return( group );
 }
 
-offset FindLinearAddr( targ_addr *addr )
+offset FindLinearAddr( addr_type *addr )
 /**************************************/
 {
     group_entry *group;
 
     group = FindGroup( addr->seg );
     if( group != NULL ) {
-        return( addr->off + ( group->linear - group->grp_addr.off ) );
+        return( addr->off + ( group->linear - group->addr.off ) );
     }
     return( addr->off );
 }
 
-offset FindLinearAddr2( targ_addr *addr )
+offset FindLinearAddr2( addr_type *addr )
 /***************************************/
 {
     group_entry *group;
@@ -649,17 +631,18 @@ offset FindLinearAddr2( targ_addr *addr )
 file_list *AllocNewFile( member_list *member )
 /********************************************/
 {
-    file_list       *new_entry;
+    file_list       *file;
 
-    _PermAlloc( new_entry, sizeof( file_list ) );
-    new_entry->next_file = NULL;
-    new_entry->flags = DBIFlag;
-    new_entry->strtab = NULL;
-    new_entry->u.member = member;
+    file = _PermAlloc( sizeof( file_list ) );
+    file->next = NULL;
+    file->flags_dbi = DBIFlag;
+    file->flags_file = 0;
+    file->strtab = NULL;
+    file->u.member = member;
     if( member != NULL ) {
-        new_entry->flags |= STAT_HAS_MEMBER;
+        file->flags_file |= STAT_HAS_MEMBER;
     }
-    return( new_entry );
+    return( file );
 }
 
 char *FileName( const char *buff, size_t len, file_defext etype, bool force )
@@ -683,20 +666,23 @@ char *FileName( const char *buff, size_t len, file_defext etype, bool force )
     cnt = len - ( namptr - buff );
     if( cnt == 0 ) {
         DUPSTR_STACK( ptr, buff, len );
-        LnkMsg( LOC+LINE+FTL+MSG_INV_FILENAME, "s", ptr );
+        LnkMsg( FTL+LOC+LINE+MSG_INV_FILENAME, "s", ptr );
     }
     namelen = cnt;
     namptr = buff + len - 1;
     while( --cnt > 0 && *namptr != '.' ) {
         namptr--;
     }
-    if( !force && ( etype == E_NONE || *namptr == '.' ) ) {
+    if( !force
+      && ( etype == E_NONE
+      || *namptr == '.' ) ) {
         /*
          * duplicate name if no extension change is necessary
          */
-        ptr = ChkToString( buff, len );
+        ptr = MemToStringSafe( buff, len );
     } else {
-        if( force && etype == E_MAP ) {         // op map goes in current dir.
+        if( force
+          && etype == E_MAP ) {         // op map goes in current dir.
             buff = namstart;
             len = namelen;
         }
@@ -710,10 +696,10 @@ char *FileName( const char *buff, size_t len, file_defext etype, bool force )
          * if some extension is required then add it
          */
         if( etype == E_NONE ) {
-            ptr = ChkToString( buff, len );
+            ptr = MemToStringSafe( buff, len );
         } else {
             extlen = DefExtLen[etype];
-            _ChkAlloc( ptr, len + 1 + extlen + 1 );
+            ptr = MemAllocSafe( len + 1 + extlen + 1 );
             memcpy( ptr, buff, len );
             if( extlen > 0 ) {
                 ptr[len++] = '.';
@@ -737,13 +723,13 @@ section *NewSection( void )
 {
     section             *sect;
 
-    _ChkAlloc( sect, sizeof( section ) );
-    sect->next_sect = NULL;
-    sect->classlist = NULL;
+    sect = MemAllocSafe( sizeof( section ) );
+    sect->next = NULL;
+    sect->classes = NULL;
     sect->orderlist = NULL;
     sect->areas = NULL;
     sect->files = NULL;
-    sect->modFilesHashed = CreateHTable( 256, StringiHashFunc, stricmp_wrapper, ChkLAlloc, LFree );
+    sect->modFilesHashed = CreateHTable( 256, StringiHashFunc, stricmp_wrapper, MemAllocSafe, MemFree );
     sect->mods = NULL;
     sect->reloclist = NULL;
     SET_ADDR_UNDEFINED( sect->sect_addr );

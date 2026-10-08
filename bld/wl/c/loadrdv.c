@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -75,10 +75,10 @@ static void WriteBinData( void )
     OrderGroups( CompareDosSegments );
 
     Root->outfile->file_loc = Root->u.file_loc;
-    Root->sect_addr = Groups->grp_addr;
+    Root->sect_addr = Groups->addr;
 
     /* write groups and relocations */
-    for( group = Groups; group != NULL; group = group->next_group ) {
+    for( group = Groups; group != NULL; group = group->next ) {
         CurrSect = group->section;  // needed for WriteInfo.
         if( group->totalsize ) {
             WriteGroup( group );
@@ -102,19 +102,21 @@ static void WriteRDOSCode( void )
     OrderGroups( CompareDosSegments );
 
     Root->outfile->file_loc = Root->u.file_loc;
-    Root->sect_addr = Groups->grp_addr;
+    Root->sect_addr = Groups->addr;
     leader = NULL;
 
     /* write groups and relocations */
     iscode = false;
-    for( group = Groups; group != NULL; group = group->next_group ) {
+    for( group = Groups; group != NULL; group = group->next ) {
         if( leader != group->leaders ) {
             iscode = false;
             leader = group->leaders;
-            if( leader != NULL && leader->size ) {
+            if( leader != NULL
+              && leader->size ) {
                 piece = leader->pieces;
                 if( piece != NULL ) {
-                    if( piece->iscode && ( leader->seg_addr.seg == FmtData.u.rdos.code_seg ) ) {
+                    if( piece->iscode
+                      && ( leader->seg_addr.seg == FmtData.u.rdos.code_seg ) ) {
                         iscode = true;
                     }
                 }
@@ -148,14 +150,17 @@ static void WriteRDOSData( void )
     /* write groups and relocations */
     leader = NULL;
     isdata = false;
-    for( group = Groups; group != NULL; group = group->next_group ) {
+    for( group = Groups; group != NULL; group = group->next ) {
         if( leader != group->leaders ) {
             isdata = false;
             leader = group->leaders;
-            if( leader != NULL && leader->size ) {
+            if( leader != NULL
+              && leader->size ) {
                 piece = leader->pieces;
                 if( piece != NULL ) {
-                    if( ( piece->isidata || piece->isuninit ) && ( leader->seg_addr.seg == FmtData.u.rdos.data_seg ) ) {
+                    if( ( piece->isidata
+                      || piece->isuninit )
+                      && ( leader->seg_addr.seg == FmtData.u.rdos.data_seg ) ) {
                         isdata = true;
                     }
                 }
@@ -191,15 +196,17 @@ void GetRdosSegs( void )
     SEGDATA             *piece;
 
     leader = NULL;
-    for( group = Groups; group != NULL; group = group->next_group ) {
+    for( group = Groups; group != NULL; group = group->next ) {
         if( leader != group->leaders ) {
             leader = group->leaders;
-            if( leader != NULL && leader->size ) {
+            if( leader != NULL
+              && leader->size ) {
                 piece = leader->pieces;
                 if( piece != NULL ) {
                     if( piece->iscode )
                         FmtData.u.rdos.code_seg = leader->seg_addr.seg;
-                    if( piece->isidata || piece->isuninit ) {
+                    if( piece->isidata
+                      || piece->isuninit ) {
                         FmtData.u.rdos.data_seg = leader->seg_addr.seg;
                     }
                 }
@@ -312,7 +319,8 @@ void FiniRdosLoadFile( void )
  * finish writing of load file
  */
 {
-    if( (FmtData.type & MK_RDOS_16) && (LinkState & LS_FMT_SEEN_32BIT) ) {
+    if( (FmtData.type & MK_RDOS_16)
+      && (LinkState & LS_FMT_SEEN_32BIT) ) {
         LnkMsg( WRN+LOC+MSG_CANNOT_HAVE_16_AND_32, NULL );
     }
     HeaderSize = getHeaderSize();

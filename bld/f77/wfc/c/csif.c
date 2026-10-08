@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2025-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -40,6 +41,7 @@
 #include "opn.h"
 #include "opr.h"
 #include "global.h"
+#include "namecod.h"
 #include "recog.h"
 #include "ferror.h"
 #include "utility.h"
@@ -51,17 +53,17 @@
 #include "gflow.h"
 
 
-void    CpLogIf(void) {
-//=================
-
+void    CpLogIf( void )
+//=====================
 // Process a logical IF statement.
-
+{
     label_id    if_skip;
 
     if_skip = NextLabel();
     CSCond( if_skip );
-    if( RecKeyWord( "THEN" ) &&
-        ( RecNextOpr( OPR_TRM ) || RecNextOpr( OPR_COL ) ) ) {
+    if( RecKeyWordOpn( "THEN" )
+      && ( RecNextOpr( OPR_TRM )
+      || RecNextOpr( OPR_COL ) ) ) {
         AddCSNode( CS_IF );
         CSHead->branch = if_skip;
         CSHead->bottom = NextLabel();
@@ -76,44 +78,44 @@ void    CpLogIf(void) {
 }
 
 
-void    CpElseIf(void) {
-//==================
-
+void    CpElseIf( void )
+//======================
 // Process an ELSEIF statement.
-
-    if( ( CSHead->typ == CS_IF ) || ( CSHead->typ == CS_ELSEIF ) ) {
+{
+    if( ( CSHead->typ == CS_IF )
+      || ( CSHead->typ == CS_ELSEIF ) ) {
         GBranch( CSHead->bottom );
         GLabel( CSHead->branch );
         FreeLabel( CSHead->branch );
         CSHead->typ = CS_ELSEIF;
         CSHead->branch = NextLabel();
-        CSHead->block = ++BlockNum;
+        CSHead->block = NextBlock();
     } else if( CSHead->typ == CS_ELSE ) {
         Error( IF_ELSE_LAST );
     } else {
         Match();
     }
     CSCond( CSHead->branch );
-    if( RecKeyWord( "THEN" ) ) {
+    if( RecKeyWordOpn( "THEN" ) ) {
         AdvanceITPtr();
-        ReqEOS();
+        ReqEOSOpr();
     } else {
         Error( IF_NO_THEN );
     }
 }
 
 
-void    CpElse(void) {
-//================
-
+void    CpElse( void )
+//====================
 // Process an ELSE statement.
-
-    if( ( CSHead->typ == CS_IF ) || ( CSHead->typ == CS_ELSEIF ) ) {
+{
+    if( ( CSHead->typ == CS_IF )
+      || ( CSHead->typ == CS_ELSEIF ) ) {
         GBranch( CSHead->bottom );
         GLabel( CSHead->branch );
         FreeLabel( CSHead->branch );
         CSHead->typ = CS_ELSE;
-        CSHead->block = ++BlockNum;
+        CSHead->block = NextBlock();
     } else if( CSHead->typ == CS_ELSE ) {
         Error( IF_ELSE_LAST );
     } else {
@@ -123,12 +125,12 @@ void    CpElse(void) {
 }
 
 
-void    CpEndif(void) {
-//=================
-
+void    CpEndif( void )
+//=====================
 // Process an ENDIF statement.
-
-    if( ( CSHead->typ == CS_IF ) || ( CSHead->typ == CS_ELSEIF ) ) {
+{
+    if( ( CSHead->typ == CS_IF )
+      || ( CSHead->typ == CS_ELSEIF ) ) {
         GLabel( CSHead->branch );
         FreeLabel( CSHead->branch );
         GLabel( CSHead->bottom );

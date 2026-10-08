@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2024      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2024-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -33,7 +33,7 @@
 
 #include "dbgdefn.h"
 #include "dbgdata.h"
-#include "dbgmem.h"
+#include "memfuncs.h"
 #include "dui.h"
 #include "banner.h"
 #include "litdui.h"
@@ -43,11 +43,11 @@
 #include "wv.rh"
 
 
-#define pick(c,e,j)     char *LIT_DUI( c );
+#define pick(c,e,j)     const char *LIT_DUI( c );
 #include "wddui.gh"
 #undef pick
 
-#define pick(c,e,j)     char *LIT_MENU( c );
+#define pick(c,e,j)     const char *LIT_MENU( c );
 #include "wdmenu.gh"
 #undef pick
 
@@ -63,10 +63,10 @@ void DUIInitLiterals( void )
 
 void DUIFiniLiterals( void )
 {
-    #define pick(c,e,j)     DUIFreeString( LIT_MENU( c ) );
+    #define pick(c,e,j)     DUIFreeString( (void *)LIT_MENU( c ) );
     #include "wdmenu.gh"
     #undef pick
-    #define pick(c,e,j)     DUIFreeString( LIT_DUI( c ) );
+    #define pick(c,e,j)     DUIFreeString( (void *)LIT_DUI( c ) );
     #include "wddui.gh"
     #undef pick
 }
@@ -78,5 +78,5 @@ char *DUILoadString( dui_res_id id )
 
 void DUIFreeString( void *ptr )
 {
-    WndFree( ptr );
+    MemFree( ptr );
 }

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2017 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -36,6 +36,7 @@
 #include "progsw.h"
 #include "global.h"
 #include "opn.h"
+#include "namecod.h"
 #include "recog.h"
 #include "ferror.h"
 #include "inout.h"
@@ -61,7 +62,7 @@ static  void    BreakOpn( FCODE routine ) {
     AddConst( CITNode );
     GBreak( routine );
     AdvanceITPtr();
-    if( !RecEOS() ) {
+    if( !RecEOSOpr() ) {
         Error( SX_NUM_OR_LIT );
     }
 }
@@ -70,15 +71,15 @@ static  void    BreakOpn( FCODE routine ) {
 static  void    NumOrLit( FCODE routine ) {
 //===============================================
 
-    if( RecNOpn() ) {
+    if( RecNoOpn() ) {
         AdvanceITPtr();
     }
-    if( RecNOpn() ) {
+    if( RecNoOpn() ) {
         GBreak( routine );
-    } else if( !RecLiteral() ) {
-        if( CITNode->opn.ds == DSOPN_INT ) {
+    } else if( !RecLiteralOpn() ) {
+        if( RecNumberOpn() ) {
             if( CITNode->opnd_size > 5 ) {
-                Extension( ST_LONG_NUM, StmtKeywords[ StmtProc ] );
+                Extension( ST_LONG_NUM, StmtKeywords[StmtProc] );
             }
             BreakOpn( routine );
         } else {
@@ -120,11 +121,11 @@ void    CpEnd(void) {
 //===============
 
     LFSkip();
-    if( RecNOpn() ) {
+    if( RecNoOpn() ) {
         ProgSw |= PS_END_OF_SUBPROG;
         AdvanceITPtr();
         Remember.endstmt = true;
-        ReqEOS();
+        ReqEOSOpr();
     } else {
         BadStmt();
     }

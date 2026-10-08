@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -52,7 +52,7 @@ int SemWINStrToAccelEvent( char *string )
              * assume we are using the ASCII charater set to get the
              * corresponding code for control-letter
              */
-            return( toupper( (unsigned char)*string ) - 'A' + 1 );
+            return( toupper( *(unsigned char *)string ) - 'A' + 1 );
         } else {
             return( 0 );
         }
@@ -69,7 +69,7 @@ int SemWINStrToAccelEvent( char *string )
 static void CheckAccelFlags( AccelFlags *flags, unsigned long idval )
 /*******************************************************************/
 {
-    if( !( *flags & ACCEL_VIRTKEY ) ) {
+    if( (*flags & ACCEL_VIRTKEY) == 0 ) {
         if( *flags & ACCEL_SHIFT ) {
             *flags &= ~ACCEL_SHIFT;
             RcWarning( ERR_ACCEL_KEYWORD_IGNORED, "SHIFT", idval );
@@ -87,21 +87,20 @@ FullAccelEntry SemWINMakeAccItem( AccelEvent event, unsigned long idval,
 {
     FullAccelEntry      entry;
 
-    entry.Win32 = false;
+    entry.iswin32 = CmdLineParms.iswin32;
     entry.startoftable = 0;
     if( event.strevent
       || flags.typegiven ) {
         CheckAccelFlags( &flags.flags, idval );
-        if( CmdLineParms.TargetOS == RC_TARGET_OS_WIN16 ) {
-            entry.u.entry.Ascii = event.event;
-            entry.u.entry.Flags = flags.flags;
-            entry.u.entry.Id = idval;
-        } else {
-            entry.Win32 = true;
+        if( CmdLineParms.iswin32 ) {
             entry.u.entry32.Ascii = event.event;
             entry.u.entry32.Flags = flags.flags;
             entry.u.entry32.Id = idval;
             entry.u.entry32.Unknown = 0;
+        } else {
+            entry.u.entry.Ascii = event.event;
+            entry.u.entry.Flags = flags.flags;
+            entry.u.entry.Id = idval;
         }
     } else {
         RcError( ERR_ACCEL_NO_TYPE, idval );
@@ -120,13 +119,13 @@ void SemWINWriteAccelEntry( FullAccelEntry entry )
     bool    error;
 
     if( !ErrorHasOccured ) {
-        if( entry.Win32 ) {
+        if( entry.iswin32 ) {
             error = ResWriteAccelEntry32( &entry.u.entry32, CurrResFile.fp );
         } else {
             error = ResWriteAccelEntry( &entry.u.entry, CurrResFile.fp );
         }
         if( error ) {
-            RcError( ERR_WRITTING_RES_FILE, CurrResFile.filename, LastWresErrStr() );
+            RcError( ERR_WRITTING_RES, CurrResFile.filename, LastWresErrStr() );
             ErrorHasOccured = true;
         }
     }
@@ -135,7 +134,7 @@ void SemWINWriteAccelEntry( FullAccelEntry entry )
 void SemWINWriteLastAccelEntry( FullAccelEntry entry )
 /****************************************************/
 {
-    if( entry.Win32 ) {
+    if( entry.iswin32 ) {
         entry.u.entry32.Flags |= ACCEL_LAST;
     } else {
         entry.u.entry.Flags |= ACCEL_LAST;

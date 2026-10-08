@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -36,6 +36,7 @@
 #include "stmtsw.h"
 #include "errcod.h"
 #include "fmemmgr.h"
+#include "namecod.h"
 #include "insert.h"
 #include "rstutils.h"
 #include "rststruc.h"
@@ -48,7 +49,7 @@ static sym_id AddStruct( const char *name, size_t length )
 {
     sym_id      sym;
 
-    sym = FMemAlloc( sizeof( fstruct ) + length );
+    sym = MemAllocSafe( sizeof( fstruct ) + length );
     sym->u.sd.dbh = 0;
     sym->u.sd.name_len = length;
     memcpy( &sym->u.sd.name, name, length );
@@ -64,7 +65,7 @@ sym_id FindStruct( const char *name, size_t len )
     sym_id      head;
 
     head = RList;
-    for(;;) {
+    for( ;; ) {
         if( head == NULL )
             return( NULL );
         if( head->u.sd.name_len == len ) {
@@ -149,7 +150,7 @@ static sym_id *Strut( sym_id *p_field, const char *name, size_t len )
     sym_id      field;
     sym_id      *q_field;
 
-    for(;;) {
+    for( ;; ) {
         field = *p_field;
         if( field == NULL )
             return( p_field );
@@ -183,7 +184,7 @@ static sym_id AddField( const char *name, size_t length )
 {
     sym_id      sym;
 
-    sym = FMemAlloc( sizeof( field ) + length );
+    sym = MemAllocSafe( sizeof( field ) + length );
     sym->u.fd.name_len = length;
     memcpy( &sym->u.fd.name, name, length );
     sym->u.fd.name[length] = NULLCHAR;
@@ -240,7 +241,7 @@ static sym_id LookupField( sym_id field, const char *name, size_t len, intstar4 
             }
             size = _FieldSize( field );
             if( field->u.fd.dim_ext != NULL ) {
-                size *= field->u.fd.dim_ext->num_elts;
+                size *= field->u.fd.dim_ext->num_elems;
             }
         }
         f_offset += size;
@@ -305,7 +306,7 @@ bool    CalcStructSize( sym_id sd ) {
             }
             size = _FieldSize( field );
             if( field->u.fd.dim_ext != NULL ) {
-                size *= field->u.fd.dim_ext->num_elts;
+                size *= field->u.fd.dim_ext->num_elems;
             }
         }
         total_size += size;
@@ -331,7 +332,7 @@ void    STUnion( void ) {
     //                      ENDMAP
     if( CurrStruct == NULL )
         return;
-    un = FMemAlloc( sizeof( funion ) );
+    un = MemAllocSafe( sizeof( funion ) );
     un->u.fd.typ = FT_UNION;
     un->u.fd.link = NULL;
     un->u.fd.xt.record = NULL;
@@ -368,7 +369,7 @@ void    STMap( void ) {
     //                        INTEGER I
     if( field == NULL )
         return;
-    md = FMemAlloc( sizeof( fmap ) );
+    md = MemAllocSafe( sizeof( fmap ) );
     md->u.sd.link = NULL;
     md->u.sd.fl.fields = NULL;
     md->u.sd.size = 0;

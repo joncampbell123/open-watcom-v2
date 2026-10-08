@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -36,7 +36,6 @@
     #include <process.h>
 #endif
 #include "asmalloc.h"
-#include "fatal.h"
 #include "asmexpnd.h"
 #include "swchar.h"
 #include "asminput.h"
@@ -49,21 +48,14 @@
 #include "cmdlnprs.gh"
 #include "cmdlnprs.h"
 #include "cmdscan.h"
+#include "mangle.h"
 
 #include "clibint.h"
 #include "clibext.h"
 
 
-extern void             Fatal( unsigned msg, ... );
-extern void             DelErrFile( void );
-
-#if defined( __WATCOMC__ ) && defined( _M_IX86 )
-unsigned char   _8087 = 0;
-unsigned char   _real87 = 0;
-#endif
-
-File_Info               AsmFiles;       // files information
-char                    *ModuleName = NULL;
+#define MAX_NESTING     15
+#define BUF_SIZE        512
 
 struct  option {
     char        *option;
@@ -71,8 +63,17 @@ struct  option {
     void        (*function)( void );
 };
 
-#define MAX_NESTING     15
-#define BUF_SIZE        512
+extern void         Fatal( unsigned msg, ... );
+extern void         DelErrFile( void );
+
+#if defined( __WATCOMC__ ) && defined( _M_IX86 )
+unsigned char       _8087 = 0;
+unsigned char       _real87 = 0;
+#endif
+
+File_Info           AsmFiles;       // files information
+char                *ModuleName = NULL;
+jmp_buf             errjmp;
 
 sw_data SWData = {
     false, // real mode CPU instructions set
@@ -81,11 +82,6 @@ sw_data SWData = {
     -1,    // unspecified memory model
     -1     // unspecified FP mode
 };
-
-static char             *ForceInclude = NULL;
-static const char       *switch_start = NULL;
-static char             *SrcFName = NULL;
-static char             *SrcModuleName = NULL;
 
 global_options Options = {
     false,              // sign_value
@@ -124,6 +120,11 @@ global_options Options = {
     0,                  // trace stack
     true                // instructions optimization
 };
+
+static char             *ForceInclude = NULL;
+static const char       *switch_start = NULL;
+static char             *SrcFName = NULL;
+static char             *SrcModuleName = NULL;
 
 static void usage_msg( void )
 /***************************/
@@ -184,13 +185,50 @@ void BadCmdLineOption( void )
     BadCmdLine( MSG_UNKNOWN_OPTION );
 }
 
+static char *SetStringOption( char **o, OPT_STRING **h )
+/******************************************************/
+{
+    OPT_STRING *s;
+    char *p;
+
+    s = *h;
+    p = NULL;
+    if( s != NULL ) {
+        if( s->data[0] != '\0' ) {
+            p = MemStrdupSafe( s->data );
+        }
+        OPT_CLEAN_STRING( h );
+    }
+    if( o != NULL ) {
+        MemFree( *o );
+        *o = p;
+    }
+    return( p );
+}
+
 static char *SetTargetName( char *target_name, const char *name )
 /***************************************************************/
 {
     if( target_name != NULL ) {
-        AsmFree( target_name );
+        MemFree( target_name );
     }
-    return( AsmStrDup( name ) );
+    return( MemStrdupSafe( name ) );
+}
+
+static char *SetTargetNameBT( char *target_name, OPT_STRING **bt_value )
+/**********************************************************************/
+{
+    int             c;
+    char            *p;
+
+    if( target_name != NULL ) {
+        MemFree( target_name );
+    }
+    target_name = p = SetStringOption( NULL, bt_value );
+    while( (c = *(unsigned char *)p) != '\0' ) {
+        *p++ = (char)toupper( c );
+    }
+    return( target_name );
 }
 
 static bool isvalidident( const char *id )
@@ -297,8 +335,8 @@ void ConvertModuleName( char *module_name )
     }
 }
 
-static void srcFileName( char *token )
-/*************************************
+static void srcFileName( const char *token )
+/*******************************************
  * figure out the source file name & store it in AsmFiles
  * fill in default object file name if it is null
  */
@@ -311,20 +349,20 @@ static void srcFileName( char *token )
 
     if( token == NULL ) {
         MsgGet( SOURCE_FILE, msgbuf );
-        Fatal( MSG_CANNOT_OPEN_FILE, msgbuf );
+        Fatal( CANNOT_OPEN_FILE, msgbuf );
     }
     if( AsmFiles.fname[ASM] != NULL ) {
-        Fatal( MSG_TOO_MANY_FILES );
+        Fatal( TOO_MANY_FILES );
     }
     _splitpath2( token, pg.buffer, &pg.drive, &pg.dir, &pg.fname, &pg.ext );
     if( pg.ext[0] == '\0' ) {
-        pg.ext = ASM_EXT;
+        pg.ext = FEXT_ASM;
     }
-    SrcFName = AsmStrDup( pg.fname );
-    SrcModuleName = AsmStrDup( pg.fname );
+    SrcFName = MemStrdupSafe( pg.fname );
+    SrcModuleName = MemStrdupSafe( pg.fname );
     ConvertModuleName( SrcModuleName );
     _makepath( name, pg.drive, pg.dir, pg.fname, pg.ext );
-    AsmFiles.fname[ASM] = AsmStrDup( name );
+    AsmFiles.fname[ASM] = MemStrdupSafe( name );
 }
 
 static void add_include( const char *target_name, const char *src )
@@ -362,16 +400,16 @@ static void free_names( void )
 /* Free names set as cmdline options */
 {
     if( Options.code_class != NULL ) {
-        AsmFree( Options.code_class );
+        MemFree( Options.code_class );
     }
     if( Options.data_seg != NULL ) {
-        AsmFree( Options.data_seg );
+        MemFree( Options.data_seg );
     }
     if( Options.module_name != NULL ) {
-        AsmFree( Options.module_name );
+        MemFree( Options.module_name );
     }
     if( Options.text_seg != NULL ) {
-        AsmFree( Options.text_seg );
+        MemFree( Options.text_seg );
     }
 }
 
@@ -380,29 +418,57 @@ static void main_init( void )
 {
     int         i;
 
-    MemInit();
-    for( i = ASM; i <= OBJ; i++ ) {
-        AsmFiles.file[i] = NULL;
+    for( i = 0; i < FILE_TYPES; i++ ) {
+        AsmFiles.fp[i] = NULL;
         AsmFiles.fname[i] = NULL;
     }
-    AsmFiles.fname[ERR] = AsmStrDup( "*" );
+    AsmFiles.fname[ERR] = MemStrdupSafe( "*" );
     ObjRecInit();
+}
+
+void CloseAsmFile( int i )
+{
+    if( AsmFiles.fp[i] != NULL ) {
+        if( fclose( AsmFiles.fp[i] ) != 0 ) {
+            Fatal( CANNOT_CLOSE_FILE, AsmFiles.fname[i] );
+        }
+        AsmFiles.fp[i] = NULL;
+    }
+}
+
+static void close_files( void )
+/*****************************/
+{
+    /* close ASM file */
+    CloseAsmFile( ASM );
+
+    /* close OBJ file */
+    ObjWriteClose( !write_to_file || Options.error_count > 0 );
+    ObjRecFini();
+    CloseAsmFile( LST );
+    CloseAsmFile( ERR );
+    MemFree( AsmFiles.fname[ASM] );
+    MemFree( AsmFiles.fname[ERR] );
+    MemFree( AsmFiles.fname[LST] );
+    MemFree( AsmFiles.fname[OBJ] );
 }
 
 static void main_fini( void )
 /***************************/
 {
+    close_files();
     free_names();
-    AsmShutDown();
+    MemFree( SrcFName );
+    MemFree( SrcModuleName );
 }
 
 static void open_files( void )
 /****************************/
 {
     /* open ASM file */
-    AsmFiles.file[ASM] = fopen( AsmFiles.fname[ASM], "r" );
-    if( AsmFiles.file[ASM] == NULL ) {
-        Fatal( MSG_CANNOT_OPEN_FILE, AsmFiles.fname[ASM] );
+    AsmFiles.fp[ASM] = fopen( AsmFiles.fname[ASM], "r" );
+    if( AsmFiles.fp[ASM] == NULL ) {
+        Fatal( CANNOT_OPEN_FILE, AsmFiles.fname[ASM] );
     }
 
     /* open OBJ file */
@@ -427,7 +493,7 @@ static char *ReadIndirectFile( char *name )
         fseek( fp, 0, SEEK_END );
         len = ftell( fp );
         fseek( fp, 0, SEEK_SET );
-        env = AsmAlloc( len + 1 );
+        env = MemAllocSafe( len + 1 );
         len = fread( env, 1, len, fp );
         env[len] = '\0';
         fclose( fp );
@@ -437,12 +503,6 @@ static char *ReadIndirectFile( char *name )
             if( ch == '\r' || ch == '\n' ) {
                 *str = ' ';
             }
-#if !defined(__UNIX__)
-            if( ch == 0x1A ) {      // if end of file
-                *str = '\0';        // - mark end of str
-                break;
-            }
-#endif
         }
     }
     return( env );
@@ -456,12 +516,7 @@ static bool scanMode( unsigned *p )
 
     CmdRecogEquals();
     len = CmdScanId( &str );
-    if( len > sizeof( buff ) - 1 ) {
-        len = sizeof( buff ) - 1;
-    }
-    strncpy( buff, str, len );
-    buff[len] = '\0';
-    strupr( buff );
+    len = get_ucase_name( buff, sizeof( buff ), str, len );
     if( strcmp( buff, "MASM5" ) == 0 ) {
 #if 0
         *p = MODE_MASM5;
@@ -535,7 +590,7 @@ static int ProcOptions( OPT_STORAGE *data, const char *str )
             if( ch == '\0' ) {
                 if( level < 0 )
                     break;
-                AsmFree( buffers[level] );
+                MemFree( buffers[level] );
                 CmdScanLineInit( save[level] );
                 level--;
                 continue;
@@ -559,27 +614,6 @@ static int ProcOptions( OPT_STORAGE *data, const char *str )
     return( 0 );
 }
 
-static char *SetStringOption( char **o, OPT_STRING **h )
-/******************************************************/
-{
-    OPT_STRING *s;
-    char *p;
-
-    s = *h;
-    p = NULL;
-    if( s != NULL ) {
-        if( s->data[0] != '\0' ) {
-            p = AsmStrDup( s->data );
-        }
-        OPT_CLEAN_STRING( h );
-    }
-    if( o != NULL ) {
-        AsmFree( *o );
-        *o = p;
-    }
-    return( p );
-}
-
 static void reverseList( OPT_STRING **h )
 {
     OPT_STRING *s;
@@ -601,9 +635,7 @@ static char *set_build_target( OPT_STORAGE *data )
     char    *target_name = NULL;
 
     if( data->bt ) {
-        char *target = SetStringOption( NULL, &(data->bt_value) );
-        target_name = SetTargetName( target_name, strupr( target ) );
-        AsmFree( target );
+        target_name = SetTargetNameBT( target_name, &(data->bt_value) );
     }
 
     if( target_name == NULL ) {
@@ -1092,41 +1124,54 @@ static void set_options( OPT_STORAGE *data )
         SetStringOption( &Options.code_class, &(data->nc_value) );
     }
     if( data->fe && data->fe_value != NULL ) {
-        AsmFree( AsmFiles.fname[ERR] );
-        AsmFiles.fname[ERR] = AsmStrDup( data->fe_value->data );
+        MemFree( AsmFiles.fname[ERR] );
+        AsmFiles.fname[ERR] = MemStrdupSafe( data->fe_value->data );
     }
     if( data->fr ) {
-        AsmFree( AsmFiles.fname[ERR] );
+        MemFree( AsmFiles.fname[ERR] );
         if( data->fr_value != NULL ) {
-            AsmFiles.fname[ERR] = AsmStrDup( data->fr_value->data );
+            AsmFiles.fname[ERR] = MemStrdupSafe( data->fr_value->data );
         } else {
             AsmFiles.fname[ERR] = NULL;
         }
     }
     if( data->fl && data->fl_value != NULL ) {
-        AsmFiles.fname[LST] = AsmStrDup( data->fl_value->data );
+        AsmFiles.fname[LST] = MemStrdupSafe( data->fl_value->data );
         Options.write_listing = true;
     }
     if( data->fo && data->fo_value != NULL ) {
-        AsmFiles.fname[OBJ] = AsmStrDup( data->fo_value->data );
+        AsmFiles.fname[OBJ] = MemStrdupSafe( data->fo_value->data );
     }
     if( data->fi ) {
         SetStringOption( &ForceInclude, &(data->fi_value) );
     }
 }
 
-static void do_init_stuff( char **cmdline )
-/*****************************************/
+static bool do_init_stuff( void )
+/**************************************/
 {
 //    char        msgbuf[MAX_MESSAGE_SIZE];
     OPT_STORAGE data;
     char        *target_name;
+    char        **cmdline;
+#if !defined( __UNIX__ )
+    int         cmd_len;
+    char        *cmd_line;
+    char        *argv[2];
+#endif
 
-    if( !MsgInit() )
-        exit( EXIT_ERROR );
-
+#if defined( __UNIX__ )
+    cmdline = _argv + 1;
+#else
+    cmd_len = _bgetcmd( NULL, 0 ) + 1;
+    cmd_line = MemAllocSafe( cmd_len );
+    _bgetcmd( cmd_line, cmd_len );
+    argv[0] = cmd_line;
+    argv[1] = NULL;
+    cmdline = argv;
+#endif
     add_constant( "WASM=" _MACROSTR( _BLDVER ), true );
-    ForceInclude = AsmStrDup( getenv( "FORCE" ) );
+    ForceInclude = MemStrdupSafe( getenv( "FORCE" ) );
     OPT_INIT( &data );
     ProcOptions( &data, getenv( "WASM" ) );
     for( ; *cmdline != NULL; ++cmdline ) {
@@ -1139,61 +1184,51 @@ static void do_init_stuff( char **cmdline )
         usage_msg();
     }
     add_include( target_name, AsmFiles.fname[ASM] );
-    AsmFree( target_name );
+    MemFree( target_name );
     set_cpu_mode();
     set_fpu_mode();
     PrintBanner();
     open_files();
+#if !defined( __UNIX__ )
+    MemFree( cmd_line );
+#endif
+    return( true );
 }
 
 static void do_fini_stuff( void )
 /*******************************/
 {
-    MsgFini();
 }
 
-#ifdef __UNIX__
-
+#if defined( __UNIX__ ) && !defined( __WATCOMC__ )
 int main( int argc, char **argv )
+#else
+int main( void )
+#endif
 /*******************************/
 {
-  #if !defined( __WATCOMC__ )
+    int         rc;
+#if defined( __UNIX__ ) && !defined( __WATCOMC__ )
     _argc = argc;
     _argv = argv;
-  #else
-    /* unused parameters */ (void)argc;
-  #endif
-
-#else
-
-int main( void )
-/**************/
-{
-    char       *argv[2];
-    int        cmd_len;
-    char       *cmd_line;
-
 #endif
 
-    main_init();
-#ifdef __UNIX__
-    do_init_stuff( &argv[1] );
-#else
-    cmd_len = _bgetcmd( NULL, 0 ) + 1;
-    cmd_line = malloc( cmd_len );
-    if( cmd_line == NULL ) {
-        return( -1 );
+    rc = EXIT_FAILURE;
+    MemInit();
+    if( MsgInit() ) {
+        main_init();
+        if( do_init_stuff() ) {
+            if( (rc = setjmp( errjmp )) == 0 ) {
+                WriteObjModule();           // main body: parse the source file
+                rc = Options.error_count;
+            }
+        }
+        do_fini_stuff();
+        main_fini();
     }
-    _bgetcmd( cmd_line, cmd_len );
-    argv[0] = cmd_line;
-    argv[1] = NULL;
-    do_init_stuff( argv );
-    free( cmd_line );
-#endif
-    WriteObjModule();           // main body: parse the source file
-    do_fini_stuff();
-    main_fini();
-    return( Options.error_count ); /* zero if no errors */
+    MsgFini();
+    MemFini();
+    return( rc ); /* zero if no errors */
 }
 
 void CmdlParamsInit( void )
@@ -1217,5 +1252,5 @@ void CmdlParamsInit( void )
 void FreeForceInclude( void )
 /***************************/
 {
-    AsmFree( ForceInclude );
+    MemFree( ForceInclude );
 }

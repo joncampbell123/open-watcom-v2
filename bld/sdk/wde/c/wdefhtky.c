@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -95,7 +95,9 @@ static bool     WdeHtKyDefineHook( HWND, UINT, WPARAM, LPARAM, DialogStyle );
 /* static variables                                                         */
 /****************************************************************************/
 static HINSTANCE                WdeApplicationInstance;
+#ifdef __WINDOWS__
 static DISPATCH_FN              *WdeHtKyDispatch;
+#endif
 static WdeDialogBoxControl      *WdeDefaultHtKy = NULL;
 static int                      WdeHtKyWndExtra;
 static WNDPROC                  WdeOriginalHtKyProc;
@@ -134,7 +136,7 @@ OBJPTR WdeMakeHtKy( OBJPTR parent, RECT *obj_rect, OBJPTR handle, DialogStyle st
 
     new = WdeHKCreate( parent, obj_rect, handle, id, WdeDefaultHtKy );
 
-    WRMemFree( GETCTL_TEXT( WdeDefaultHtKy ) );
+    MemFree( GETCTL_TEXT( WdeDefaultHtKy ) );
     SETCTL_TEXT( WdeDefaultHtKy, NULL );
 
     return( new );
@@ -152,13 +154,17 @@ OBJPTR WdeHKCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle,
         return( NULL );
     }
 
-    new = (WdeHtKyObject *)WRMemAlloc( sizeof( WdeHtKyObject ) );
+    new = MemAlloc( sizeof( WdeHtKyObject ) );
     if( new == NULL ) {
         WdeWriteTrail( "WdeHtKyCreate: Object malloc failed" );
         return( NULL );
     }
 
+#ifdef __WINDOWS__
     OBJ_DISPATCHER_SET( new, WdeHtKyDispatch );
+#else
+    OBJ_DISPATCHER_SET( new, WdeHtKyDispatcher );
+#endif
 
     new->object_id = id;
 
@@ -172,21 +178,21 @@ OBJPTR WdeHKCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle,
 
     if( new->control == NULL ) {
         WdeWriteTrail( "WdeHtKyCreate: CONTROL_OBJ not created!" );
-        WRMemFree( new );
+        MemFree( new );
         return( NULL );
     }
 
     if( !Forward( new->object_handle, SET_OBJECT_INFO, info, NULL ) ) {
         WdeWriteTrail( "WdeHtKyCreate: SET_OBJECT_INFO failed!" );
         Destroy( new->control, false );
-        WRMemFree( new );
+        MemFree( new );
         return( NULL );
     }
 
     if( !Forward( new->object_handle, CREATE_WINDOW, NULL, NULL ) ) {
         WdeWriteTrail( "WdeHtKyCreate: CREATE_WINDOW failed!" );
         Destroy( new->control, false );
-        WRMemFree( new );
+        MemFree( new );
         return( NULL );
     }
 
@@ -253,14 +259,18 @@ bool WdeHtKyInit( bool first )
     SETCTL_TEXT( WdeDefaultHtKy, NULL );
     SETCTL_CLASSID( WdeDefaultHtKy, WdeStrToControlClass( WHOTKEY_CLASS ) );
 
+#ifdef __WINDOWS__
     WdeHtKyDispatch = MakeProcInstance_DISPATCHER( WdeHtKyDispatcher, WdeGetAppInstance() );
+#endif
     return( true );
 }
 
 void WdeHtKyFini( void )
 {
     WdeFreeDialogBoxControl( &WdeDefaultHtKy );
+#ifdef __WINDOWS__
     FreeProcInstance_DISPATCHER( WdeHtKyDispatch );
+#endif
 }
 
 bool WdeHtKyDestroy( WdeHtKyObject *obj, bool *flag, bool *p2 )
@@ -272,7 +282,7 @@ bool WdeHtKyDestroy( WdeHtKyObject *obj, bool *flag, bool *p2 )
         return( false );
     }
 
-    WRMemFree( obj );
+    MemFree( obj );
 
     return( true );
 }
@@ -299,7 +309,7 @@ bool WdeHtKyCopyObject( WdeHtKyObject *obj, WdeHtKyObject **new, OBJPTR handle )
         return( false );
     }
 
-    *new = (WdeHtKyObject *)WRMemAlloc( sizeof( WdeHtKyObject ) );
+    *new = MemAlloc( sizeof( WdeHtKyObject ) );
 
     if( *new == NULL ) {
         WdeWriteTrail( "WdeHtKyCopyObject: Object malloc failed" );
@@ -317,7 +327,7 @@ bool WdeHtKyCopyObject( WdeHtKyObject *obj, WdeHtKyObject **new, OBJPTR handle )
 
     if( !CopyObject( obj->control, &(*new)->control, (*new)->object_handle ) ) {
         WdeWriteTrail( "WdeHtKyCopyObject: Control not created!" );
-        WRMemFree( *new );
+        MemFree( *new );
         return( false );
     }
 

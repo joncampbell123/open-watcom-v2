@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2024      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2024-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -32,22 +32,25 @@
 
 #include <stddef.h>
 #include "cmemmgr.h"
-#include "asalloc.h"
+#include "memfuncs.h"
 
-void *AsmAlloc( size_t amount )
+
+void *MemAlloc( size_t amount )
 {
-    void    *ptr;
-
-    ptr = CMemAlloc( amount );
-    return( ptr );
+    return( CMemAlloc( amount ) );
 }
 
-char *AsmStrDup( const char *str )
+void *MemAllocSafe( size_t amount )
 {
-    return( CMemStrDup( str ) );
+    return( CMemAlloc( amount ) );
 }
 
-void AsmFree( void *ptr )
+char *MemStrdupSafe( const char *str )
+{
+    return( CMemStrdup( str ) );
+}
+
+void MemFree( void *ptr )
 {
     CMemFree( ptr );
 }

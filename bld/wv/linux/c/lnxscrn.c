@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2019 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -50,7 +50,7 @@
 #include "dbgdefn.h"
 #include "dbgdata.h"
 #include "dbgio.h"
-#include "dbgmem.h"
+#include "memfuncs.h"
 #include "stdui.h"
 #include "uiextrn.h"
 #include "dbgscrn.h"
@@ -127,6 +127,7 @@ static void HupHandler( int signo )
     /* Xqsh has gone away -- nothing to do except die */
     ReleaseProgOvlay( true );
     KillDebugger( 0 );
+    /* never return */
 }
 
 static bool TryXWindows( void )
@@ -152,6 +153,7 @@ static bool TryXWindows( void )
     _searchenv( "xterm", "PATH", xsh_name );
     if( xsh_name[0] == NULLCHAR ) {
         StartupErr( "xterm executable not in PATH" );
+        /* never return */
     }
     masterfd = open( "/dev/ptmx", O_RDWR );
     if( masterfd < 0 )
@@ -165,7 +167,7 @@ static bool TryXWindows( void )
     if( DbgConHandle == -1 ) {
         close( masterfd );
         StartupErr( "unable to open debugger console" );
-        return( false );
+        /* never return */
     }
     tcgetattr( slavefd, &termio );
     termio.c_lflag &= ~ECHO;
@@ -215,15 +217,12 @@ static bool TryXWindows( void )
     XTermPid = fork();
     if( XTermPid == 0 ) { /* child */
         setpgid( 0, 0 );
-#if defined( __UNIX__ ) && !defined( __WATCOMC__ )
-        execvp( argv[0], (char * const *)argv );
-#else
-        execvp( argv[0], (const char **)argv );
-#endif
+        execvp( argv[0], (char **)argv );
         exit( 1 );
     }
     if( XTermPid == (pid_t)-1 ) {
         StartupErr( "unable to create console helper process" );
+        /* never return */
     }
     do { /* xterm transmits a window ID -- ignore */
         res = read( slavefd, &buf, 1 );
@@ -313,6 +312,7 @@ static bool TryTTY( void )
     DbgConHandle = open( DbgTerminal, O_RDWR );
     if( DbgConHandle == -1 ) {
         StartupErr( "unable to open system console" );
+        /* never return */
     }
     return( true );
 }
@@ -321,6 +321,7 @@ void InitScreen( void )
 {
     if( setpgid( 0, 0 ) != 0 && errno != EPERM ) {
         StartupErr( "unable to create new process group" );
+        /* never return */
     }
     if( TryTTY() ) {
         ConMode = C_TTY;
@@ -333,7 +334,7 @@ void InitScreen( void )
         ConMode = C_CURTTY;
         DbgConHandle = -1;
     }
-    _Free( DbgTerminal );
+    MemFree( DbgTerminal );
     DbgTerminal = NULL;
     if( DbgConHandle != -1 ) {
         fcntl( DbgConHandle, F_SETFD, FD_CLOEXEC );
@@ -342,6 +343,7 @@ void InitScreen( void )
     }
     if( !uistart() ) {
         StartupErr( "unable to initialize user interface" );
+        /* never return */
     }
     if( _IsOn( SW_USE_MOUSE ) ) {
         GUIInitMouse( INIT_MOUSE );

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -82,7 +82,7 @@ int                     FontHeight = 15;
 static  HFONT           CurFont;
 static  HWND            CurWindow;
 static  char            Buffer[MAX_BYTES * 4 + 20];
-#ifndef __NT__
+#ifdef __WINDOWS__
 static  DLGPROC         DialProc;
 static  unsigned        DialCount;
 #endif
@@ -110,42 +110,7 @@ typedef enum {
     MT_READABLE
 } MemType;
 
-#ifdef __NT__
-
-static HANDLE   ProcessHdl;
-static DWORD    CurLimit;
-static DWORD    CurBase;
-
-
-/*
- * GetASelectorSize
- */
-DWORD GetASelectorSize( WORD sel )
-{
-    sel = sel;
-    return( CurLimit );
-
-} /* GetASelectorSize */
-
-/*
- * ReadMem
- */
-ULONG_PTR ReadMem( WORD sel, ULONG_PTR off, void *buff, ULONG_PTR size )
-{
-    ULONG_PTR   bytesread;
-
-    sel = sel;
-    bytesread = 0;
-    size++;
-    while( bytesread != size && size != 0 ) {
-        size--;
-        ReadProcessMemory( ProcessHdl, (LPCSTR)(pointer_uint)off, buff, size, &bytesread );
-    }
-    return( bytesread );
-
-} /* ReadMem */
-
-#else
+#ifndef __NT__
 
 /*
  * createAccessString
@@ -310,7 +275,11 @@ bool RegMemWndClass( HANDLE instance )
     WNDCLASS    wc;
 
     wc.style = 0L;
+#ifdef __WINDOWS__
     wc.lpfnWndProc = GetWndProc( MemDisplayProc );
+#else
+    wc.lpfnWndProc = MemDisplayProc;
+#endif
     wc.cbClsExtra = 0;
     wc.cbWndExtra = sizeof( LONG_PTR );
     wc.hInstance = instance;
@@ -896,7 +865,6 @@ LRESULT CALLBACK MemDisplayProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpar
     DWORD               state;
     DWORD               size;
     HBRUSH              wbrush;
-    DLGPROC             dlgproc;
     unsigned            cmd;
 
     info = WPI_GET_WNDINFO( hwnd );
@@ -1050,9 +1018,15 @@ LRESULT CALLBACK MemDisplayProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpar
             break;
         case MEMINFO_OFFSET:
             inst = GET_HINSTANCE( hwnd );
-            dlgproc = MakeProcInstance_DLG( OffsetDlgProc, inst );
-            DialogBox( inst, "OFFSETDLG", hwnd, dlgproc );
-            FreeProcInstance_DLG( dlgproc );
+#ifdef __WINDOWS__
+            {
+                DLGPROC dlgproc = MakeProcInstance_DLG( OffsetDlgProc, inst );
+                DialogBox( inst, "OFFSETDLG", hwnd, dlgproc );
+                FreeProcInstance_DLG( dlgproc );
+            }
+#else
+            DialogBox( inst, "OFFSETDLG", hwnd, OffsetDlgProc );
+#endif
             break;
         }
         break;
@@ -1084,9 +1058,9 @@ LRESULT CALLBACK MemDisplayProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpar
     case WM_NCDESTROY:
         if( info != NULL ) {
             if( info->asm_info != NULL ) {
-                CUIMemFree( info->asm_info );
+                MemFree( info->asm_info );
             }
-            CUIMemFree( info );
+            MemFree( info );
         }
         /* fall through */
     default:
@@ -1167,7 +1141,7 @@ INT_PTR CALLBACK SegInfoDlgProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpar
         EnableMenuItem( hmenu, MEMINFO_SHOW, MF_ENABLED );
         break;
     case WM_NCDESTROY:
-#ifndef __NT__
+#ifdef __WINDOWS__
         DialCount--;
         if( DialCount == 0 ) {
             FreeProcInstance_DLG( DialProc );
@@ -1202,14 +1176,19 @@ static void displaySegInfo( HWND parent, HANDLE instance, MemWndInfo *info )
 
     hmenu = GetMenu( parent );
     EnableMenuItem( hmenu, MEMINFO_SHOW, MF_GRAYED );
+#ifdef __WINDOWS__
     if( DialCount == 0 ) {
         DialProc = MakeProcInstance_DLG( SegInfoDlgProc, instance );
     }
     DialCount++;
+#endif
     if( info->isdpmi ) {
         GetADescriptor( info->sel, &desc );
+#ifdef __WINDOWS__
         hwnd = CreateDialog( instance, "SEL_INFO", parent, DialProc );
-
+#else
+        hwnd = CreateDialog( instance, "SEL_INFO", parent, SegInfoDlgProc );
+#endif
         sprintf( buf, "%04X", info->sel );
         SetDlgItemText( hwnd, SEL_INFO_SEL, buf );
 //      SetWORDStaticField( hwnd, SEL_INFO_SEL, info->sel );
@@ -1244,7 +1223,11 @@ static void displaySegInfo( HWND parent, HANDLE instance, MemWndInfo *info )
     } else {
         ge.dwSize = sizeof( GLOBALENTRY );
         GlobalEntryHandle( &ge, (HGLOBAL)info->sel );
+#ifdef __WINDOWS__
         hwnd = CreateDialog( instance, "HDL_INFO", parent, DialProc );
+#else
+        hwnd = CreateDialog( instance, "HDL_INFO", parent, SegInfoDlgProc );
+#endif
 
         sprintf( buf, "%04X", ge.hBlock );
         SetDlgItemText( hwnd, HDL_INFO_HDL, buf );
@@ -1275,7 +1258,7 @@ static void displaySegInfo( HWND parent, HANDLE instance, MemWndInfo *info )
 /*
  * DispMem
  */
-HWND DispMem( HANDLE instance, HWND parent, WORD seg, bool isdpmi )
+HWND DispMem( HANDLE instance, HWND parent, WORD seg, bool isdpmi, uint_32 base, uint_32 limit )
 {
     HWND                hdl;
     char                buf[50];
@@ -1305,13 +1288,14 @@ HWND DispMem( HANDLE instance, HWND parent, WORD seg, bool isdpmi )
             return( NULLHANDLE );
         }
     }
-    info = CUIMemAlloc( sizeof( MemWndInfo ) );
+    info = MemAlloc( sizeof( *info ) );
     if( info == NULL ) {
         RCMessageBox( parent, MWND_CANT_DISP_MEM_WND, MemConfigInfo.appname, MB_OK | MB_ICONHAND | MB_SYSTEMMODAL );
         return( NULLHANDLE );
     }
     info->sel = seg;
-    info->limit = GetASelectorSize( seg );
+    info->base = base;
+    info->limit = limit;
     info->lastline = 0;
     info->bytesdisp = 1;
     info->ins_cnt = 0;
@@ -1320,7 +1304,9 @@ HWND DispMem( HANDLE instance, HWND parent, WORD seg, bool isdpmi )
     info->dialog = NULLHANDLE;
     info->isdpmi = isdpmi;
     info->autopos = MemConfigInfo.autopos_info;
-#ifndef __NT__
+#ifdef __NT__
+    info->disp_type = MemConfigInfo.data_type;
+#else
     if( isdpmi ) {
         GetADescriptor( seg, &desc );
         if( desc.u1.flags.nonsystem && !desc.u1.flags.execute )  {
@@ -1338,10 +1324,6 @@ HWND DispMem( HANDLE instance, HWND parent, WORD seg, bool isdpmi )
             info->disp_type = MemConfigInfo.data_type;
         }
     }
-    info->base = 0;
-#else
-    info->disp_type = MemConfigInfo.data_type;
-    info->base = CurBase;
 #endif
     info->offset = info->base;
     info->asm_info = NULL;
@@ -1368,7 +1350,7 @@ HWND DispMem( HANDLE instance, HWND parent, WORD seg, bool isdpmi )
     if( hdl == NULLHANDLE || info->scrlbar == NULL ) {
         RCMessageBox( parent, MWND_CANT_DISP_MEM_WND, MemConfigInfo.appname, MB_OK | MB_ICONHAND | MB_SYSTEMMODAL );
         DestroyWindow( hdl );
-        CUIMemFree( info );
+        MemFree( info );
         return( NULLHANDLE );
     }
     if( maximize ) {
@@ -1382,23 +1364,3 @@ HWND DispMem( HANDLE instance, HWND parent, WORD seg, bool isdpmi )
     return( hdl );
 
 } /* DispMem */
-
-#ifdef __NT__
-
-/*
- * DispNTMem
- */
-HWND DispNTMem( HWND parent, HANDLE instance, HANDLE prochdl, DWORD offset, DWORD limit, char *title )
-{
-    HWND        ret;
-
-    ProcessHdl = prochdl;
-    CurLimit = limit;
-    CurBase = offset;
-    ret = DispMem( instance, parent, 0, false );
-    SetWindowText( ret, title );
-    return( ret );
-
-} /* DispNTMem */
-
-#endif

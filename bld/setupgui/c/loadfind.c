@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -42,24 +42,28 @@
 
 #define SEEK_POSBACK(p)     (-(long)(p))
 
-long            WResFileShift = 0;
+long                WResFileShift = 0;
 
-/* look for the resource information in a debugger record at the end of file */
 bool FindResourcesX( PHANDLE_INFO hinfo, bool res_file )
+/*************************************************************
+ * set position of resource info in the file (WResFileShift)
+ * it is 0 if it is external resource file (GUI project)
+ * or look for the resource information in a debugger record at the end of file
+ */
 {
     long                currpos;
     long                offset;
-    master_dbg_header   header;
+    bool                error;
     wzip_cdir           eocd;
     wzip_dirent         cdfh;
-    bool                notfound;
+    uint_16             sign;
+    uint_32             size;
 
-    notfound = !res_file;
+    error = false;
     WResFileShift = 0;
-    if( notfound ) {
+    if( !res_file ) {
+        /* Look for a PKZIP header and skip block if present */
         offset = sizeof( master_dbg_header );
-
-        /* Look for a PKZIP header and skip archive if present */
         if( !WRESSEEK( hinfo->fp, SEEK_POSBACK( sizeof( eocd ) ), SEEK_END ) ) {
             if( WRESREAD( hinfo->fp, &eocd, sizeof( eocd ) ) == sizeof( eocd ) ) {
                 if( memcmp( &eocd.signature, EOCD_MAGIC, SIZE_EOCD_MAGIC ) == 0 ) {
@@ -73,25 +77,38 @@ bool FindResourcesX( PHANDLE_INFO hinfo, bool res_file )
                 }
             }
         }
-        WRESSEEK( hinfo->fp, SEEK_POSBACK( offset ), SEEK_END );
+        error = WRESSEEK( hinfo->fp, SEEK_POSBACK( offset ), SEEK_END );
+        if( error )
+            return( true );
         currpos = WRESTELL( hinfo->fp );
         for( ;; ) {
-            WRESREAD( hinfo->fp, &header, sizeof( master_dbg_header ) );
-            if( header.signature == WAT_RES_SIG ) {
-                notfound = false;
-                WResFileShift = currpos - header.debug_size + sizeof( master_dbg_header );
+            sign = ResReadUint16( &error, hinfo->fp );
+            if( error )
                 break;
-            } else if( header.signature == WAT_DBG_SIGNATURE ||
-                       header.signature == FOX_SIGNATURE1 ||
-                       header.signature == FOX_SIGNATURE2 ) {
-                currpos -= header.debug_size;
-                WRESSEEK( hinfo->fp, currpos, SEEK_SET );
+            error = WRESSEEK( hinfo->fp, offsetof( master_dbg_header, debug_size ) - sizeof( uint_16 ), SEEK_CUR );
+            if( error )
+                break;
+            size = ResReadUint32( &error, hinfo->fp );
+            if( error )
+                break;
+            if( sign == WAT_RES_SIG ) {
+                WResFileShift = currpos - size + sizeof( master_dbg_header );
+                break;
+            } else if( sign == WAT_DBG_SIGNATURE
+              || sign == FOX_SIGNATURE1
+              || sign == FOX_SIGNATURE2 ) {
+                currpos -= size;
+                error = WRESSEEK( hinfo->fp, currpos, SEEK_SET );
+                if( error ) {
+                    break;
+                }
             } else {        /* did not find the resource information */
+                error = true;
                 break;
             }
         }
     }
-    return( notfound );
+    return( error );
 }
 
 bool FindResources( PHANDLE_INFO hinfo )

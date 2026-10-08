@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2023-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2023-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -45,15 +45,14 @@
 
 
 /***** forward references *****/
-static void AddFontResources( WResID *name, ResMemFlags, const char *filename );
+static void AddFontResources( WResID *font_id, ResMemFlags res_flags, const char *filename );
 
 
-void SemOS2AddSingleLineResource( WResID *name, YYTOKENTYPE type,
-                       FullOptFlagsOS2 *fullflags, char *filename )
+void SemOS2AddSingleLineResource( WResID *res_id, YYTOKENTYPE type,
+                       ResMemFlags res_flags, char *filename )
 /*****************************************************************/
 {
     ResLocation     start;
-    ResMemFlags     flags, flagsMDP, flagsMP;
     char            full_filename[_MAX_PATH];
     static bool     firstIcon = true;
     bool            error;
@@ -65,112 +64,73 @@ void SemOS2AddSingleLineResource( WResID *name, YYTOKENTYPE type,
         } else {
             error = AddDependency( full_filename );
             if( !error ) {
-                flagsMDP = MEMFLAG_MOVEABLE | MEMFLAG_DISCARDABLE | MEMFLAG_PURE;
-                flagsMP  = MEMFLAG_MOVEABLE | MEMFLAG_PURE;
                 switch( type ) {
                 case Y_DEFAULTICON:
                     /*
                      * DEFAULTICON doesn't have a name, let's make our own
                      */
-                    name = RESALLOC( sizeof( WResID ) );
-                    name->IsName = false;
-                    name->ID.Num = 999;
+                    res_id = MemAllocSafe( sizeof( WResID ) );
+                    res_id->IsName = false;
+                    res_id->ID.Num = 999;
                     firstIcon    = true;    /* Trigger a warning if we have one already */
                     /* fall through */
                 case Y_POINTER:
                 case Y_ICON:
-                    if( fullflags != NULL ) {
-                        SemOS2CheckResFlags( fullflags, 0, MEMFLAG_MOVEABLE | MEMFLAG_DISCARDABLE, 0 );
-                        flags = fullflags->flags;
-                    } else {
-                        flags = flagsMDP;
-                    }
                     /*
                      * Duplicate the first icon encountered as the default icon IFF it
                      * has resource ID equal to 1
                      */
                     if( firstIcon
-                      && !name->IsName
-                      && (name->ID.Num == 999
-                      || name->ID.Num == 1) ) {
+                      && !res_id->IsName
+                      && (res_id->ID.Num == 999
+                      || res_id->ID.Num == 1) ) {
                         WResID      *id;
 
-                        id = RESALLOC( sizeof( WResID ) );
-                        if( id == NULL )
-                            break;
-
                         firstIcon  = false;
+                        id = MemAllocSafe( sizeof( WResID ) );
                         id->IsName = false;
                         id->ID.Num = OS2_RT_DEFAULTICON;
                         start = SemCopyRawFileOnly( full_filename );
-                        SemAddResourceAndFree( name, WResIDFromNum( OS2_RT_POINTER ), flags, start );
+                        SemAddResourceAndFree( res_id, WResIDFromNum( OS2_RT_POINTER ), res_flags, start );
 
                         start = SemCopyRawFileOnly( full_filename );
-                        SemAddResourceAndFree( id, WResIDFromNum( OS2_RT_DEFAULTICON ), flagsMDP, start );
+                        SemAddResourceAndFree( id, WResIDFromNum( OS2_RT_DEFAULTICON ), DEFAULT_FLAGS_MDP, start );
                     } else {
                         start = SemCopyRawFileOnly( full_filename );
-                        SemAddResourceAndFree( name, WResIDFromNum( OS2_RT_POINTER ), flags, start );
+                        SemAddResourceAndFree( res_id, WResIDFromNum( OS2_RT_POINTER ), res_flags, start );
                     }
                     break;
                 case Y_BITMAP:
-                    if( fullflags != NULL ) {
-                        SemOS2CheckResFlags( fullflags, 0, MEMFLAG_MOVEABLE, MEMFLAG_PURE );
-                        flags = fullflags->flags;
-                    } else {
-                        flags = flagsMP;
-                    }
                     start = SemCopyRawFileOnly( full_filename );
-                    SemAddResourceAndFree( name, WResIDFromNum( OS2_RT_BITMAP ), flags, start );
+                    SemAddResourceAndFree( res_id, WResIDFromNum( OS2_RT_BITMAP ), res_flags, start );
                     break;
                 case Y_FONT:
-                    if( fullflags != NULL ) {
-                        SemOS2CheckResFlags( fullflags, 0, MEMFLAG_MOVEABLE | MEMFLAG_DISCARDABLE, MEMFLAG_PURE );
-                        flags = fullflags->flags;
-                    } else {
-                        flags = flagsMDP;
-                    }
-                    AddFontResources( name, flags, full_filename );
+                    AddFontResources( res_id, res_flags, full_filename );
                     break;
                 default:
-                    RESFREE( name );
+                    MemFree( res_id );
                     break;
                 }
             }
         }
     }
     if( error ) {
-        RESFREE( name );
+        MemFree( res_id );
         ErrorHasOccured = true;
     }
-    RESFREE( filename );
+    MemFree( filename );
 
 } /* SemOS2AddSingleLineResource */
 
-static RcStatus readFontInfo( FILE *fp, FontInfo *info, int *err_code )
-/*********************************************************************/
-{
-    size_t      numread;
-
-    numread = RESREAD( fp, info, sizeof( *info ) );
-    if( numread != sizeof( *info ) ) {
-        *err_code = errno;
-        return( RESIOERR( fp, numread ) ? RS_READ_ERROR : RS_READ_INCMPLT );
-    }
-    return( RS_OK );
-}
-
 #define FONT_BUFFER_SIZE  0x1000
 
-static RcStatus copyFont( FontInfo *info, FILE *fp, WResID *name,
-                                ResMemFlags flags, int *err_code )
+static RcStatus copyFont( FontInfo *info, FILE *fp, WResID *res_id,
+                                ResMemFlags res_flags, int *err_code )
 /*********************************************************************/
 {
     RcStatus            ret;
-    char                *buffer;
     ResLocation         loc;
     long                pos;
-
-    buffer = RESALLOC( FONT_BUFFER_SIZE );
 
     loc.start = SemStartResource();
 
@@ -183,7 +143,7 @@ static RcStatus copyFont( FontInfo *info, FILE *fp, WResID *name,
             ret = RS_READ_ERROR;
             *err_code = errno;
         } else {
-            ret = SemCopyDataUntilEOF( pos, fp, buffer, FONT_BUFFER_SIZE, err_code );
+            ret = CopyDataUntilEOF( pos, fp, CurrResFile.fp, FONT_BUFFER_SIZE, err_code );
         }
     }
 
@@ -191,9 +151,7 @@ static RcStatus copyFont( FontInfo *info, FILE *fp, WResID *name,
     /*
      * add the font to the RES file directory
      */
-    SemAddResourceAndFree( name, WResIDFromNum( OS2_RT_FONT ), flags, loc );
-
-    RESFREE( buffer );
+    SemAddResourceAndFree( res_id, WResIDFromNum( OS2_RT_FONT ), res_flags, loc );
 
     return( ret );
 } /* copyFont */
@@ -234,7 +192,7 @@ static FullFontDir *NewFontDir( void )
 {
     FullFontDir     *newdir;
 
-    newdir = RESALLOC( sizeof( FullFontDir ) );
+    newdir = MemAllocSafe( sizeof( FullFontDir ) );
     newdir->Head = NULL;
     newdir->Tail = NULL;
     newdir->NumOfFonts = 0;
@@ -242,8 +200,8 @@ static FullFontDir *NewFontDir( void )
     return( newdir );
 }
 
-static FullFontDirEntry *NewFontDirEntry( FontInfo *info, char *devicename, char *facename, WResID *fontid )
-/**********************************************************************************************************/
+static FullFontDirEntry *NewFontDirEntry( FontInfo *info, char *devicename, char *facename, WResID *font_id )
+/***********************************************************************************************************/
 {
     FullFontDirEntry        *entry;
     int                     structextra;
@@ -257,33 +215,27 @@ static FullFontDirEntry *NewFontDirEntry( FontInfo *info, char *devicename, char
     /*
      * -1 for the 1 char in the struct already
      */
-    entry = RESALLOC( sizeof( FullFontDirEntry ) + structextra - 1 );
+    entry = MemAllocSafe( sizeof( FullFontDirEntry ) + structextra - 1 );
     entry->Next = NULL;
     entry->Prev = NULL;
     /*
      * -1 for the 1 char in the struct already
      */
     entry->Entry.StructSize = sizeof( FontDirEntry ) + structextra - 1;
-    entry->Entry.FontID = fontid->ID.Num;
+    entry->Entry.FontID = font_id->ID.Num;
     entry->Entry.Info = *info;
     memcpy( &(entry->Entry.DevAndFaceName[0]), devicename, devicelen );
     memcpy( &(entry->Entry.DevAndFaceName[devicelen]), facename, facelen );
-    /*
-     * set dfDevice and dfFace to be the offset of the strings from the start
-     * of the FontInfo structure (entry->Entry.Info)
-     */
-    entry->Entry.Info.dfDevice = sizeof( FontInfo );
-    entry->Entry.Info.dfFace = sizeof( FontInfo ) + devicelen;
 
     return( entry );
 }
 
-static void AddFontToDir( FontInfo *info, char *devicename, char *facename, WResID *fontid )
-/******************************************************************************************/
+static void AddFontToDir( FontInfo *info, char *devicename, char *facename, WResID *font_id )
+/*******************************************************************************************/
 {
     FullFontDirEntry        *entry;
 
-    entry = NewFontDirEntry( info, devicename, facename, fontid );
+    entry = NewFontDirEntry( info, devicename, facename, font_id );
 
     if( CurrResFile.FontDir == NULL ) {
         CurrResFile.FontDir = NewFontDir();
@@ -294,8 +246,8 @@ static void AddFontToDir( FontInfo *info, char *devicename, char *facename, WRes
     CurrResFile.FontDir->NumOfFonts += 1;
 }
 
-static void AddFontResources( WResID *name, ResMemFlags flags, const char *filename )
-/***********************************************************************************/
+static void AddFontResources( WResID *font_id, ResMemFlags res_flags, const char *filename )
+/******************************************************************************************/
 {
     FontInfo            info;
     char                *devicename;
@@ -305,7 +257,7 @@ static void AddFontResources( WResID *name, ResMemFlags flags, const char *filen
     int                 err_code;
     ReadStrErrInfo      readstr_err;
 
-    if( name->IsName ) {
+    if( font_id->IsName ) {
         RcError( ERR_FONT_NAME );
         return;
     }
@@ -314,11 +266,13 @@ static void AddFontResources( WResID *name, ResMemFlags flags, const char *filen
     if( fp == NULL)
         goto FILE_OPEN_ERROR;
 
-    ret = readFontInfo( fp, &info, &err_code );
-    if( ret != RS_OK)
+    if( ResReadFontInfo( &info, fp ) ) {
+        ret = LastWresStatus();
+        err_code = LastWresErr();
         goto READ_HEADER_ERROR;
+    }
 
-    ret = copyFont( &info, fp, name, flags, &err_code );
+    ret = copyFont( &info, fp, font_id, res_flags, &err_code );
     if( ret != RS_OK )
         goto COPY_FONT_ERROR;
 
@@ -333,14 +287,14 @@ static void AddFontResources( WResID *name, ResMemFlags flags, const char *filen
     if( facename == NULL ) {
         ret = readstr_err.status;
         err_code = readstr_err.err_code;
-        RESFREE( devicename );
+        MemFree( devicename );
         goto READ_HEADER_ERROR;
     }
 
-    AddFontToDir( &info, devicename, facename, name );
+    AddFontToDir( &info, devicename, facename, font_id );
 
-    RESFREE( devicename );
-    RESFREE( facename );
+    MemFree( devicename );
+    MemFree( facename );
 
     RcIoCloseInputBin( fp );
 
@@ -350,13 +304,13 @@ static void AddFontResources( WResID *name, ResMemFlags flags, const char *filen
 FILE_OPEN_ERROR:
     RcError( ERR_CANT_OPEN_FILE, filename, strerror( errno ) );
     ErrorHasOccured = true;
-    RESFREE( name );
+    MemFree( font_id );
     return;
 
 READ_HEADER_ERROR:
     ReportCopyError( ret, ERR_READING_FONT, filename, err_code );
     ErrorHasOccured = true;
-    RESFREE( name );
+    MemFree( font_id );
     RcIoCloseInputBin( fp );
     return;
 
@@ -375,17 +329,17 @@ static void FreeFontDir( FullFontDir *olddir )
 
     for( currentry = olddir->Head; currentry != NULL; currentry = nextentry ) {
         nextentry = currentry->Next;
-        RESFREE( currentry );
+        MemFree( currentry );
     }
 
-    RESFREE( olddir );
+    MemFree( olddir );
 }
 
 /*
  * name and memory flags of the font directory resource
  */
 #define FONT_DIR_NAME   "FONTDIR"
-#define FONT_DIR_FLAGS  MEMFLAG_MOVEABLE|MEMFLAG_PRELOAD   /* not PURE */
+#define FONT_DIR_FLAGS  (RESFLAG_MOVEABLE | RESFLAG_PRELOAD)    /* not PURE */
 
 void SemOS2WriteFontDir( void )
 /*****************************/
@@ -400,7 +354,7 @@ void SemOS2WriteFontDir( void )
 
     loc.start = SemStartResource();
 
-    error = ResWriteUint16( CurrResFile.FontDir->NumOfFonts, CurrResFile.fp );
+    error = ResWriteUint16( CurrResFile.fp, CurrResFile.FontDir->NumOfFonts );
     if( error)
         goto OUTPUT_WRITE_ERROR;
 
@@ -423,7 +377,7 @@ void SemOS2WriteFontDir( void )
 
 
 OUTPUT_WRITE_ERROR:
-    RcError( ERR_WRITTING_RES_FILE, CurrResFile.filename, LastWresErrStr() );
+    RcError( ERR_WRITTING_RES, CurrResFile.filename, LastWresErrStr() );
     ErrorHasOccured = true;
     FreeFontDir( CurrResFile.FontDir );
     CurrResFile.FontDir = NULL;

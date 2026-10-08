@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -66,9 +66,6 @@
 #define decode36u( x )      strtoul( x, NULL, 36 )
 
 #define IS_EMPTY(p)         ((p)[0] == '\0' || (p)[0] == '.' && (p)[1] == '\0')
-
-#define IS_WS(c)            ((c) == ' ' || (c) == '\t')
-#define SKIP_WS(p)          while(IS_WS(*(p))) (p)++
 
 #define __ROUND_UP_SIZE_TEXTBUF(x)      __ROUND_UP_SIZE((x), TEXTBUF_SIZE)
 #define __ROUND_UP_SIZE_BLOCK(x)        __ROUND_UP_SIZE((x), block_size)
@@ -365,7 +362,7 @@ static tree_node *TreeNode( tree_op op, tree_node *left, tree_node *right )
 {
     tree_node   *tree;
 
-    tree = GUIMemAlloc( sizeof( tree_node ) );
+    tree = MemAllocSafe( sizeof( tree_node ) );
     tree->op = op;
     tree->left.u.node = left;
     tree->right = right;
@@ -391,7 +388,7 @@ static tree_node *BuildExprTree( const char *str )
     /*
      * copy string so we can use STRTOK
      */
-    str2 = GUIStrDup( str );
+    str2 = MemStrdupSafe( str );
     for( token = strtok( str2, " " ); token != NULL; token = strtok( NULL, " " ) ) {
         if( token[0] == '|' ) {         /* or together top 2 values */
             --stack_top;
@@ -418,7 +415,7 @@ static tree_node *BuildExprTree( const char *str )
                 stack_top = STACK_SIZE - 1;
             } else {
                 stack[stack_top] = TreeNodeUni( OP_EXIST );
-                stack[stack_top]->left.u.str = GUIStrDup( token + 1 );
+                stack[stack_top]->left.u.str = MemStrdupSafe( token + 1 );
             }
         } else {                        /* push current value */
             ++stack_top;
@@ -438,7 +435,7 @@ static tree_node *BuildExprTree( const char *str )
     while( stack_top-- > 0 ) {
         tree = TreeNode( OP_AND, tree, stack[stack_top] );
     }
-    GUIMemFree( str2 );
+    MemFree( str2 );
     return( tree );
 }
 
@@ -482,14 +479,14 @@ static void BurnTree( tree_node *tree )
         BurnTree( tree->left.u.node );
         break;
     case OP_EXIST:
-        GUIMemFree( tree->left.u.str );
+        MemFree( tree->left.u.str );
         break;
     case OP_VAR:
     case OP_TRUE:
     case OP_FALSE:
         break;
     }
-    GUIMemFree( tree );
+    MemFree( tree );
 }
 
 static array_idx NewFileCond( char *str )
@@ -662,25 +659,38 @@ static char *NextToken( char *buf, char delim )
  */
 {
     char            *p;
-    char            *q;
+    char            *next;
 
-    if( buf == NULL ) {
-        return( NULL );
-    }
     p = strchr( buf, delim );
-    if( p != NULL ) {
-        *p = '\0';
-        q = p - 1;
-        while( q >= buf && IS_WS( *q ) ) {
-            *q = '\0';
-            --q;
+    if( p == NULL ) {
+        next = p = strchr( buf, '\0' );
+    } else {
+        next = p;
+        *next++ = '\0';
+        while( isspace( *(unsigned char *)next ) ) {
+            next++;
         }
-        ++p;
-        SKIP_WS( p );
     }
-    return( p );
+    if( p != buf ) {
+        p--;
+        while( p >= buf && isspace( *(unsigned char *)p ) ) {
+            *p-- = '\0';
+        }
+    }
+    return( next );
 }
 
+static char *NextTokenQuoted( char **buf, char delim )
+{
+    char    *line;
+    char    *next;
+
+    line = *buf; next = NextToken( line, '"' );
+    line = next; next = NextToken( line, '"' );
+    *buf = line;
+    line = next; next = NextToken( line, delim );
+    return( next );
+}
 
 static char *StripBlanks( char *p )
 /*********************************/
@@ -690,10 +700,11 @@ static char *StripBlanks( char *p )
     if( p == NULL ) {
         return p;
     }
-
-    SKIP_WS( p );
+    while( isspace( *(unsigned char *)p ) ) {
+        p++;
+    }
     q = p + strlen( p ) - 1;
-    while( q >= p && (IS_WS( *q ) || *q == '\n') ) {
+    while( q >= p && ( isspace( *(unsigned char *)q ) || *q == '\n') ) {
         *q = '\0';
         --q;
     }
@@ -862,7 +873,7 @@ static char *find_break( char *text, DIALOG_PARSER_INFO *parse_dlg, int *chwidth
         /*
          * is this a good place to break?
          */
-        if( IS_WS( *e ) ) { /* English */
+        if( isspace( *(unsigned char *)e ) ) { /* English */
             br = n;
         } else if( valid_last_char( e )
           && valid_first_char( n ) ) {
@@ -875,6 +886,68 @@ static char *find_break( char *text, DIALOG_PARSER_INFO *parse_dlg, int *chwidth
     return( br );
 }
 
+static char *get_cond( const char *str )
+{
+    if( str == NULL || *str == '\0' )
+        return( NULL );
+    return( MemStrdupSafe( str ) );
+}
+
+static const char *set_var_default_value( vhandle var_handle, const char *line, VBUF *buff )
+{
+    const char      *val;
+    char            *section;
+#if defined( __NT__ )
+    char            *value;
+#endif
+
+#ifndef __NT__
+    /* unused parameters */ (void)buff;
+#endif
+
+    val = NULL;
+    if( line[0] != '\0' ) {
+        if( line[0] == '%' ) {
+            val = GetVariableStrVal( line + 1 );
+        } else if( line[0] == '@' ) {
+            /*
+             * support @envvar@section:value - 2nd part is optional
+             */
+            section = strchr( line + 1, '@' );
+            if( section != NULL ) {
+                /* terminate envvar */
+                *section = '\0';
+#if defined( __NT__ )
+                ++section;
+                value = strchr( section, ':' );
+                if( value != NULL ) {
+                    *value = '\0';
+                    ++value;
+                    if( GetRegString( HKEY_CURRENT_USER, section, value, buff ) ) {
+                        val = VbufString( buff );
+                    }
+                }
+#endif
+            }
+            if( val == NULL
+              && line[1] != '\0' ) {
+                val = getenv( line + 1 );
+            }
+        } else {
+            val = line;
+        }
+    }
+    if( val == NULL
+      || val[0] == '\0' ) {
+        val = VarGetStrVal( var_handle );
+    }
+    SetVariableByHandle( var_handle, val );
+    if( VariablesFile != NULL ) {
+        ReadVariablesFile( VarGetName( var_handle ) );
+    }
+    return( val );
+}
+
 static bool dialog_static( char *next, DIALOG_PARSER_INFO *parse_dlg )
 /********************************************************************/
 {
@@ -885,19 +958,16 @@ static bool dialog_static( char *next, DIALOG_PARSER_INFO *parse_dlg )
     vhandle             var_handle;
 
     VbufInit( &text );
-    line = next; next = NextToken( line, '"' );
-    line = next; next = NextToken( line, '"' );
-    if( line != NULL ) {
-        VbufConcStr( &text, line );
-    }
-    line = next; next = NextToken( line, ',' );
+    line = next; next = NextTokenQuoted( &line, ',' );
+    VbufConcStr( &text, line );
     line = next; next = NextToken( line, ',' );
     if( EvalCondition( line ) ) {
         line = next; next = NextToken( line, ',' );
+
         /*
          * condition for visibility (dynamic)
          */
-        parse_dlg->curr_dialog->controls_ext[parse_dlg->curr_dialog->num_controls].pVisibilityConds = GUIStrDup( line );
+        parse_dlg->curr_dialog->controls_ext[parse_dlg->curr_dialog->num_controls].pVisibilityConds = get_cond( line );
         /*
          * dummy_var allows control to have an id
          *  - used by dynamic visibility feature
@@ -940,10 +1010,7 @@ static char *textwindow_wrap( char *text, DIALOG_PARSER_INFO *parse_dlg, bool co
         return( NULL );
     }
 
-    big_buffer = GUIMemAlloc( strlen( text ) * 2 + 1 );
-    if( big_buffer == NULL ) {
-        return( NULL );
-    }
+    big_buffer = MemAllocSafe( strlen( text ) * 2 + 1 );
     if( license_file ) {
         /*
          * restore paragraphs by removing single cr/crlf/lf
@@ -992,7 +1059,9 @@ static char *textwindow_wrap( char *text, DIALOG_PARSER_INFO *parse_dlg, bool co
     break_candidate = find_break( orig_index, parse_dlg, &chwidth );
     for( ; orig_index[0] != '\0'; orig_index++ ) {
         if( new_line ) {
-            SKIP_WS( orig_index );
+            while( isspace( *(unsigned char *)orig_index ) ) {
+                orig_index++;
+            }
         }
 
         if( convert_newline
@@ -1026,9 +1095,9 @@ static char *textwindow_wrap( char *text, DIALOG_PARSER_INFO *parse_dlg, bool co
     }
     *new_index = '\0';
 
-    GUIMemFree( text );
-    text = GUIStrDup( big_buffer );
-    GUIMemFree( big_buffer );
+    MemFree( text );
+    text = MemStrdupSafe( big_buffer );
+    MemFree( big_buffer );
     return( text );
 }
 
@@ -1050,9 +1119,8 @@ static bool dialog_textwindow( char *next, DIALOG_PARSER_INFO *parse_dlg, bool l
     if( rows > 0 ) {
         rows -= 1;
     }
-    line = next; next = NextToken( line, '"' );
-    line = next; next = NextToken( line, '"' );
-    if( line == NULL ) {
+    line = next; next = NextTokenQuoted( &line, ',' );
+    if( *line == '\0' ) {
         rc = false;
     } else {
         if( *line == '@' ) {
@@ -1061,11 +1129,9 @@ static bool dialog_textwindow( char *next, DIALOG_PARSER_INFO *parse_dlg, bool l
             afh = FileOpen( &file_name, DATA_BIN );
             if( afh != NULL ) {
                 FileStat( &file_name, &statbuf );
-                text = GUIMemAlloc( statbuf.st_size + 1 );  /* +1 for terminating null */
-                if( text != NULL ) {
-                    FileRead( afh, text, statbuf.st_size );
-                    text[statbuf.st_size] = '\0';
-                }
+                text = MemAllocSafe( statbuf.st_size + 1 );  /* +1 for terminating null */
+                FileRead( afh, text, statbuf.st_size );
+                text[statbuf.st_size] = '\0';
                 FileClose( afh );
             }
             VbufFree( &file_name );
@@ -1075,19 +1141,19 @@ static bool dialog_textwindow( char *next, DIALOG_PARSER_INFO *parse_dlg, bool l
              */
             text = textwindow_wrap( text, parse_dlg, false, license_file );
         } else {
-            text = GUIStrDup( line );
+            text = MemStrdupSafe( line );
             text = textwindow_wrap( text, parse_dlg, true, false );
         }
 
         line = next; next = NextToken( line, ',' );
-        line = next; next = NextToken( line, ',' );
         if( EvalCondition( line )
           && text != NULL ) {
             line = next; next = NextToken( line, ',' );
+
             /*
              * condition for visibility (dynamic)
              */
-            parse_dlg->curr_dialog->controls_ext[parse_dlg->curr_dialog->num_controls].pVisibilityConds = GUIStrDup( line );
+            parse_dlg->curr_dialog->controls_ext[parse_dlg->curr_dialog->num_controls].pVisibilityConds = get_cond( line );
             /*
              * dummy_var allows control to have an id
              *  - used by dynamic visibility feature
@@ -1106,7 +1172,7 @@ static bool dialog_textwindow( char *next, DIALOG_PARSER_INFO *parse_dlg, bool l
         } else {
             rc = false;
         }
-        GUIMemFree( text );
+        MemFree( text );
     }
     return( rc );
 }
@@ -1117,32 +1183,28 @@ static bool dialog_dynamic( char *next, DIALOG_PARSER_INFO *parse_dlg )
     int                 len;
     char                *line;
     vhandle             var_handle;
-    char                *vbl_name;
     char                *text;
     bool                rc = true;
 
     line = next; next = NextToken( line, ',' );
-    vbl_name = GUIStrDup( line );
-    line = next; next = NextToken( line, '"' );
-    line = next; next = NextToken( line, '"' );
-    var_handle = AddVariable( vbl_name );
-    text = GUIStrDup( line );
-    line = next; next = NextToken( line, ',' );
+    var_handle = AddVariable( line );
+    line = next; next = NextTokenQuoted( &line, ',' );
+    text = line;
     line = next; next = NextToken( line, ',' );
     if( EvalCondition( line ) ) {
-        if( text != NULL ) {
+        line = next; next = NextToken( line, ',' );
+
+        len = (int)strlen( text );
+        if( len > 0 ) {
             SetVariableByHandle( var_handle, text );
         }
         parse_dlg->curr_dialog->pVariables[parse_dlg->num_variables] = var_handle;
         parse_dlg->curr_dialog->pConditions[parse_dlg->num_variables] = NULL;
         parse_dlg->num_variables++;
-        len = (int)strlen( text );
-        line = next;
-        next = NextToken( line, ',' );
         /*
          * condition for visibility (dynamic)
          */
-        parse_dlg->curr_dialog->controls_ext[parse_dlg->curr_dialog->num_controls].pVisibilityConds = GUIStrDup( line );
+        parse_dlg->curr_dialog->controls_ext[parse_dlg->curr_dialog->num_controls].pVisibilityConds = get_cond( line );
         if( parse_dlg->max_width < len )
             parse_dlg->max_width = len;
         if( parse_dlg->max_width < 60 )
@@ -1152,8 +1214,6 @@ static bool dialog_dynamic( char *next, DIALOG_PARSER_INFO *parse_dlg )
     } else {
         rc = false;
     }
-    GUIMemFree( vbl_name );
-    GUIMemFree( text );
     return( rc );
 }
 
@@ -1171,6 +1231,8 @@ static bool dialog_pushbutton( char *next, DIALOG_PARSER_INFO *parse_dlg )
     line_start = next; next = NextToken( line_start, ',' );
     line = next; next = NextToken( line, ',' );
     if( EvalCondition( line ) ) {
+        line = next; next = NextToken( line, ',' );
+
         parse_dlg->num_push_buttons += 1;
         def_ret = false;
         if( *line_start == '.' ) {
@@ -1186,11 +1248,10 @@ static bool dialog_pushbutton( char *next, DIALOG_PARSER_INFO *parse_dlg )
         }
         if( parse_dlg->max_width < parse_dlg->num_push_buttons * ( ( 3 * BW ) / 2 ) )
             parse_dlg->max_width = parse_dlg->num_push_buttons * ( ( 3 * BW ) / 2 );
-        line = next; next = NextToken( line, ',' );
         /*
          * condition for visibility (dynamic)
          */
-        parse_dlg->curr_dialog->controls_ext[parse_dlg->curr_dialog->num_controls].pVisibilityConds = GUIStrDup( line );
+        parse_dlg->curr_dialog->controls_ext[parse_dlg->curr_dialog->num_controls].pVisibilityConds = get_cond( line );
     } else {
         rc = false;
     }
@@ -1202,69 +1263,22 @@ static bool dialog_edit_button( char *next, DIALOG_PARSER_INFO *parse_dlg )
 {
 //    int                 len;
     char                *line;
-    char                *vbl_name;
-    const char          *val;
-    char                *section;
     char                *button_text;
     char                *dialog_name;
-#if defined( __NT__ )
-    char                *value;
-#endif
     vhandle             var_handle;
     vhandle             var_handle_2;
     VBUF                buff;
     bool                rc = true;
 
-    line = next; next = NextToken( line, ',' );
-    vbl_name = GUIStrDup( line );
-    var_handle = AddVariable( vbl_name );
-    line = next; next = NextToken( line, ',' );
-    val = NULL;
     VbufInit( &buff );
-    if( line[0] != '\0' ) {
-        if( line[0] == '%' ) {
-            val = GetVariableStrVal( &line[1] );
-        } else if( line[0] == '@' ) {
-            /*
-             * support @envvar@section:value - 2nd part is optional
-             */
-            section = strchr( &line[1], '@' );
-            if( section != NULL ) {
-                /* terminate envvar */
-                *section = '\0';
-#if defined( __NT__ )
-                ++section;
-                value = strchr( section, ':' );
-                if( value != NULL ) {
-                    *value = '\0';
-                    ++value;
-                    if( GetRegString( HKEY_CURRENT_USER, section, value, &buff ) ) {
-                        val = VbufString( &buff );
-                    }
-                }
-#endif
-            }
-            if( val == NULL
-              && line[1] != '\0' ) {
-                val = getenv( &line[1] );
-            }
-        } else {
-            val = line;
-        }
-    }
-    if( val == NULL
-      || val[0] == '\0' )
-        val = VarGetStrVal( var_handle );
-    SetVariableByHandle( var_handle, val );
-    if( VariablesFile != NULL ) {
-        ReadVariablesFile( VarGetName( var_handle ) );
-    }
-    line = next; next = NextToken( line, '"' );
-    line = next; next = NextToken( line, '"' );
+
+    line = next; next = NextToken( line, ',' );
+    var_handle = AddVariable( line );
+    line = next; next = NextToken( line, ',' );
+    set_var_default_value( var_handle, line, &buff );
+    line = next; next = NextTokenQuoted( &line, ',' );
     ReplaceVars( &buff, line );
     line = next; next = NextToken( line, ',' );
-    line = next; next = NextToken( line, ',' );
-
     line = TrimQuote( line );
     var_handle_2 = AddVariable( line );
 //    len = max( BW, strlen( line + 2 ) );
@@ -1272,16 +1286,16 @@ static bool dialog_edit_button( char *next, DIALOG_PARSER_INFO *parse_dlg )
     line = next; next = NextToken( line, ',' );
     dialog_name = line;
     line = next; next = NextToken( line, ',' );
-
     if( EvalCondition( line ) ) {
+        line = next; next = NextToken( line, ',' );
+
         parse_dlg->curr_dialog->pVariables[parse_dlg->num_variables] = var_handle;
         parse_dlg->curr_dialog->pConditions[parse_dlg->num_variables] = NULL;
         parse_dlg->num_variables++;
-        line = next; next = NextToken( line, ',' );
         /*
          * condition for visibility (dynamic)
          */
-        parse_dlg->curr_dialog->controls_ext[parse_dlg->curr_dialog->num_controls].pVisibilityConds = GUIStrDup( line );
+        parse_dlg->curr_dialog->controls_ext[parse_dlg->curr_dialog->num_controls].pVisibilityConds = get_cond( line );
         var_handle_2 = MakeDummyVar();
         SetVariableByHandle( var_handle_2, dialog_name );
         set_dlg_push_button( var_handle_2, button_text, parse_dlg->curr_dialog->controls,
@@ -1290,7 +1304,7 @@ static bool dialog_edit_button( char *next, DIALOG_PARSER_INFO *parse_dlg )
         /*
          * condition for visibility (dynamic)
          */
-        parse_dlg->curr_dialog->controls_ext[parse_dlg->curr_dialog->num_controls + 1].pVisibilityConds = GUIStrDup( line );
+        parse_dlg->curr_dialog->controls_ext[parse_dlg->curr_dialog->num_controls + 1].pVisibilityConds = get_cond( line );
         set_dlg_edit( parse_dlg->curr_dialog->controls, parse_dlg->controls_array.num - 1, VbufString( &buff ),
                       VarGetId( var_handle ), C0, parse_dlg->row_num, BW );
         if( VbufLen( &buff ) > 0 ) {
@@ -1298,7 +1312,7 @@ static bool dialog_edit_button( char *next, DIALOG_PARSER_INFO *parse_dlg )
             /*
              * condition for visibility (dynamic)
              */
-            parse_dlg->curr_dialog->controls_ext[parse_dlg->curr_dialog->num_controls + 2].pVisibilityConds = GUIStrDup( line );
+            parse_dlg->curr_dialog->controls_ext[parse_dlg->curr_dialog->num_controls + 2].pVisibilityConds = get_cond( line );
             /*
              * dummy_var allows control to have an id
              *  - used by dynamic visibility feature
@@ -1313,7 +1327,6 @@ static bool dialog_edit_button( char *next, DIALOG_PARSER_INFO *parse_dlg )
     } else {
         rc = false;
     }
-    GUIMemFree( vbl_name );
     VbufFree( &buff );
     return( rc );
 }
@@ -1326,7 +1339,6 @@ static bool dialog_other_button( char *next, DIALOG_PARSER_INFO *parse_dlg )
     char                *next_copy;
     char                *text;
     char                *dialog_name;
-    char                *condition;
     vhandle             var_handle;
     bool                rc = true;
 
@@ -1334,14 +1346,13 @@ static bool dialog_other_button( char *next, DIALOG_PARSER_INFO *parse_dlg )
     button_text = TrimQuote( line );
     line = next; next = NextToken( line, ',' );
     dialog_name = line;
-    next_copy = GUIStrDup( next );
+    next_copy = MemStrdupSafe( next );
     line = next; next = NextToken( line, ',' );
     text = line;
     line = next; next = NextToken( line, ',' );
-    condition = line;
-    line = next; next = NextToken( line, ',' );
+    if( EvalCondition( line ) ) {
+        line = next; next = NextToken( line, ',' );
 
-    if( EvalCondition( condition ) ) {
         var_handle = MakeDummyVar();
         SetVariableByHandle( var_handle, dialog_name );
         set_dlg_push_button( var_handle, button_text, parse_dlg->curr_dialog->controls,
@@ -1349,20 +1360,20 @@ static bool dialog_other_button( char *next, DIALOG_PARSER_INFO *parse_dlg )
         /*
          * condition for visibility (dynamic)
          */
-        parse_dlg->curr_dialog->controls_ext[parse_dlg->curr_dialog->num_controls].pVisibilityConds = GUIStrDup( line );
+        parse_dlg->curr_dialog->controls_ext[parse_dlg->curr_dialog->num_controls].pVisibilityConds = get_cond( line );
         if( text != NULL ) {
             BumpDlgArrays( parse_dlg );
             /*
              * condition for visibility (dynamic)
              */
-            parse_dlg->curr_dialog->controls_ext[parse_dlg->curr_dialog->num_controls + 1].pVisibilityConds = GUIStrDup( line );
+            parse_dlg->curr_dialog->controls_ext[parse_dlg->curr_dialog->num_controls + 1].pVisibilityConds = get_cond( line );
             parse_dlg->col_num = 1;
             dialog_static( next_copy, parse_dlg );
         }
     } else {
         rc = false;
     }
-    GUIMemFree( next_copy );
+    MemFree( next_copy );
     return( rc );
 }
 
@@ -1375,22 +1386,18 @@ static vhandle dialog_set_variable( DIALOG_PARSER_INFO *parse_dlg, const char *v
 
     var_handle = AddVariable( vbl_name );
     parse_dlg->curr_dialog->pVariables[parse_dlg->num_variables] = var_handle;
-    if( init_cond != NULL ) {
-        if( *init_cond == '\0' ) {
-            init_cond = NULL;
-        } else {
-            if( SkipDialogs ) {
-                if( stricmp( init_cond, "true" ) == 0 ) {
-                    SetBoolVariableByHandle( var_handle, true );
-                } else if( stricmp( init_cond, "false" ) == 0 ) {
-                    SetBoolVariableByHandle( var_handle, false );
-                } else {
-                    SetVariableByHandle( var_handle, init_cond );
-                }
+    if( *init_cond != '\0' ) {
+        if( SkipDialogs ) {
+            if( stricmp( init_cond, "true" ) == 0 ) {
+                SetBoolVariableByHandle( var_handle, true );
+            } else if( stricmp( init_cond, "false" ) == 0 ) {
+                SetBoolVariableByHandle( var_handle, false );
+            } else {
+                SetVariableByHandle( var_handle, init_cond );
             }
         }
     }
-    parse_dlg->curr_dialog->pConditions[parse_dlg->num_variables] = GUIStrDup( init_cond );
+    parse_dlg->curr_dialog->pConditions[parse_dlg->num_variables] = get_cond( init_cond );
     parse_dlg->num_variables++;
     return( var_handle );
 }
@@ -1408,23 +1415,22 @@ static bool dialog_radiobutton( char *next, DIALOG_PARSER_INFO *parse_dlg )
     bool                rc = true;
 
     line = next; next = NextToken( line, ',' );
-    vbl_name = GUIStrDup( line );
+    vbl_name = line;
     line = next; next = NextToken( line, ',' );
-    init_cond = GUIStrDup( line );
-    line = next; next = NextToken( line, '"' );
-    line = next; next = NextToken( line, '"' );
-    text = GUIStrDup( line );
-    line = next; next = NextToken( line, ',' );
+    init_cond = line;
+    line = next; next = NextTokenQuoted( &line, ',' );
+    text = line;
     line = next; next = NextToken( line, ',' );
     if( EvalCondition( line ) ) {
+        line = next; next = NextToken( line, ',' );
+
         var_handle = dialog_set_variable( parse_dlg, vbl_name, init_cond );
         parse_dlg->num_radio_buttons += 1;
         len = (int)strlen( text ) + 4; /* room for button */
-        line = next; next = NextToken( line, ',' );
         /*
          * condition for visibility (dynamic)
          */
-        parse_dlg->curr_dialog->controls_ext[parse_dlg->curr_dialog->num_controls].pVisibilityConds = GUIStrDup( line );
+        parse_dlg->curr_dialog->controls_ext[parse_dlg->curr_dialog->num_controls].pVisibilityConds = get_cond( line );
         set_dlg_radio( parse_dlg->curr_dialog->controls, parse_dlg->controls_array.num - 1,
                        parse_dlg->num_radio_buttons, text, VarGetId( var_handle ), C0, parse_dlg->row_num, len );
         if( parse_dlg->max_width < len ) {
@@ -1433,9 +1439,6 @@ static bool dialog_radiobutton( char *next, DIALOG_PARSER_INFO *parse_dlg )
     } else {
         rc = false;
     }
-    GUIMemFree( init_cond );
-    GUIMemFree( vbl_name );
-    GUIMemFree( text );
     return( rc );
 }
 
@@ -1464,26 +1467,25 @@ static bool dialog_checkbox( char *next, DIALOG_PARSER_INFO *parse_dlg, bool det
         button_text = line;
     }
     line = next; next = NextToken( line, ',' );
-    vbl_name = GUIStrDup( line );
+    vbl_name = line;
     line = next; next = NextToken( line, ',' );
-    init_cond = GUIStrDup( line );
-    line = next; next = NextToken( line, '"' );
-    line = next; next = NextToken( line, '"' );
-    text = GUIStrDup( line );
-    line = next; next = NextToken( line, ',' );
+    init_cond = line;
+    line = next; next = NextTokenQuoted( &line, ',' );
+    text = line;
     line = next; next = NextToken( line, ',' );
     if( EvalCondition( line ) ) {
+        line = next; next = NextToken( line, ',' );
+
         if( detail_button ) {
             dlg_var_handle = MakeDummyVar();
             SetVariableByHandle( dlg_var_handle, dialog_name );
         }
         var_handle = dialog_set_variable( parse_dlg, vbl_name, init_cond );
         len = (int)strlen( text ) + 4; /* room for button */
-        line = next; next = NextToken( line, ',' );
         /*
          * condition for visibility (dynamic)
          */
-        parse_dlg->curr_dialog->controls_ext[parse_dlg->curr_dialog->num_controls].pVisibilityConds = GUIStrDup( line );
+        parse_dlg->curr_dialog->controls_ext[parse_dlg->curr_dialog->num_controls].pVisibilityConds = get_cond( line );
         set_dlg_check( parse_dlg->curr_dialog->controls, parse_dlg->controls_array.num - 1, text,
                        VarGetId( var_handle ), parse_dlg->col_num, parse_dlg->row_num, len );
         if( parse_dlg->col_num == C0 ) {
@@ -1505,16 +1507,13 @@ static bool dialog_checkbox( char *next, DIALOG_PARSER_INFO *parse_dlg, bool det
         }
         if( detail_button ) {
             BumpDlgArrays( parse_dlg );
-            parse_dlg->curr_dialog->controls_ext[parse_dlg->curr_dialog->num_controls + 1].pVisibilityConds = GUIStrDup( line );
+            parse_dlg->curr_dialog->controls_ext[parse_dlg->curr_dialog->num_controls + 1].pVisibilityConds = get_cond( line );
             set_dlg_push_button( dlg_var_handle, button_text, parse_dlg->curr_dialog->controls,
                                  parse_dlg->controls_array.num - 1, parse_dlg->row_num, 4, 4, W, BW );
         }
     } else {
         rc = false;
     }
-    GUIMemFree( init_cond );
-    GUIMemFree( vbl_name );
-    GUIMemFree( text );
     return( rc );
 }
 
@@ -1526,81 +1525,33 @@ void SimSetNeedGetDiskSizes( void )
 }
 
 
-static bool dialog_editcontrol( char *next, DIALOG_PARSER_INFO *parse_dlg )
-/*************************************************************************/
+static bool dialog_edit_control( char *next, DIALOG_PARSER_INFO *parse_dlg )
+/**************************************************************************/
 {
     char                *line;
-    char                *vbl_name;
-    const char          *val;
-    char                *section;
-#if defined( __NT__ )
-    char                *value;
-#endif
     vhandle             var_handle;
     VBUF                buff;
     bool                rc = true;
 
-    line = next; next = NextToken( line, ',' );
-    vbl_name = GUIStrDup( line );
-    var_handle = AddVariable( vbl_name );
-    line = next; next = NextToken( line, ',' );
-    val = NULL;
     VbufInit( &buff );
-    if( line[0] != '\0' ) {
-        if( line[0] == '%' ) {
-            val = GetVariableStrVal( &line[1] );
-        } else if( line[0] == '@' ) {
-            /*
-             * support @envvar@section:value - 2nd part is optional
-             */
-            section = strchr( &line[1], '@' );
-            if( section != NULL ) {
-                /*
-                 * terminate envvar
-                 */
-                *section = '\0';
-#if defined( __NT__ )
-                ++section;
-                value = strchr( section, ':' );
-                if( value != NULL ) {
-                    *value = '\0';
-                    ++value;
-                    if( GetRegString( HKEY_CURRENT_USER, section, value, &buff ) ) {
-                        val = VbufString( &buff );
-                    }
-                }
-#endif
-            }
-            if( val == NULL
-              && line[1] != '\0' ) {
-                val = getenv( &line[1] );
-            }
-        } else {
-            val = line;
-        }
-    }
-    if( val == NULL
-      || val[0] == '\0' ) {
-        val = VarGetStrVal( var_handle );
-    }
-    SetVariableByHandle( var_handle, val );
-    if( VariablesFile != NULL ) {
-        ReadVariablesFile( VarGetName( var_handle ) );
-    }
-    line = next; next = NextToken( line, '"' );
-    line = next; next = NextToken( line, '"' );
+
+    line = next; next = NextToken( line, ',' );
+    var_handle = AddVariable( line );
+    line = next; next = NextToken( line, ',' );
+    set_var_default_value( var_handle, line, &buff );
+    line = next; next = NextTokenQuoted( &line, ',' );
     ReplaceVars( &buff, line );
     line = next; next = NextToken( line, ',' );
-    line = next; next = NextToken( line, ',' );
     if( EvalCondition( line ) ) {
+        line = next; next = NextToken( line, ',' );
+
         parse_dlg->curr_dialog->pVariables[parse_dlg->num_variables] = var_handle;
         parse_dlg->curr_dialog->pConditions[parse_dlg->num_variables] = NULL;
         parse_dlg->num_variables++;
-        line = next; next = NextToken( line, ',' );
         /*
          * condition for visibility (dynamic)
          */
-        parse_dlg->curr_dialog->controls_ext[parse_dlg->curr_dialog->num_controls].pVisibilityConds = GUIStrDup( line );
+        parse_dlg->curr_dialog->controls_ext[parse_dlg->curr_dialog->num_controls].pVisibilityConds = get_cond( line );
         set_dlg_edit( parse_dlg->curr_dialog->controls, parse_dlg->controls_array.num - 1,
                       VbufString( &buff ), VarGetId( var_handle ), C0, parse_dlg->row_num, W );
         if( VbufLen( &buff ) > 0 ) {
@@ -1608,7 +1559,7 @@ static bool dialog_editcontrol( char *next, DIALOG_PARSER_INFO *parse_dlg )
             /*
              * condition for visibility (dynamic)
              */
-            parse_dlg->curr_dialog->controls_ext[parse_dlg->curr_dialog->num_controls + 1].pVisibilityConds = GUIStrDup( line );
+            parse_dlg->curr_dialog->controls_ext[parse_dlg->curr_dialog->num_controls + 1].pVisibilityConds = get_cond( line );
             /*
              * dummy_var allows control to have an id
              *  - used by dynamic visibility feature
@@ -1624,7 +1575,6 @@ static bool dialog_editcontrol( char *next, DIALOG_PARSER_INFO *parse_dlg )
         rc = false;
     }
     VbufFree( &buff );
-    GUIMemFree( vbl_name );
     return( rc );
 }
 
@@ -1642,9 +1592,9 @@ static void GrabConfigInfo( char *line, array_info *info )
         return;
     array = *(info->array);
     next = NextToken( line, '=' );
-    array[num].var = GUIStrDup( line );
+    array[num].var = MemStrdupSafe( line );
     line = next; next = NextToken( line, ',' );
-    array[num].value = GUIStrDup( line );
+    array[num].value = MemStrdupSafe( line );
     array[num].condition = CompileCondition( next );
 }
 
@@ -1764,7 +1714,7 @@ static bool ProcLine( char *line, pass_type pass )
             } else if( stricmp( line, "condition" ) == 0 ) {
                 parse_dlg.curr_dialog->condition = CompileCondition( next );
             } else if( stricmp( line, "title" ) == 0 ) {
-                parse_dlg.curr_dialog->title = GUIStrDup( next );
+                parse_dlg.curr_dialog->title = MemStrdupSafe( next );
             } else if( stricmp( line, "any_check" ) == 0 ) {
                 parse_dlg.curr_dialog->any_check = AddVariable( next );
             } else if( stricmp( line, "width" ) == 0 ) {
@@ -1779,7 +1729,7 @@ static bool ProcLine( char *line, pass_type pass )
                 if( !EvalCondition( next ) ) {
                     line = NULL;
                 }
-                parse_dlg.curr_dialog->controls_ext[parse_dlg.curr_dialog->num_controls - 1].pVisibilityConds = GUIStrDup( line );
+                parse_dlg.curr_dialog->controls_ext[parse_dlg.curr_dialog->num_controls - 1].pVisibilityConds = get_cond( line );
             } else {
                 /*
                  * add another control to current dialog
@@ -1814,7 +1764,7 @@ static bool ProcLine( char *line, pass_type pass )
                     parse_dlg.row_num -= 1;
                     added = dialog_checkbox( next, &parse_dlg, false );
                 } else if( stricmp(line, "edit_control") == 0 ) {
-                    added = dialog_editcontrol( next, &parse_dlg );
+                    added = dialog_edit_control( next, &parse_dlg );
                 } else if( stricmp(line, "text_window") == 0 ) {
                     added = dialog_textwindow( next, &parse_dlg, false );
                 } else if( stricmp(line, "text_window_license") == 0 ) {
@@ -1846,29 +1796,29 @@ static bool ProcLine( char *line, pass_type pass )
         if( stricmp( line, "DefPMGroup" ) == 0 ) {
             line = next; next = NextToken( line, ',' );
             if( SetupInfo.pm_group_file != NULL ) {
-                GUIMemFree( SetupInfo.pm_group_file );
+                MemFree( SetupInfo.pm_group_file );
                 SetupInfo.pm_group_file = NULL;
             }
-            SetupInfo.pm_group_file = GUIStrDup( line );
+            SetupInfo.pm_group_file = MemStrdupSafe( line );
             line = next; next = NextToken( line, ',' );
             if( SetupInfo.pm_group_name != NULL ) {
-                GUIMemFree( SetupInfo.pm_group_name );
+                MemFree( SetupInfo.pm_group_name );
                 SetupInfo.pm_group_name = NULL;
             }
             VbufInit( &buff );
             ReplaceVars( &buff, line );
-            SetupInfo.pm_group_name = GUIStrDup( VbufString( &buff ) );
+            SetupInfo.pm_group_name = MemStrdupSafe( VbufString( &buff ) );
             VbufFree( &buff );
             num = SetupInfo.all_pm_groups.num;
             if( !BumpArray( &SetupInfo.all_pm_groups ) )
                 return( false );
-            AllPMGroups[num].group_name = GUIStrDup( SetupInfo.pm_group_name );
-            AllPMGroups[num].group_file = GUIStrDup( SetupInfo.pm_group_file );
+            AllPMGroups[num].group_name = MemStrdupSafe( SetupInfo.pm_group_name );
+            AllPMGroups[num].group_file = MemStrdupSafe( SetupInfo.pm_group_file );
             if( SetupInfo.pm_group_iconfile != NULL ) {
-                GUIMemFree( SetupInfo.pm_group_iconfile );
+                MemFree( SetupInfo.pm_group_iconfile );
                 SetupInfo.pm_group_iconfile = NULL;
             }
-            SetupInfo.pm_group_iconfile = GUIStrDup( next );
+            SetupInfo.pm_group_iconfile = MemStrdupSafe( next );
         } else {
             /*
              * system variables start with '$'
@@ -1885,7 +1835,7 @@ static bool ProcLine( char *line, pass_type pass )
         if( !BumpArray( &SetupInfo.dirs ) )
             return( false );
         next = NextToken( line, ',' );
-        DirInfo[num].desc = GUIStrDup( line );
+        DirInfo[num].desc = MemStrdupSafe( line );
         line = next; next = NextToken( line, ',' );
         DirInfo[num].target = atoi( line ) - 1;
         DirInfo[num].parent = atoi( next );
@@ -1904,7 +1854,7 @@ static bool ProcLine( char *line, pass_type pass )
             if( !BumpArray( &SetupInfo.files ) )
                 return( false );
             next = NextToken( line, ',' );
-            FileInfo[num].filename = GUIStrDup( line );
+            FileInfo[num].filename = MemStrdupSafe( line );
             line = next; next = NextToken( line, ',' );
             /*
              * Multiple files in archive. First number is number of files,
@@ -1914,10 +1864,7 @@ static bool ProcLine( char *line, pass_type pass )
             if( num_files == 0 ) {
                 FileInfo[num].files = NULL;
             } else {
-                FileInfo[num].files = GUIMemAlloc( num_files * sizeof( a_file_info ) );
-                if( FileInfo[num].files == NULL ) {
-                    return( false );
-                }
+                FileInfo[num].files = MemAllocSafe( num_files * sizeof( a_file_info ) );
             }
             FileInfo[num].supplemental = false;
             FileInfo[num].core_component = false;
@@ -1942,12 +1889,12 @@ static bool ProcLine( char *line, pass_type pass )
                     file->date = SetupInfo.stamp;
                 }
                 line = p; p = NextToken( line, '!' );
-                if( p != NULL
-                  && *p != '\0'
-                  && *p != '!' ) {
-                    file->dst_var = AddVariable( p );
-                } else {
+                if( p == NULL
+                  || *p == '\0'
+                  || *p == '!' ) {
                     file->dst_var = NO_VAR;
+                } else {
+                    file->dst_var = AddVariable( p );
                 }
                 line = p; p = NextToken( line, '!' );
                 file->executable = false;
@@ -1984,7 +1931,7 @@ static bool ProcLine( char *line, pass_type pass )
     case RS_AUTOSET:
         next = NextToken( line, '=' );
         if( VariablesFile == NULL ) {
-            VarSetAutoSetCond( AddVariable( line ), next );
+            VarSetAutoSetCond( AddVariable( line ), get_cond( next ) );
         } else {
             AddVariable( line );
         }
@@ -2006,7 +1953,7 @@ static bool ProcLine( char *line, pass_type pass )
             SpawnInfo[num].when = WHEN_BEFORE;
         }
         line = next; next = NextToken( line, ',' );
-        SpawnInfo[num].command = GUIStrDup( line );
+        SpawnInfo[num].command = MemStrdupSafe( line );
         SpawnInfo[num].condition = CompileCondition( next );
         break;
     case RS_DELETEFILES:
@@ -2022,7 +1969,7 @@ static bool ProcLine( char *line, pass_type pass )
             DeleteInfo[num].type = DELETE_DIR;
         }
         line = next; next = NextToken( line, ',' );
-        DeleteInfo[num].name = GUIStrDup( line );
+        DeleteInfo[num].name = MemStrdupSafe( line );
         break;
     case RS_PMINFO:
         num = SetupInfo.pm_files.num;
@@ -2032,20 +1979,20 @@ static bool ProcLine( char *line, pass_type pass )
         PMInfo[num].group = ( strcmp( line, "GROUP" ) == 0 );
         PMInfo[num].shadow = ( line[0] == '+' );
         if( PMInfo[num].shadow ) {
-            PMInfo[num].filename = GUIStrDup( line + 1 );
+            PMInfo[num].filename = MemStrdupSafe( line + 1 );
         } else {
-            PMInfo[num].filename = GUIStrDup( line );
+            PMInfo[num].filename = MemStrdupSafe( line );
         }
         line = next; next = NextToken( line, ',' );
-        PMInfo[num].parameters = GUIStrDup( line );
+        PMInfo[num].parameters = MemStrdupSafe( line );
         line = next; next = NextToken( line, ',' );
         VbufInit( &buff );
         ReplaceVars( &buff, line );
-        PMInfo[num].desc = GUIStrDup( VbufString( &buff ) );
+        PMInfo[num].desc = MemStrdupSafe( VbufString( &buff ) );
         VbufFree( &buff );
         if( PMInfo[num].group ) {
-            AllPMGroups[SetupInfo.all_pm_groups.num].group_name = GUIStrDup( PMInfo[num].desc );
-            AllPMGroups[SetupInfo.all_pm_groups.num].group_file = GUIStrDup( PMInfo[num].parameters );
+            AllPMGroups[SetupInfo.all_pm_groups.num].group_name = MemStrdupSafe( PMInfo[num].desc );
+            AllPMGroups[SetupInfo.all_pm_groups.num].group_file = MemStrdupSafe( PMInfo[num].parameters );
             if( !BumpArray( &SetupInfo.all_pm_groups ) ) {
                 return( false );
             }
@@ -2054,7 +2001,7 @@ static bool ProcLine( char *line, pass_type pass )
         PMInfo[num].iconindex = 0;
         if( next != NULL ) {
             line = next; next = NextToken( line, ',' );
-            PMInfo[num].iconfile = GUIStrDup( line );
+            PMInfo[num].iconfile = MemStrdupSafe( line );
             if( next != NULL ) {
                 line = next; next = NextToken( line, ',' );
                 PMInfo[num].iconindex = atoi( line );
@@ -2067,15 +2014,15 @@ static bool ProcLine( char *line, pass_type pass )
         if( !BumpArray( &SetupInfo.profile ) )
             return( false );
         next = NextToken( line, ',' );
-        ProfileInfo[num].app_name = GUIStrDup( line );
+        ProfileInfo[num].app_name = MemStrdupSafe( line );
         line = next; next = NextToken( line, ',' );
-        ProfileInfo[num].key_name = GUIStrDup( line );
+        ProfileInfo[num].key_name = MemStrdupSafe( line );
         line = next; next = NextToken( line, ',' );
-        ProfileInfo[num].value = GUIStrDup( line );
+        ProfileInfo[num].value = MemStrdupSafe( line );
         line = next; next = NextToken( line, ',' );
-        ProfileInfo[num].file_name = GUIStrDup( line );
+        ProfileInfo[num].file_name = MemStrdupSafe( line );
         line = next; next = NextToken( line, ',' );
-        ProfileInfo[num].hive_name = GUIStrDup( line );
+        ProfileInfo[num].hive_name = MemStrdupSafe( line );
         ProfileInfo[num].condition = CompileCondition( next );
         break;
     case RS_AUTOEXEC:
@@ -2092,16 +2039,13 @@ static bool ProcLine( char *line, pass_type pass )
         if( !BumpArray( &SetupInfo.target ) )
             return( false );
         next = NextToken( line, ',' );
-        TargetInfo[num].name = GUIStrDup( line );
+        TargetInfo[num].name = MemStrdupSafe( line );
         TargetInfo[num].supplemental = false;
         if( next != NULL
           && stricmp( next, "supplemental" ) == 0 ) {
             TargetInfo[num].supplemental = true;
         }
-        TargetInfo[num].path = GUIMemAlloc( _MAX_PATH );
-        if( TargetInfo[num].path == NULL ) {
-            return( false );
-        }
+        TargetInfo[num].path = MemAllocSafe( _MAX_PATH );
         TargetInfo[num].path[0] = '\0';
         TargetInfo[num].fsys = -1;
         break;
@@ -2110,29 +2054,29 @@ static bool ProcLine( char *line, pass_type pass )
         if( !BumpArray( &SetupInfo.label ) )
             return( false );
         next = NextToken( line, '=' );
-        LabelInfo[num].dir = GUIStrDup( line );
-        LabelInfo[num].label = GUIStrDup( next );
+        LabelInfo[num].dir = MemStrdupSafe( line );
+        LabelInfo[num].label = MemStrdupSafe( next );
         break;
     case RS_FORCEDLLINSTALL:
         num = SetupInfo.force_DLL_install.num;
         if( !BumpArray( &SetupInfo.force_DLL_install ) )
             return( false );
-        ForceDLLInstall[num].name = GUIStrDup( line );
+        ForceDLLInstall[num].name = MemStrdupSafe( line );
         break;
     case RS_ASSOCIATIONS:
         num = SetupInfo.associations.num;
         if( !BumpArray( &SetupInfo.associations ) )
             return( false );
         next = NextToken( line, '=' );
-        AssociationInfo[num].ext = GUIStrDup( line );
+        AssociationInfo[num].ext = MemStrdupSafe( line );
         line = next; next = NextToken( line, ',' );
-        AssociationInfo[num].keyname = GUIStrDup( line );
+        AssociationInfo[num].keyname = MemStrdupSafe( line );
         line = next; next = NextToken( line, ',' );
-        AssociationInfo[num].description = GUIStrDup( line );
+        AssociationInfo[num].description = MemStrdupSafe( line );
         line = next; next = NextToken( line, ',' );
-        AssociationInfo[num].program = GUIStrDup( line );
+        AssociationInfo[num].program = MemStrdupSafe( line );
         line = next; next = NextToken( line, ',' );
-        AssociationInfo[num].iconfile = GUIStrDup( line );
+        AssociationInfo[num].iconfile = MemStrdupSafe( line );
         line = next; next = NextToken( line, ',' );
         AssociationInfo[num].iconindex = strtol( line, NULL, 10 );
         AssociationInfo[num].condition = CompileCondition( next );
@@ -2226,7 +2170,7 @@ static bool GetFileInfo( int dir_index, int i, bool in_old_dir, bool *pzeroed )
                 }
                 PropagateValue( FileInfo[i].condition.p->cond, true );
                 if( file->in_new_dir
-                  && __ROUND_UP_SIZE_INF( file->disk_size ) == file->size
+                  && __ROUND_UP_SIZE_INFBLK( file->disk_size ) == file->size
                   && file->date == file->disk_date ) {
                     FileInfo[i].condition.p->one_uptodate = true;
                 }
@@ -2320,14 +2264,11 @@ static int PrepareSetupInfo( file_handle afh, pass_type pass )
     char                *p;
     char                *buffer;
     size_t              bufsize;
-    char                readbuf[1024 + 1];
+    char                readbuf[_1K + 1];
     size_t              bytes_read;
 
     bufsize = TEXTBUF_SIZE;
-    buffer = GUIMemAlloc( bufsize );
-    if( buffer == NULL ) {
-        return( SIM_INIT_NOMEM );
-    }
+    buffer = MemAllocSafe( bufsize );
 
     LineCountPointer = &NoLineCount;
     old_cursor = GUISetMouseCursor( GUI_HOURGLASS_CURSOR );
@@ -2342,8 +2283,8 @@ static int PrepareSetupInfo( file_handle afh, pass_type pass )
     for( ;; ) {
         len = 0;
         for( ;; ) {
-            bytes_read = FileRead( afh, readbuf, 1024 );
-            if( (int)bytes_read <= 0 ) {
+            bytes_read = FileRead( afh, readbuf, sizeof( readbuf ) - 1 );
+            if( bytes_read == READ_ERROR || bytes_read == 0 ) {
                 done = true;
                 break;
             }
@@ -2352,11 +2293,13 @@ static int PrepareSetupInfo( file_handle afh, pass_type pass )
              * Eliminate leading blanks on lines
              */
             p = readbuf;
-            SKIP_WS( p );
+            while( isspace( *(unsigned char *)p ) ) {
+                p++;
+            }
             bytes_read = len + bytes_read - ( p - readbuf );
-            if( bytes_read > bufsize ) {
+            if( bufsize < bytes_read ) {
                 bufsize = __ROUND_UP_SIZE_TEXTBUF( bytes_read );
-                buffer = GUIMemRealloc( buffer, bufsize + 1 );
+                buffer = MemReallocSafe( buffer, bufsize + 1 );
             }
             strcpy( buffer + len, p );
             if( bytes_read == 0 )
@@ -2392,7 +2335,7 @@ static int PrepareSetupInfo( file_handle afh, pass_type pass )
             break;
         }
     }
-    GUIMemFree( buffer );
+    MemFree( buffer );
     GUIResetMouseCursor( old_cursor );
     return( result );
 }
@@ -2808,7 +2751,7 @@ bool SimFileUpToDate( int parm )
             return( true );
         if( info->files[i].date > info->files[i].disk_date )
             return( false );
-        if( __ROUND_UP_SIZE_INF( info->files[i].disk_size ) != info->files[i].size )
+        if( __ROUND_UP_SIZE_INFBLK( info->files[i].disk_size ) != info->files[i].size )
             return( false );
     }
     return( true );
@@ -3216,7 +3159,7 @@ static const char *GetTargetFullPath( int parm, VBUF *buff )
     }
 #if !defined( __UNIX__ )
     if( TEST_DRIVE( VbufString( buff ) ) ) {
-        VbufSetPathDrive( buff, toupper( VbufString( buff )[0] ) );
+        VbufSetPathDrive( buff, toupper( ((unsigned char *)VbufString( buff ))[0] ) );
     }
 #endif
     return( VbufString( buff ) );
@@ -3358,25 +3301,21 @@ static void CalcAddRemove( void )
         dir_index = FileInfo[i].dir_index;
         target_index = DirInfo[dir_index].target;
         add = EvalExprTree( FileInfo[i].condition.p->cond );
+        remove = false;
         if( FileInfo[i].supplemental ) {
-            remove = false;
             if( uninstall ) {
                 add = false;
             }
+        } else if( uninstall
+          && !FileInfo[i].core_component ) {
+            add = false;
+            remove = true;
+        } else if( FileInfo[i].condition.p->dont_touch ) {
+            add = false;
+        } else if( FileInfo[i].core_component ) {
+            add = !SimSubFileExists( i, 0 );
         } else {
-            if( uninstall
-              && !FileInfo[i].core_component ) {
-                add = false;
-                remove = true;
-            } else if( FileInfo[i].condition.p->dont_touch ) {
-                add = false;
-                remove = false;
-            } else if( FileInfo[i].core_component ) {
-                add = !SimSubFileExists( i, 0 );
-                remove = false;
-            } else {
-                remove = !add && previous;
-            }
+            remove = !add && previous;
         }
         if( add ) {
             MarkUsed( dir_index );
@@ -3426,7 +3365,11 @@ static void CalcAddRemove( void )
     }
     if( ok ) {
         /* Estimate space used for directories. Be generous. */
-        if( !uninstall ) {
+        if( uninstall ) {
+            /*
+             * no action for uninstall
+             */
+        } else {
             for( i = 0; i < SetupInfo.target.num; ++i ) {
                 block_size = GetTargetBlockSize( i );
                 for( j = 0; j < SetupInfo.dirs.num; ++j ) {
@@ -3436,7 +3379,7 @@ static void CalcAddRemove( void )
                         continue;
                     if( DirInfo[j].num_files <= DirInfo[j].num_existing )
                         continue;
-                    TargetInfo[i].space_needed += __ROUND_UP_SIZE_BLOCK( ((( DirInfo[j].num_files - DirInfo[j].num_existing ) / 10) + 1) * 1024UL );
+                    TargetInfo[i].space_needed += __ROUND_UP_SIZE_BLOCK( ((( DirInfo[j].num_files - DirInfo[j].num_existing ) / 10) + 1) * _1K );
                 }
             }
         }
@@ -3507,15 +3450,15 @@ static void FreeSetupInfoVal( void )
 /**********************************/
 {
     if( SetupInfo.pm_group_file != NULL ) {
-        GUIMemFree( SetupInfo.pm_group_file );
+        MemFree( SetupInfo.pm_group_file );
         SetupInfo.pm_group_file = NULL;
     }
     if( SetupInfo.pm_group_name != NULL ) {
-        GUIMemFree( SetupInfo.pm_group_name );
+        MemFree( SetupInfo.pm_group_name );
         SetupInfo.pm_group_name = NULL;
     }
     if( SetupInfo.pm_group_iconfile != NULL ) {
-        GUIMemFree( SetupInfo.pm_group_iconfile );
+        MemFree( SetupInfo.pm_group_iconfile );
         SetupInfo.pm_group_iconfile = NULL;
     }
 }
@@ -3528,10 +3471,10 @@ static void FreeTargetInfo( void )
 
     if( TargetInfo != NULL ) {
         for( i = 0; i < SetupInfo.target.num; i++ ) {
-            GUIMemFree( TargetInfo[i].name );
-            GUIMemFree( TargetInfo[i].path );
+            MemFree( TargetInfo[i].name );
+            MemFree( TargetInfo[i].path );
         }
-        GUIMemFree( TargetInfo );
+        MemFree( TargetInfo );
         TargetInfo = NULL;
         SetupInfo.target.num = 0;
     }
@@ -3545,9 +3488,9 @@ static void FreeDirInfo( void )
 
     if( DirInfo != NULL ) {
         for( i = 0; i < SetupInfo.dirs.num; i++ ) {
-            GUIMemFree( DirInfo[i].desc );
+            MemFree( DirInfo[i].desc );
         }
-        GUIMemFree( DirInfo );
+        MemFree( DirInfo );
         DirInfo = NULL;
         SetupInfo.dirs.num = 0;
     }
@@ -3562,13 +3505,13 @@ static void FreeFileInfo( void )
 
     if( FileInfo != NULL ) {
         for( i = 0; i < SetupInfo.files.num; i++ ) {
-            GUIMemFree( FileInfo[i].filename );
+            MemFree( FileInfo[i].filename );
             for( j = 0; j < FileInfo[i].num_files; ++j ) {
                 VbufFree( &FileInfo[i].files[j].name );
             }
-            GUIMemFree( FileInfo[i].files );
+            MemFree( FileInfo[i].files );
         }
-        GUIMemFree( FileInfo );
+        MemFree( FileInfo );
         FileInfo = NULL;
         SetupInfo.files.num = 0;
     }
@@ -3583,7 +3526,7 @@ static void FreeDLLsToCheck( void )
         for( i = 0; i < SetupInfo.dlls_to_count.num; i++ ) {
             VbufFree( &DLLsToCheck[i].full_path );
         }
-        GUIMemFree( DLLsToCheck );
+        MemFree( DLLsToCheck );
         DLLsToCheck = NULL;
         SetupInfo.dlls_to_count.num = 0;
     }
@@ -3598,7 +3541,7 @@ static void FreeFileCondInfo( void )
         for( i = 0; i < SetupInfo.fileconds.num; i++ ) {
             BurnTree( FileCondInfo[i].cond );
         }
-        GUIMemFree( FileCondInfo );
+        MemFree( FileCondInfo );
         FileCondInfo = NULL;
         SetupInfo.fileconds.num = 0;
     }
@@ -3611,9 +3554,9 @@ static void FreeForceDLLInstall( void )
 
     if( ForceDLLInstall != NULL ) {
         for( i = 0; i < SetupInfo.force_DLL_install.num; i++ ) {
-            GUIMemFree( ForceDLLInstall[i].name );
+            MemFree( ForceDLLInstall[i].name );
         }
-        GUIMemFree( ForceDLLInstall );
+        MemFree( ForceDLLInstall );
         ForceDLLInstall = NULL;
         SetupInfo.force_DLL_install.num = 0;
     }
@@ -3626,10 +3569,10 @@ static void FreeSpawnInfo( void )
 
     if( SpawnInfo != NULL ) {
         for( i = 0; i < SetupInfo.spawn.num; i++ ) {
-            GUIMemFree( SpawnInfo[i].command );
-            GUIMemFree( SpawnInfo[i].condition );
+            MemFree( SpawnInfo[i].command );
+            MemFree( SpawnInfo[i].condition );
         }
-        GUIMemFree( SpawnInfo );
+        MemFree( SpawnInfo );
         SpawnInfo = NULL;
         SetupInfo.spawn.num = 0;
     }
@@ -3643,9 +3586,9 @@ static void FreeDeleteInfo( void )
 
     if( DeleteInfo != NULL ) {
         for( i = 0; i < SetupInfo.delete.num; i++ ) {
-            GUIMemFree( DeleteInfo[i].name );
+            MemFree( DeleteInfo[i].name );
         }
-        GUIMemFree( DeleteInfo );
+        MemFree( DeleteInfo );
         DeleteInfo = NULL;
         SetupInfo.delete.num = 0;
     }
@@ -3659,13 +3602,13 @@ static void FreePMInfo( void )
 
     if( PMInfo != NULL ) {
         for( i = 0; i < SetupInfo.pm_files.num; i++ ) {
-            GUIMemFree( PMInfo[i].desc );
-            GUIMemFree( PMInfo[i].filename );
-            GUIMemFree( PMInfo[i].parameters );
-            GUIMemFree( PMInfo[i].iconfile );
-            GUIMemFree( PMInfo[i].condition );
+            MemFree( PMInfo[i].desc );
+            MemFree( PMInfo[i].filename );
+            MemFree( PMInfo[i].parameters );
+            MemFree( PMInfo[i].iconfile );
+            MemFree( PMInfo[i].condition );
         }
-        GUIMemFree( PMInfo );
+        MemFree( PMInfo );
         PMInfo = NULL;
         SetupInfo.pm_files.num = 0;
     }
@@ -3679,14 +3622,14 @@ static void FreeProfileInfo( void )
 
     if( ProfileInfo != NULL ) {
         for( i = 0; i < SetupInfo.profile.num; i++ ) {
-            GUIMemFree( ProfileInfo[i].hive_name );
-            GUIMemFree( ProfileInfo[i].app_name );
-            GUIMemFree( ProfileInfo[i].key_name );
-            GUIMemFree( ProfileInfo[i].value );
-            GUIMemFree( ProfileInfo[i].file_name );
-            GUIMemFree( ProfileInfo[i].condition );
+            MemFree( ProfileInfo[i].hive_name );
+            MemFree( ProfileInfo[i].app_name );
+            MemFree( ProfileInfo[i].key_name );
+            MemFree( ProfileInfo[i].value );
+            MemFree( ProfileInfo[i].file_name );
+            MemFree( ProfileInfo[i].condition );
         }
-        GUIMemFree( ProfileInfo );
+        MemFree( ProfileInfo );
         ProfileInfo = NULL;
         SetupInfo.profile.num = 0;
     }
@@ -3699,11 +3642,11 @@ static void FreeOneConfigInfo( array_info *info, struct config_info *array )
     array_idx   i;
 
     for( i = 0; i < info->num; i++ ) {
-        GUIMemFree( array[i].var );
-        GUIMemFree( array[i].value );
-        GUIMemFree( array[i].condition );
+        MemFree( array[i].var );
+        MemFree( array[i].value );
+        MemFree( array[i].condition );
     }
-    GUIMemFree( array );
+    MemFree( array );
     info->num = 0;
 }
 
@@ -3738,10 +3681,10 @@ static void FreeLabelInfo( void )
 
     if( LabelInfo != NULL ) {
         for( i = 0; i < SetupInfo.label.num; i++ ) {
-            GUIMemFree( LabelInfo[i].dir );
-            GUIMemFree( LabelInfo[i].label );
+            MemFree( LabelInfo[i].dir );
+            MemFree( LabelInfo[i].label );
         }
-        GUIMemFree( LabelInfo );
+        MemFree( LabelInfo );
         LabelInfo = NULL;
         SetupInfo.label.num = 0;
     }
@@ -3754,10 +3697,10 @@ static void FreeAllPMGroups( void )
 
     if( AllPMGroups != NULL ) {
         for( i = 0; i < SetupInfo.all_pm_groups.num; i++ ) {
-            GUIMemFree( AllPMGroups[i].group_name );
-            GUIMemFree( AllPMGroups[i].group_file );
+            MemFree( AllPMGroups[i].group_name );
+            MemFree( AllPMGroups[i].group_file );
         }
-        GUIMemFree( AllPMGroups );
+        MemFree( AllPMGroups );
         AllPMGroups = NULL;
         SetupInfo.all_pm_groups.num = 0;
     }
@@ -3770,14 +3713,14 @@ static void FreeAssociationInfo( void )
 
     if( AssociationInfo != NULL ) {
         for( i = 0; i < SetupInfo.associations.num; i++ ) {
-            GUIMemFree( AssociationInfo[i].ext );
-            GUIMemFree( AssociationInfo[i].keyname );
-            GUIMemFree( AssociationInfo[i].description );
-            GUIMemFree( AssociationInfo[i].program );
-            GUIMemFree( AssociationInfo[i].iconfile );
-            GUIMemFree( AssociationInfo[i].condition );
+            MemFree( AssociationInfo[i].ext );
+            MemFree( AssociationInfo[i].keyname );
+            MemFree( AssociationInfo[i].description );
+            MemFree( AssociationInfo[i].program );
+            MemFree( AssociationInfo[i].iconfile );
+            MemFree( AssociationInfo[i].condition );
         }
-        GUIMemFree( AssociationInfo );
+        MemFree( AssociationInfo );
         AssociationInfo = NULL;
         SetupInfo.associations.num = 0;
     }
@@ -3891,7 +3834,7 @@ static char *CompileCondition( const char *str )
     /*
      * copy string so we can use STRTOK
      */
-    str2 = GUIStrDup( str );
+    str2 = MemStrdupSafe( str );
     for( token = strtok( str2, " " ); token != NULL; token = strtok( NULL, " " ) ) {
         switch( token[0] ) {
         case '|':
@@ -3907,8 +3850,10 @@ static char *CompileCondition( const char *str )
             sprintf( buff + strlen( buff ), "#%d ", (int)var_handle );
         }
     }
-    GUIMemFree( str2 );
-    return( GUIStrDup( buff ) );
+    MemFree( str2 );
+    if( buff[0] == '\0' )
+        return( NULL );
+    return( MemStrdupSafe( buff ) );
 }
 
 vhandle MakeDummyVar( void )

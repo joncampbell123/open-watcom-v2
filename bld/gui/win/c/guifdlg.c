@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -48,6 +48,9 @@
 //#include "guixhook.h"
 #include "ctl3dcvr.h"
 #include "guixwind.h"
+#ifdef __WINDOWS__
+    #include "wclbproc.h"
+#endif
 #include "pathgrp2.h"
 
 #include "clibext.h"
@@ -242,7 +245,7 @@ static char *GetStrFromEdit( HWND hDlg, gui_ctl_id id )
     LRESULT text_copied;
 
     text_length = SendDlgItemMessage( hDlg, id, WM_GETTEXTLENGTH, 0, 0 );
-    cp = (char *)GUIMemAlloc( text_length + 1 );
+    cp = MemAlloc( text_length + 1 );
     if( cp == NULL ) {
         return ( NULL );
     }
@@ -347,7 +350,11 @@ int GUIGetFileName( gui_window *wnd, open_file_name *ofn )
     wofn.lpstrInitialDir = ofn->initial_dir;
     wofn.lpfnHook = (LPOFNHOOKPROC)NULL;
     if( hookFileDlg ) {
+#ifdef __WINDOWS__
         wofn.lpfnHook = MakeProcInstance_OFNHOOK( OpenOFNHookProc, GUIMainHInst );
+#else
+        wofn.lpfnHook = OpenOFNHookProc;
+#endif
     }
 
     old_drive = 0;
@@ -361,12 +368,14 @@ int GUIGetFileName( gui_window *wnd, open_file_name *ofn )
         rc = GetOpenFileName( &wofn );
     }
 
+#ifdef __WINDOWS__
     if( hookFileDlg ) {
         FreeProcInstance_OFNHOOK( wofn.lpfnHook );
     }
+#endif
 
     if( LastPath && ( rc == 0 || (ofn->flags & FN_WANT_LAST_PATH) == 0 ) ) {
-        GUIMemFree( LastPath );
+        MemFree( LastPath );
         LastPath = NULL;
     }
     ofn->last_path = LastPath;

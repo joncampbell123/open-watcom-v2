@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -96,7 +96,9 @@ static bool     WdeScrollDefineHook( HWND, UINT, WPARAM, LPARAM, DialogStyle );
 /* static variables                                                         */
 /****************************************************************************/
 static HINSTANCE                WdeApplicationInstance;
+#ifdef __WINDOWS__
 static DISPATCH_FN              *WdeScrollDispatch;
+#endif
 static WdeDialogBoxControl      *WdeDefaultScroll = NULL;
 static int                      WdeScrollWndExtra;
 static WNDPROC                  WdeOriginalScrollProc;
@@ -150,7 +152,7 @@ OBJPTR WdeMakeScroll( OBJPTR parent, RECT *obj_rect, OBJPTR handle, DialogStyle 
 
     new = WdeScrollCreate( parent, obj_rect, handle, id, WdeDefaultScroll );
 
-    WRMemFree( GETCTL_TEXT( WdeDefaultScroll ) );
+    MemFree( GETCTL_TEXT( WdeDefaultScroll ) );
     SETCTL_TEXT( WdeDefaultScroll, NULL );
 
     return( new );
@@ -167,13 +169,17 @@ OBJPTR WdeScrollCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle, OBJ_ID id,
         return( NULL );
     }
 
-    new = (WdeScrollObject *)WRMemAlloc( sizeof( WdeScrollObject ) );
+    new = MemAlloc( sizeof( WdeScrollObject ) );
     if( new == NULL ) {
         WdeWriteTrail( "WdeScrollCreate: Object malloc failed" );
         return( NULL );
     }
 
+#ifdef __WINDOWS__
     OBJ_DISPATCHER_SET( new, WdeScrollDispatch );
+#else
+    OBJ_DISPATCHER_SET( new, WdeScrollDispatcher );
+#endif
     new->object_id = id;
     if( handle == NULL ) {
         new->object_handle = (OBJPTR)new;
@@ -185,21 +191,21 @@ OBJPTR WdeScrollCreate( OBJPTR parent, RECT *obj_rect, OBJPTR handle, OBJ_ID id,
 
     if( new->control == NULL ) {
         WdeWriteTrail( "WdeScrollCreate: CONTROL_OBJ not created!" );
-        WRMemFree( new );
+        MemFree( new );
         return( NULL );
     }
 
     if( !Forward( new->object_handle, SET_OBJECT_INFO, info, NULL ) ) {
         WdeWriteTrail( "WdeScrollCreate: SET_OBJECT_INFO failed!" );
         Destroy( new->control, false );
-        WRMemFree( new );
+        MemFree( new );
         return( NULL );
     }
 
     if( !Forward( new->object_handle, CREATE_WINDOW, NULL, NULL ) ) {
         WdeWriteTrail( "WdeScrollCreate: CREATE_WINDOW failed!" );
         Destroy( new->control, false );
-        WRMemFree( new );
+        MemFree( new );
         return( NULL );
     }
 
@@ -266,14 +272,18 @@ bool WdeScrollInit( bool first )
     SETCTL_TEXT( WdeDefaultScroll, NULL );
     SETCTL_CLASSID( WdeDefaultScroll, ResNumToControlClass( CLASS_SCROLLBAR ) );
 
+#ifdef __WINDOWS__
     WdeScrollDispatch = MakeProcInstance_DISPATCHER( WdeScrollDispatcher, WdeGetAppInstance() );
+#endif
     return( true );
 }
 
 void WdeScrollFini( void )
 {
     WdeFreeDialogBoxControl( &WdeDefaultScroll );
+#ifdef __WINDOWS__
     FreeProcInstance_DISPATCHER( WdeScrollDispatch );
+#endif
 }
 
 bool WdeScrollDestroy( WdeScrollObject *obj, bool *flag, bool *p2 )
@@ -285,7 +295,7 @@ bool WdeScrollDestroy( WdeScrollObject *obj, bool *flag, bool *p2 )
         return( false );
     }
 
-    WRMemFree( obj );
+    MemFree( obj );
 
     return( true );
 }
@@ -365,7 +375,7 @@ bool WdeScrollCopyObject( WdeScrollObject *obj, WdeScrollObject **new, OBJPTR ha
         return( false );
     }
 
-    *new = (WdeScrollObject *)WRMemAlloc( sizeof( WdeScrollObject ) );
+    *new = MemAlloc( sizeof( WdeScrollObject ) );
 
     if( *new == NULL ) {
         WdeWriteTrail( "WdeScrollCopyObject: Object malloc failed" );
@@ -383,7 +393,7 @@ bool WdeScrollCopyObject( WdeScrollObject *obj, WdeScrollObject **new, OBJPTR ha
 
     if( !CopyObject( obj->control, &(*new)->control, (*new)->object_handle ) ) {
         WdeWriteTrail( "WdeScrollCopyObject: Control not created!" );
-        WRMemFree( *new );
+        MemFree( *new );
         return( false );
     }
 

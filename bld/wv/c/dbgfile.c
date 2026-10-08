@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -44,7 +44,7 @@
 #else
     #include "rfxdata.h"
 #endif
-#include "dbgmem.h"
+#include "memfuncs.h"
 #include "dbgio.h"
 #include "digcli.h"
 #include "digld.h"
@@ -654,12 +654,14 @@ void SysFileInit( void )
     SYSHANDLE( STD_ERR ) = LocalFileHandleSys( STD_ERR );
 }
 
-#if !defined( BUILD_RFX )
-
 void PathFini( void )
 {
+#if !defined( BUILD_RFX )
     FreeRing( LclPath );
+#endif
 }
+
+#if !defined( BUILD_RFX )
 
 static void parsePathList( char_ring **owner, char *src )
 /********************************************************
@@ -684,7 +686,7 @@ static void parsePathList( char_ring **owner, char *src )
             while( len > 0 && start[len - 1] == ' ' ) {
                 --len;
             }
-            _Alloc( new, sizeof( char_ring ) + len );
+            new = MemAlloc( sizeof( *new ) + len );
             if( new == NULL )
                 break;
             *owner = new;
@@ -707,14 +709,15 @@ static void parseEnvVar( char_ring **owner, const char *name )
     size = DUIEnvLkup( name, NULL, 0 );
     if( size > 0 ) {
         ++size;
-        _Alloc( buff, size );   /* allocate enough room for a very long PATH */
+        buff = MemAlloc( size );   /* allocate enough room for a very long PATH */
         if( buff == NULL ) {
             StartupErr( LIT_ENG( ERR_NO_MEMORY ) );
+            /* never return */
         }
         if( DUIEnvLkup( name, buff, size ) != 0 ) {
             parsePathList( owner, buff );
         }
-        _Free( buff );
+        MemFree( buff );
     }
 }
 

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2020 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -47,6 +47,16 @@
 
 #define CHAR_VALUE(c)       (char)(unsigned char)(c)
 #define UCHAR_VALUE(c)      (unsigned char)(c)
+
+#define _ARRAY_SIZE( a )    ( sizeof(a) / sizeof( (a)[0] ) )
+
+#if defined( __DOS__ ) || defined( _M_I86 )
+typedef char        __far *LP_STRING;
+typedef const char  __far *LPC_STRING;
+#else
+typedef char        *LP_STRING;
+typedef const char  *LPC_STRING;
+#endif
 
 typedef enum {
     UI_MOUSE_PRESS          = 1,
@@ -97,7 +107,7 @@ extern void             intern bfake( BUFFER *, int, int );
 extern void             intern bfill( BUFFER *, int, int, ATTR, char, uisize );
 extern void             intern bpixel( BUFFER *, int, int, ATTR, char );
 extern void             intern braw( BUFFER *, int, int, LP_PIXEL, uisize );
-extern void             intern bstring( BUFFER *, int, int, ATTR, LPC_STRING, uisize );
+extern void             intern bstring( BUFFER *, int, int, ATTR, const char *, uisize );
 extern void             intern bunframe( BUFFER * );
 extern int              intern checkkey( void );
 extern void             intern checkmouse( MOUSESTAT *, MOUSEORD *, MOUSEORD *, MOUSETIME * );

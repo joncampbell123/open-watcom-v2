@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -47,7 +47,9 @@
 #include "jdlg.h"
 #include "watini.h"
 #include "inipath.h"
-#include "wclbproc.h"
+#ifdef __WINDOWS__
+    #include "wclbproc.h"
+#endif
 
 
 /****************************************************************************/
@@ -174,7 +176,7 @@ static bool WdeWriteRectOpt( char *entry, RECT *r )
     str = WdeRectToStr( r );
     if( str != NULL ) {
         ret = ( WritePrivateProfileString( WdeSectionName, entry, str, WdeProfileName ) != 0 );
-        WRMemFree( str );
+        MemFree( str );
     }
 
     return( ret );
@@ -205,7 +207,7 @@ static bool WdeGetStrOpt( char *entry, char **opt )
 
     if( ret ) {
         if( !WdeIsStrSpace( str ) ) {
-            ret = ((*opt = WdeStrDup( str )) != NULL);
+            ret = ((*opt = WdeStrdup( str )) != NULL);
         }
     }
 
@@ -258,22 +260,22 @@ static void WdeWriteOpts( WdeOptState *o )
 void WdeOptsShutdown( void )
 {
     if( WdeCurrentState.last_directory != NULL ) {
-        WRMemFree( WdeCurrentState.last_directory );
+        MemFree( WdeCurrentState.last_directory );
     }
     if( WdeCurrentState.last_file_filter != NULL ) {
-        WRMemFree( WdeCurrentState.last_file_filter );
+        MemFree( WdeCurrentState.last_file_filter );
     }
 
-    WdeCurrentState.last_directory = WdeStrDup( WdeGetInitialDir() );
+    WdeCurrentState.last_directory = WdeStrdup( WdeGetInitialDir() );
     WdeCurrentState.last_file_filter = WdeGetFileFilter();
 
     WdeWriteOpts( &WdeCurrentState );
 
     if( WdeCurrentState.last_directory != NULL ) {
-        WRMemFree( WdeCurrentState.last_directory );
+        MemFree( WdeCurrentState.last_directory );
     }
     if( WdeCurrentState.inc_path != NULL ) {
-        WRMemFree( WdeCurrentState.inc_path );
+        MemFree( WdeCurrentState.inc_path );
     }
 }
 
@@ -292,14 +294,14 @@ void WdeInitOpts( void )
 void WdeResetOpts( void )
 {
     if( WdeCurrentState.inc_path != NULL ) {
-        WRMemFree( WdeCurrentState.inc_path );
+        MemFree( WdeCurrentState.inc_path );
     }
     WdeCurrentState.is_wres_fmt = WdeDefaultState.is_wres_fmt;
     WdeCurrentState.use_def_dlg = WdeDefaultState.use_def_dlg;
     WdeCurrentState.grid_x = WdeDefaultState.grid_x;
     WdeCurrentState.grid_y = WdeDefaultState.grid_y;
     WdeCurrentState.ignore_inc = WdeDefaultState.ignore_inc;
-    WdeCurrentState.inc_path = WdeStrDup( WdeDefaultState.inc_path );
+    WdeCurrentState.inc_path = WdeStrdup( WdeDefaultState.inc_path );
 }
 
 int WdeGetOption( WdeOptReq req )
@@ -359,7 +361,7 @@ char *WdeGetIncPathOption( void )
 void WdeSetIncPathOption( char *path )
 {
     if( WdeCurrentState.inc_path != NULL ) {
-        WRMemFree( WdeCurrentState.inc_path );
+        MemFree( WdeCurrentState.inc_path );
     }
     WdeCurrentState.inc_path = path;
 }
@@ -441,7 +443,6 @@ int WdeSetOption( WdeOptReq req, int val )
 bool WdeDisplayOptions( void )
 {
     HWND      dialog_owner;
-    DLGPROC   dlgproc;
     HINSTANCE app_inst;
     INT_PTR   modified;
 
@@ -450,10 +451,15 @@ bool WdeDisplayOptions( void )
 
     dialog_owner = WdeGetMainWindowHandle();
     app_inst = WdeGetAppInstance();
-    dlgproc = MakeProcInstance_DLG( WdeOptionsDlgProc, app_inst );
-    modified = JDialogBoxParam( app_inst, "WdeOptions", dialog_owner, dlgproc, (LPARAM)NULL );
-    FreeProcInstance_DLG( dlgproc );
-
+#ifdef __WINDOWS__
+    {
+        DLGPROC dlgproc = MakeProcInstance_DLG( WdeOptionsDlgProc, app_inst );
+        modified = JDialogBoxParam( app_inst, "WdeOptions", dialog_owner, dlgproc, (LPARAM)NULL );
+        FreeProcInstance_DLG( dlgproc );
+    }
+#else
+    modified = JDialogBoxParam( app_inst, "WdeOptions", dialog_owner, WdeOptionsDlgProc, (LPARAM)NULL );
+#endif
     if( modified == -1 ) {
         WdeWriteTrail( "WdeDisplayOptions: Dialog not created!" );
         return( FALSE );
@@ -521,14 +527,14 @@ static void WdeGetOptInfo( HWND hDlg )
     WdeCurrentState.ignore_inc = IsDlgButtonChecked( hDlg, IDB_OPT_IGNOREINC );
 
     if( WdeCurrentState.inc_path != NULL ) {
-        WRMemFree( WdeCurrentState.inc_path );
+        MemFree( WdeCurrentState.inc_path );
     }
 
     WdeCurrentState.inc_path = WdeGetStrFromEdit( hDlg, IDB_OPT_INCPATH, NULL );
 
     if( WdeCurrentState.inc_path != NULL ) {
         if( WdeIsStrSpace( WdeCurrentState.inc_path ) ) {
-            WRMemFree( WdeCurrentState.inc_path );
+            MemFree( WdeCurrentState.inc_path );
             WdeCurrentState.inc_path = NULL;
         }
     }

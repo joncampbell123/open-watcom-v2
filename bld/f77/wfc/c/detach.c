@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -40,6 +40,7 @@
 #include "errcod.h"
 #include "opr.h"
 #include "global.h"
+#include "namecod.h"
 #include "recog.h"
 #include "ferror.h"
 #include "insert.h"
@@ -87,25 +88,25 @@ void    DetCallList(void) {
 
     cit = CITNode;
     AdvanceITPtr();
-    if( RecNOpn() ) {
+    if( RecNoOpn() ) {
         AdvanceITPtr();
     } else {
         SetDefinedStatus();
         AdvanceITPtr();
-        while( RecComma() ) {
+        while( RecCommaOpr() ) {
             if( CheckColon() ) {
                 Extension( SS_FUNCTION_VALUE );
                 SubStrArgs( cit );
                 Detach( cit );
                 return;
             }
-            if( RecNOpn() )
+            if( RecNoOpn() )
                 break;
             SetDefinedStatus();
             AdvanceITPtr();
         }
     }
-    if( !RecCloseParen() ) {
+    if( !RecCloseParenOpr() ) {
         Error( PC_NO_CLOSEPAREN );
     }
     Detach( cit );
@@ -128,7 +129,7 @@ void    DetSubList(void) {
     }
     cit = CITNode;
     AdvanceITPtr();
-    for( dim_no = 0; RecComma() || RecFBr(); ++dim_no ) {
+    for( dim_no = 0; RecCommaOpr() || RecFBrOpr(); ++dim_no ) {
         if( CheckColon() ) {
             if( dim_no == 0 ) {
                 save_cit = CITNode;
@@ -144,12 +145,12 @@ void    DetSubList(void) {
             Detach( cit );
             return;
         }
-        if( RecNOpn() )
+        if( RecNoOpn() )
             break;
         CkScrStr();
         AdvanceITPtr();
     }
-    if( !RecCloseParen() ) {
+    if( !RecCloseParenOpr() ) {
         Error( PC_NO_CLOSEPAREN );
     }
     if( dim_no != dim_cnt ) {
@@ -188,14 +189,14 @@ static  void    SubStrArgs( itnode *cit ) {
         Error( SS_ONLY_IF_CHAR );
     }
     count = 1;
-    for(;;) {
+    for( ;; ) {
         if( CITNode->opn.us & USOPN_SS1 ) {
             cit->opn.us |= USOPN_SS1;
             cit->value.st.ss_size = CITNode->value.st.ss_size;
         }
         CkScrStr();
         AdvanceITPtr();
-        if( !RecColon() )
+        if( !RecColonOpr() )
             break;
         ++count;
     }
@@ -220,7 +221,7 @@ static  void    Detach( itnode *cit ) {
 
     cit->list = cit->link;
     cit->link = CITNode->link;
-    if( !RecNOpn() ) {
+    if( !RecNoOpn() ) {
         Error( SX_NO_OPR );
     }
     CITNode->link = NULL;

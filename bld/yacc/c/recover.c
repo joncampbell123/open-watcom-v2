@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -47,27 +47,37 @@ static a_state *AddErrState( a_state **enter, a_state **s, a_state **t )
 
 static AddError()
 {
-    a_sym *xsym, *sym;
-    a_pro *xpro, *pro;
-    a_state *state;
-    a_state **s, **t;
-    a_shift_action *tx, *ty, *trans;
-    a_reduce_action *rx, *ry, *redun;
-    int i;
-    a_word *defined, *conflict, *rset;
-    short *at;
+    a_sym           *xsym;
+    a_sym           *sym;
+    a_pro           *xpro;
+    a_pro           *pro;
+    a_state         *state;
+    a_state         **s;
+    a_state         **t;
+    a_shift_action  *saction;
+    a_shift_action  *ty;
+    a_shift_action  *trans;
+    a_reduce_action *raction;
+    a_reduce_action *ry;
+    a_reduce_action *redun;
+    int             i;
+    a_word          *defined;
+    a_word          *conflict;
+    a_word          *rset;
+    short           *at;
+    rule_n          pidx;
 
-    trans = CALLOC( nsym, a_shift_action );
-    rx = redun = CALLOC( npro + 1, a_reduce_action );
-    rset = conflict = AllocSet( npro + 2 );
-    for( i = 0; i <= npro; ++i ) {
-        (rx++)->follow = rset;
+    trans = MemCAllocSafe( nsym, sizeof( *trans ) );
+    raction = redun = MemCAllocSafe( npro + 1, sizeof( *raction ) );
+    rset = conflict = MemAllocSetSafe( npro + 2 );
+    for( pidx = 0; pidx <= npro; ++pidx ) {
+        raction->follow = rset;
+        ++raction;
         rset += GetSetSize( 1 );
     }
     defined = rset;
-    s = CALLOC( nstate, a_state * );
-    at = CALLOC( nstate, short );
-    s = t = CALLOC( nstate + 1, a_state * );
+    at = MemCAllocSafe( nstate, sizeof( *at ) );
+    s = t = MemCAllocSafe( nstate + 1, sizeof( *s ) );
     for( state = statelist; state != NULL; state = state->next ) {
          Mark( *state );
          *t++ = state;
@@ -85,16 +95,16 @@ static AddError()
             }
         }
         redun->pro = errpro;
-        rx = redun + 1;
-        if( state != restart )
+        raction = redun + 1;
+        if( state != restart ) {
             while( xpro != NULL ) {
                 pro = xpro;
                 xpro = NULL;
-                Clear( rx->follow );
+                Clear( raction->follow );
                 for( i = 0; i < state->kersize; ++i ) {
                     ry = &state->name.state[i]->redun[at[i]];
                     if( ry->pro == pro ) {
-                        Union( rx->follow, ry->follow );
+                        Union( raction->follow, ry->follow );
                         ++(at[i]);
                         ++ry;
                     }
@@ -102,11 +112,12 @@ static AddError()
                         xpro = ry->pro;
                     }
                 }
-                UnionAnd( conflict, rx->follow, defined );
-                Union( defined, rx->follow );
-                rx->pro = pro;
-                ++rx;
+                UnionAnd( conflict, raction->follow, defined );
+                Union( defined, raction->follow );
+                raction->pro = pro;
+                ++raction;
             }
+        }
         xsym = NULL;
         for( i = 0; i < state->kersize; ++i ) {
             at[i] = 0;
@@ -115,7 +126,7 @@ static AddError()
                 xsym = sym;
             }
         }
-        tx = trans;
+        saction = trans;
         while( xsym != NULL ) {
             sym = xsym;
             xsym = NULL;
@@ -134,59 +145,59 @@ static AddError()
                     xsym = ty->sym;
                 }
             }
-            tx->sym = sym;
+            saction->sym = sym;
             if( sym->pro != NULL ) {
                 ++nvtrans;
             } else {
-                if( IsBitSet( defined, sym->id ) ) {
-                    SetBit( conflict, sym->id );
+                if( IsBitSet( defined, sym->id, WSIZE ) ) {
+                    SetBit( conflict, sym->id, WSIZE );
                     while( --t >= s ) {
                         Unmark( **t );
                     }
                     continue;
                 } else {
-                    SetBit( defined, sym->id );
+                    SetBit( defined, sym->id, WSIZE );
                 }
             }
-            tx->state = AddErrState( &errsym->enter, s, t );
-            ++tx;
+            saction->state = AddErrState( &errsym->enter, s, t );
+            ++saction;
         }
-        state->trans = CALLOC( tx - trans + 1, a_shift_action );
-        memcpy( state->trans, trans, (char *)tx - (char *)trans );
+        state->trans = MemCAllocSafe( ( saction - trans ) + 1, sizeof( *(state->trans) ) );
+        memcpy( state->trans, trans, ( saction - trans ) * sizeof( a_shift_action ) );
         if( Empty( conflict ) ) {
             redun->pro = NULL;
             i = 0;
         } else {
             i = 1;
         }
-        while( --rx > redun ) {
-            AndNot( rx->follow, conflict );
-            if( Empty( rx->follow ) ) {
-                rx->pro = NULL;
+        while( --raction > redun ) {
+            AndNot( raction->follow, conflict );
+            if( Empty( raction->follow ) ) {
+                raction->pro = NULL;
             } else {
                 ++i;
             }
         }
-        state->redun = CALLOC( i + 1, a_reduce_action );
+        state->redun = MemCAllocSafe( i + 1, sizeof( *(state->redun) ) );
         if( i > 0 ) {
-            rset = AllocSet( i );
-            rx = redun;
+            rset = MemAllocSetSafe( i );
+            raction = redun;
             while( i > 0 ) {
-                if( rx->pro != NULL ) {
+                if( raction->pro != NULL ) {
                     --i;
-                    state->redun[i].pro = rx->pro;
+                    state->redun[i].pro = raction->pro;
                     state->redun[i].follow = rset;
-                    Assign( rset, rx->follow );
+                    Assign( rset, raction->follow );
                     rset += GetSetSize( 1 );
                 }
-                ++rx;
+                ++raction;
             }
         }
     }
-    FREE( trans );
-    FREE( redun );
-    FreeSet( conflict );
-    FREE( s );
-    FREE( at );
+    MemFree( trans );
+    MemFree( redun );
+    MemFreeSet( conflict );
+    MemFree( s );
+    MemFree( at );
 }
 

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -164,9 +164,9 @@ static void mkConsDesNames( void )
     }
 
     len = strlen(classname);
-    SRU.con_name = MemMalloc( PB_NAME_LEN + 1 );
+    SRU.con_name = MemAlloc( PB_NAME_LEN + 1 );
     GetConstructor( classname, SRU.con_name );
-    SRU.des_name = MemMalloc( PB_NAME_LEN + 1 );
+    SRU.des_name = MemAlloc( PB_NAME_LEN + 1 );
     GetDestructor( classname, SRU.des_name );
 }
 
@@ -205,7 +205,7 @@ void InitSru( void ) {
     inSubPgm = false;
     setHeader = false;
     SRU.type_prots = NewHashTable( PROTO_PRIME );
-    SRU.name = MemStrDup( NONAME_FILE );
+    SRU.name = MemStrdup( NONAME_FILE );
     SetDefaultAccess( ST_PUBLIC );
     SetBaseName( SRU.name );
     if( Options & OPT_GEN_C_CODE ) {
@@ -252,7 +252,7 @@ void SetHeader( char *name, char *ext )
     if( SRU.name ) {
         MemFree( SRU.name );
     }
-    SRU.name = MemStrDup( name );
+    SRU.name = MemStrdup( name );
     strcpy( SRU.name, name + headerlen );
     SetBaseName( SRU.name );
     mkConsDesNames();
@@ -294,7 +294,7 @@ static void copyTypeInfo( TypeInfo *dst, TypeInfo *src ) {
     if( src->name == NULL ) {
         dst->name = NULL;
     } else {
-        dst->name = MemStrDup( src->name );
+        dst->name = MemStrdup( src->name );
     }
     dst->isref = src->isref;
 }
@@ -310,7 +310,7 @@ void SetFunction( TypeInfo *ret, char *fname ) {
     assert( ret );
 
     copyTypeInfo( &( SRU.curr.sp.ret_type ), ret );
-    SRU.curr.sp.name = MemStrDup( fname );
+    SRU.curr.sp.name = MemStrdup( fname );
     SRU.curr.sp.typ = ST_FUNCTION;
     SRU.curr_typ = SRU_SUBPROG;
     SRU.curr.sp.typ_id = isTypeKnown( ret ); /* we must first set sp info */
@@ -336,7 +336,7 @@ void SetSubroutine( char *sname ) {
 
     SRU.curr.sp.ret_type.name = NULL;
     SRU.curr.sp.ret_type.isref = false;
-    SRU.curr.sp.name = MemStrDup( sname );
+    SRU.curr.sp.name = MemStrdup( sname );
     SRU.curr.sp.typ = ST_SUBROUTINE;
     SRU.curr.sp.subroutine = true;
     SRU.curr_typ = SRU_SUBPROG;
@@ -474,7 +474,7 @@ void AddParm( TypeInfo *typ, char *tname, ArrayInfo *array ) {
     assert( tname );
     assert( typ );
 
-    ptmp = MemMalloc( sizeof( var_rec ) );
+    ptmp = MemAlloc( sizeof( var_rec ) );
     memset( ptmp, 0, sizeof( var_rec ) );
     if( SRU.curr.sp.last_parm ) {
         SRU.curr.sp.last_parm->next = ptmp;
@@ -488,11 +488,11 @@ void AddParm( TypeInfo *typ, char *tname, ArrayInfo *array ) {
         ptmp->fake = true;
     }
     ptmp->next = NULL;
-    ptmp->name = MemStrDup( tname );
+    ptmp->name = MemStrdup( tname );
     if( array == NULL ) {
         ptmp->array = NULL;
     } else {
-        ptmp->array = MemMalloc( sizeof( ArrayInfo ) );
+        ptmp->array = MemAlloc( sizeof( ArrayInfo ) );
         memcpy( ptmp->array, array, sizeof( ArrayInfo ) );
     }
 }
@@ -656,7 +656,7 @@ static statement *insertTypePrototype( statement *func, statement *locale ) {
     libname = GetLibName();
     size = strlen( name ) + strlen( sp ) + strlen( ret ) + strlen( libname );
     size += sizeof( DECL_THIS_VAR ) + sizeof( LIBRARY  ) + sizeof( LEFT_PAREN )
-          + sizeof( RIGHT_PAREN ) + sizeof( "." DLL_EXT ) + sizeof( DQUOTE )
+          + sizeof( RIGHT_PAREN ) + sizeof( "." FEXT_DLL ) + sizeof( DQUOTE )
           + sizeof( DQUOTE ) + OVERHEAD;
 
     finger = func->data.sp.parm_list;
@@ -699,7 +699,7 @@ static statement *insertTypePrototype( statement *func, statement *locale ) {
     strcat( line, LIBRARY );
     strcat( line, DQUOTE );
     strcat( line, libname );
-    strcat( line, "." DLL_EXT );
+    strcat( line, "." FEXT_DLL );
     strcat( line, DQUOTE );
     strcat( line, "\n" );
 
@@ -710,7 +710,7 @@ static statement *insertTypePrototype( statement *func, statement *locale ) {
     //          must be explicitly copied here or else things will get freed
     //          twice.  This code should be rewritten. DRW
     memcpy( &(rc->data), &(func->data), sizeof( spec ) );
-    rc->data.sp.name = MemStrDup( name );
+    rc->data.sp.name = MemStrdup( name );
     copyTypeInfo( &rc->data.sp.ret_type, &func->data.sp.ret_type );
     finger = func->data.sp.parm_list;
     SRU.curr.sp.parm_list = NULL;
@@ -949,7 +949,7 @@ static statement *mkStatement( char *stmt ) {
 
     assert( stmt );
 
-    ret = MemMalloc( sizeof( statement ) + strlen( stmt ) + 1 );
+    ret = MemAlloc( sizeof( statement ) + strlen( stmt ) + 1 );
     memset( ret, 0, sizeof( statement ) );
     strcpy( ret->stmt, stmt );
     return( ret );

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -51,8 +51,10 @@
 #include "preproc.h"
 #include "wresdefn.h"
 #include "pathgrp2.h"
-#include "wclbhelp.h"
 #include "jmpbuf.h"
+#ifdef __WINDOWS__
+    #include "wclbproc.h"
+#endif
 
 #include "clibext.h"
 
@@ -98,37 +100,6 @@ extern char     *WdeWriteHeaderTitle;
 /****************************************************************************/
 static char  WdeBusyChars[]         = "-\\|/";
 
-static jmp_buf Env;
-
-
-void PPENTRY PP_OutOfMemory( void )
-/*********************************/
-{
-    if( WdePopEnv( JMPBUF_PTR( Env ) ) ) {
-        longjmp( Env, 1 );
-    } else {
-        WdeWriteTrail( "Wde PreProc: Fatal error!" );
-        exit( -1 );
-    }
-}
-
-void * PPENTRY PP_Malloc( size_t size )
-/*************************************/
-{
-    void        *p;
-
-    p = WRMemAlloc( size );
-    if( p == NULL ) {
-        PP_OutOfMemory();
-    }
-    return( p );
-}
-
-void PPENTRY PP_Free( void *p )
-/*****************************/
-{
-    WRMemFree( p );
-}
 
 int PP_MBCharLen( const char *p )
 /*******************************/
@@ -179,26 +150,22 @@ static void Add_PP_Symbols( WRHashTable *table )
 static bool WdeViewSymbols( WRHashTable **table, HWND parent )
 {
     WRHashEntryFlags    flags;
-    HELPFUNC            hcb;
     bool                ok;
 
-    hcb = NULL;
     ok = (table != NULL);
 
     if( ok ) {
-        hcb = MakeProcInstance_HELP( WdeHelpRoutine, WdeGetAppInstance() );
-        ok = (hcb != NULL);
-    }
-
-    if( ok ) {
         flags = WR_HASHENTRY_ALL;
-        ok = WREditSym( parent, table, &flags, hcb );
+#ifdef __WINDOWS__
+        {
+            HELPFUNC hcb = MakeProcInstance_HELP( WdeHelpRoutine, WdeGetAppInstance() );
+            ok = WREditSym( parent, table, &flags, hcb );
+            FreeProcInstance_HELP( hcb );
+        }
+#else
+        ok = WREditSym( parent, table, &flags, WdeHelpRoutine );
+#endif
     }
-
-    if( hcb != NULL ) {
-        FreeProcInstance_HELP( hcb );
-    }
-
     return( ok );
 }
 
@@ -272,7 +239,7 @@ bool WdeResourceLoadHash( WdeResInfo *info )
     }
 
     if( info->sym_name != NULL ) {
-        WRMemFree( info->sym_name );
+        MemFree( info->sym_name );
     }
     info->sym_name = include;
 
@@ -331,7 +298,7 @@ bool WdeCreateDLGInclude( WdeResInfo *rinfo, char *include )
     }
 
     if( ok ) {
-        str = WdeStrDup( include );
+        str = WdeStrdup( include );
         ok = (str != NULL);
     }
 
@@ -339,7 +306,7 @@ bool WdeCreateDLGInclude( WdeResInfo *rinfo, char *include )
         lang.lang = DEF_LANG;
         lang.sublang = DEF_SUBLANG;
         len = strlen( include ) + 1;
-        ok = !WResAddResource( type, res, MEMFLAG_DISCARDABLE, 0, len, rinfo->info->dir, &lang, NULL );
+        ok = !WResAddResource( type, res, RESFLAG_DISCARDABLE, 0, len, rinfo->info->dir, &lang, NULL );
     }
 
     if( ok ) {
@@ -347,16 +314,16 @@ bool WdeCreateDLGInclude( WdeResInfo *rinfo, char *include )
     }
 
     if( type != NULL ) {
-        WRMemFree( type );
+        MemFree( type );
     }
 
     if( res != NULL ) {
-        WRMemFree( res );
+        MemFree( res );
     }
 
     if( !ok ) {
         if( str != NULL ) {
-            WRMemFree( str );
+            MemFree( str );
         }
     }
 
@@ -445,7 +412,7 @@ char *WdeCreateSymName( const char *fname )
     _splitpath2( fname, pg.buffer, &pg.drive, &pg.dir, &pg.fname, NULL );
     _makepath( fn_path, pg.drive, pg.dir, pg.fname, "h" );
 
-    return( WdeStrDup( fn_path ) );
+    return( WdeStrdup( fn_path ) );
 }
 
 bool WdeFindAndLoadSymbols( WdeResInfo *rinfo )
@@ -464,7 +431,7 @@ bool WdeFindAndLoadSymbols( WdeResInfo *rinfo )
 
     include = WdeFindDLGInclude( rinfo );
     if( include != NULL && !WRFileExists( include ) ) {
-        WRMemFree( include );
+        MemFree( include );
         include = NULL;
     }
 
@@ -474,7 +441,7 @@ bool WdeFindAndLoadSymbols( WdeResInfo *rinfo )
         prompt_name = true;
     } else {
         strcpy( fn_path, include );
-        WRMemFree( include );
+        MemFree( include );
         include = NULL;
         prompt_name = false;
     }
@@ -486,7 +453,7 @@ bool WdeFindAndLoadSymbols( WdeResInfo *rinfo )
         ret = (include != NULL);
         if( ret ) {
             if( rinfo->sym_name != NULL ) {
-                WRMemFree( rinfo->sym_name );
+                MemFree( rinfo->sym_name );
             }
             rinfo->sym_name = include;
             WdeSetResModified( rinfo, TRUE );
@@ -529,7 +496,7 @@ char *WdeLoadSymbols( WRHashTable **table, char *file_name, bool prompt_name )
             gf.filter = WdeSymSaveFilter;
             name = WdeGetOpenFileName( &gf );
         } else {
-            name = WdeStrDup( file_name );
+            name = WdeStrdup( file_name );
         }
         ok = ( name != NULL );
     }
@@ -587,7 +554,7 @@ char *WdeLoadSymbols( WRHashTable **table, char *file_name, bool prompt_name )
 
     if( !ok ) {
         if( name != NULL ) {
-            WRMemFree( name );
+            MemFree( name );
             name = NULL;
         }
     }
@@ -626,7 +593,7 @@ bool WdeSaveSymbols( WRHashTable *table, char **file_name, bool prompt_name )
             return( false );
         }
         if( *file_name != NULL ) {
-            WRMemFree( *file_name );
+            MemFree( *file_name );
         }
         *file_name = name;
     } else {

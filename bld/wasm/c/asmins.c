@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -148,8 +148,8 @@ int GetInsString( asm_token token, char *string )
 }
 #endif
 
-const asm_ins ASMI86FAR *get_instruction( char *string )
-/******************************************************/
+const asm_ins ASMI86FAR *get_instruction( const char *string )
+/************************************************************/
 {
     asm_token   token;
 
@@ -1081,10 +1081,11 @@ static bool get_register_argument( token_buffer *tokbuf, token_idx index, char *
             case T_SS:
             case T_FS:
             case T_GS:
-                if( Use32 )
+                if( Use32 ) {
                     size = 4;
-                else
+                } else {
                     size = 2;
+                }
                 break;
             case T_AL:
             case T_AH:
@@ -1125,10 +1126,11 @@ static bool get_register_argument( token_buffer *tokbuf, token_idx index, char *
         } else if( tokbuf->tokens[i].class == TC_QUESTION_MARK ) {
             return( RC_OK );
         } else {
-            if( Use32 )
+            if( Use32 ) {
                 sprintf( buffer, "mov %s,", regs[A_DWORD][j] );
-            else
+            } else {
                 sprintf( buffer, "mov %s,", regs[A_WORD][j] );
+            }
             while( ( tokbuf->tokens[i].class != TC_FINAL ) &&
                    ( tokbuf->tokens[i].class != TC_COMMA ) ) {
                 strcat( buffer, tokbuf->tokens[i++].string_ptr );
@@ -1239,7 +1241,7 @@ static bool get_stack_argument( token_buffer *tokbuf, token_idx idx, char *buffe
     return( RC_OK );
 }
 
-static bool expand_call( token_buffer *tokbuf, token_idx index, int lang_type )
+static bool expand_call( token_buffer *tokbuf, token_idx index, lang_type langtype )
 {
     token_idx   i, j;
     token_idx   arglist[16];
@@ -1250,7 +1252,7 @@ static bool expand_call( token_buffer *tokbuf, token_idx index, int lang_type )
 
     argcount = cleanup = reversed = register_count = register_arguments = 0;
     parameter_on_stack = true;
-    switch( lang_type ) {
+    switch( langtype ) {
     case WASM_LANG_C:
     case WASM_LANG_SYSCALL:
         cleanup++;
@@ -1672,7 +1674,7 @@ static bool idata_fixup( token_buffer *tokbuf, expr_list *opndx )
             return( RC_ERROR );
         }
     } else {
-        if( MEM_TYPE( Code->mem_type, BYTE ) ) {
+        if( MEM_TYPE( Code->mem_type, BYTE ) && !opndx->abs ) {
             AsmError( OFFSET_TOO_SMALL );
             return( RC_ERROR );
         }
@@ -1687,6 +1689,12 @@ static bool idata_fixup( token_buffer *tokbuf, expr_list *opndx )
         }
     }
     switch( Code->mem_type ) {
+#if defined( _STANDALONE_ )
+    case MT_SBYTE:
+#endif
+    case MT_BYTE:
+        Code->info.opnd_type[Opnd_Count] = OP_I8;
+        break;
     case MT_EMPTY:
         if( Opnd_Count > OPND1 ) {
             type = OperandSize( Code->info.opnd_type[OPND1] );
@@ -1761,7 +1769,9 @@ static bool idata_fixup( token_buffer *tokbuf, expr_list *opndx )
         }
     }
     ConstantOnly = true;
-    Code->info.opcode |= W_BIT;
+    if( !MEM_TYPE( Code->mem_type, BYTE ) ) {
+        Code->info.opcode |= W_BIT;
+    }
 
 #if defined( _STANDALONE_ )
     find_frame( opndx->sym );
@@ -2292,7 +2302,7 @@ bool AsmParse( token_buffer *tokbuf, const char *curline )
     int             jmp_flags;
     bool            flag;
 #if defined( _STANDALONE_ )
-    int             temp;
+    lang_type       langtype;
     static bool     in_epilogue = false;
 #endif
 
@@ -2403,8 +2413,8 @@ bool AsmParse( token_buffer *tokbuf, const char *curline )
             case T_CALL:
                 if( Options.mode & MODE_IDEAL ) {
                     for( n = i + 2; n < tokbuf->count; n++ ) {
-                        if( !CheckForLang( tokbuf, n, &temp ) ) {
-                            return( expand_call( tokbuf, n + 1, temp ) );
+                        if( !CheckForLang( tokbuf, n, &langtype ) ) {
+                            return( expand_call( tokbuf, n + 1, langtype ) );
                         }
                     }
                 }

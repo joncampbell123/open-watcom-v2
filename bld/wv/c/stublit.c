@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2024      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2024-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -31,6 +31,7 @@
 ****************************************************************************/
 
 
+#include <stdlib.h>
 #include <string.h>
 #include <process.h>
 #ifdef __OS2__
@@ -39,7 +40,7 @@
     #include <windows.h>
 #endif
 #include "dbgdefn.h"
-#include "dbgmem.h"
+#include "memfuncs.h"
 #include "wreslang.h"
 #include "wv.rh"
 #include "dbglit.h"
@@ -100,14 +101,14 @@ char *DUILoadString( dui_res_id id )
     }
     buffer[len++] = NULLCHAR;
 #endif
-    ret = DbgAlloc( len );
+    ret = MemAllocSafe( len );
     strcpy( ret, buffer );
     return( ret );
 }
 
 void DUIFreeString( void *ptr )
 {
-    DbgFree( ptr );
+    MemFree( ptr );
 }
 
 void DUIInitLiterals( void )

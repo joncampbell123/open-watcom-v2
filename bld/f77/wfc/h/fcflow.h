@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2025-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -29,10 +30,14 @@
 ****************************************************************************/
 
 
+#define _GetStmtNumber(x)        ((x)->u.st.number)
+#define _GetStmtLabel(x)         ((x)->u.st.label)
+#define _GetStmtCgLabel(x)       GetCgLabel((x)->u.st.label)
+#define _GetStmtCgBckLabel(x)    GetCgBckLabel((x)->u.st.label)
+
 extern void             InitLabels( void );
-extern void             FiniLabels( int label_type );
-extern label_handle     GetLabel( label_id label );
-extern label_handle     GetStmtLabel( sym_id sn );
-extern back_handle      GetFmtLabel( label_id label );
+extern void             FiniLabels( bool format_label );
+extern label_handle     GetCgLabel( label_id label );
+extern back_handle      GetCgBckLabel( label_id label );
 extern void             DoneLabel( label_id label );
 extern void             RefStmtLabel( sym_id sn );

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -81,19 +81,19 @@ typedef struct {
     boolbit             changing  : 1;
 } mac_window;
 
-static char **WndDisplayNames[] = {
+static const char **WndDisplayNames[] = {
     #define pick( a,b,c,d,e,f ) LITREF_DUI( f ),
     #include "wndnames.h"
     #undef pick
 };
 
-static char **WhatList[] = {
+static const char **WhatList[] = {
     LITREF_DUI( Mac_PopupMenu ),
     LITREF_DUI( Mac_MainMenu ),
     LITREF_DUI( Mac_CommandString ),
 };
 
-static char **Titles[] = {
+static const char **Titles[] = {
     LITREF_DUI( Key_Name ),
     LITREF_DUI( Mac_Window ),
     LITREF_DUI( Macro_Type ),
@@ -106,9 +106,11 @@ static gui_menu_struct MacMenu[] = {
     #include "menumac.h"
 };
 
-static const char * GUICALLBACK WndGetName( const void *data_handle, int item )
+static const char * GUICALLBACK WndGetName( data_handle _data, int item )
 {
-    return( *((const char ***)data_handle)[item] );
+    data_handle *data = (data_handle *)_data;
+
+    return( *data[item] );
 }
 
 #ifdef DEADCODE
@@ -149,7 +151,7 @@ static void MacChangeMac( a_window wnd, wnd_macro *mac, gui_key key, wnd_class_w
     wnd_row     i;
 
     cmds = mac->cmd;
-    LockCmdList( cmds );
+    cmds->use++;
     MacAddDel( mac->key, mac->wndclass, NULL );
     curr = MacAddDel( key, wndclass, cmds );
     for( owner = &WndMacroList; *owner; owner = &(*owner)->link ) {
@@ -183,11 +185,11 @@ static bool MacModWhat( a_window wnd, wnd_row row )
     old = mac->type;
     new = -1;
     if( mac->wndclass == WND_ALL ) {
-        if( DlgPickWithRtn( LIT_DUI( Macro_Type ), WhatList + 1, old - 1, WndGetName, ArraySize( WhatList ) - 1, &new ) ) {
+        if( DlgPickWithRtn( LIT_DUI( Macro_Type ), (data_handle)WhatList + 1, old - 1, WndGetName, ArraySize( WhatList ) - 1, &new ) ) {
             ++new;
         }
     } else {
-        DlgPickWithRtn( LIT_DUI( Macro_Type ), WhatList, old, WndGetName, ArraySize( WhatList ), &new );
+        DlgPickWithRtn( LIT_DUI( Macro_Type ), (data_handle)WhatList, old, WndGetName, ArraySize( WhatList ), &new );
     }
     if( new != -1 ) {
         mac->type = new;
@@ -223,7 +225,7 @@ bool MacKeyHit( a_window wnd, gui_key key )
                 MacChangeMac( wnd, mac, key, mac->wndclass, wndmac->change_row );
             } else if( wndmac->creating ) {
                 wndmac->creating = false;
-                if( DlgPickWithRtn( LIT_DUI( Enter_Window ), WndDisplayNames, WND_ALL, WndGetName, NUM_WNDCLS, &new ) ) {
+                if( DlgPickWithRtn( LIT_DUI( Enter_Window ), (data_handle)WndDisplayNames, WND_ALL, WndGetName, NUM_WNDCLS, &new ) ) {
                     curr = MacAddDel( key, (wnd_class_wv)new, AllocCmdList( LIT_ENG( Quest_Marks ), strlen( LIT_ENG( Quest_Marks ) ) ) );
                     row = 0;
                     for( mac = WndMacroList; mac != curr; mac = mac->link ) {
@@ -315,7 +317,7 @@ static void MacModWhere( a_window wnd, wnd_row row )
     /* unused parameters */ (void)wnd;
 
     mac = MacGetMacro( row );
-    if( DlgPickWithRtn( LIT_DUI( Enter_Window ), WndDisplayNames, mac->wndclass, WndGetName, NUM_WNDCLS, &new ) ) {
+    if( DlgPickWithRtn( LIT_DUI( Enter_Window ), (data_handle)WndDisplayNames, mac->wndclass, WndGetName, NUM_WNDCLS, &new ) ) {
 //        WndSetRepaint( wnd );
         MacChangeMac( wnd, mac, mac->key, (wnd_class_wv)new, row );
     }
@@ -615,7 +617,7 @@ static bool WNDCALLBACK MacWndEventProc( a_window wnd, gui_event gui_ev, void *p
         MacRefresh( wnd );
         WndMacroList = SortLinkedList( WndMacroList,
                     offsetof( wnd_macro, link ),
-                    MacCompare, DbgAlloc, DbgFree );
+                    MacCompare, MemAlloc, MemFree );
         MacReSize( wnd );
         memset( wndmac, 0, sizeof( *wndmac ) );
         return( true );
@@ -623,7 +625,7 @@ static bool WNDCALLBACK MacWndEventProc( a_window wnd, gui_event gui_ev, void *p
         MacReSize( wnd );
         return( true );
     case GUI_DESTROY:
-        WndFree( wndmac );
+        MemFree( wndmac );
         return( true );
     }
     return( false );
@@ -647,13 +649,13 @@ wnd_info MacInfo = {
     NoNextRow,
     NoNotify,
     ChkUpdate,
-    PopUp( MacMenu )
+    GUI_MENU_ARRAY( MacMenu )
 };
 
 a_window WndMacOpen( void )
 {
     mac_window  *wndmac;
 
-    wndmac = WndMustAlloc( sizeof( *wndmac ) );
+    wndmac = MemAllocSafe( sizeof( *wndmac ) );
     return( DbgWndCreateTitle( LIT_DUI( WindowAccelerator ), &MacInfo, WND_MACRO, wndmac, &AclIcon, TITLE_SIZE, true ) );
 }

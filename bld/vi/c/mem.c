@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -36,29 +36,61 @@
 #ifdef __WATCOMC__
     #include <malloc.h>
 #endif
+#include "trmem.h"
 #ifdef TRMEM
     #include "wio.h"
-    #include "trmem.h"
 #endif
 #include "memdmp.h"
-#if defined( __LINUX__ )
-    #include "stdui.h"
-#endif
+
 
 #ifdef TRMEM
-    #define MSIZE( x )          _trmem_msize( x, trmemHandle )
+    #define MSIZE( x )          _trmem_msize( x, TrHdl )
     #define WHO_PTR             _trmem_who
 #else
     #define MSIZE( x )          _msize( x )
     #define WHO_PTR             void *
 #endif
 
-#ifdef TRMEM
-    static FILE                 *trmemOutput = NULL;
-    static _trmem_hdl           trmemHandle;
-#endif
+static char                 *StaticBuffer = NULL;
 
-static char     *StaticBuffer = NULL;
+#ifdef TRMEM
+
+static FILE                 *TrFile = NULL;
+static _trmem_hdl           TrHdl = _TRMEM_HDL_NONE;
+
+static void trmemPrintLine( void *handle, const char *buff, size_t len )
+/**********************************************************************/
+{
+    /* unused parameters */ (void)handle; (void)len;
+
+    if( TrFile != NULL ) {
+        fprintf( TrFile, "%s\n", buff );
+    }
+}
+
+#endif  /* TRMEM */
+
+void FiniMem( void )
+{
+#ifdef TRMEM
+    _trmem_prt_list( TrHdl );
+    _trmem_close( TrHdl );
+    if( TrFile != NULL ) {
+        fclose( TrFile );
+        TrFile = NULL;
+    }
+#endif
+}
+
+void InitMem( void )
+{
+#ifdef TRMEM
+    TrFile = fopen( "trmem.out", "w" );
+    TrHdl = _trmem_open( malloc, free, realloc, strdup,
+        NULL, trmemPrintLine, _TRMEM_DEF );
+    // atexit( DumpTRMEM );
+#endif
+}
 
 /*
  * getMem - get and clear memory
@@ -68,7 +100,7 @@ static void *getMem( size_t size, WHO_PTR who )
     void        *tmp;
 
 #ifdef TRMEM
-    tmp = _trmem_alloc( size, who, trmemHandle );
+    tmp = _trmem_alloc( size, who, TrHdl );
 #else
     /* unused parameters */ (void)who;
 
@@ -159,7 +191,7 @@ static void tossBoundData( void )
 {
     if( BoundData ) {
         if( !EditFlags.BndMemoryLocked ) {
-            _MemFreeArray( BndMemory );
+            MemFree( BndMemory );
             BndMemory = NULL;
         }
     }
@@ -169,9 +201,9 @@ static void tossBoundData( void )
 
 
 /*
- * doMemAllocUnsafe - see above
+ * doAlloc - see above
  */
-static void *doMemAllocUnsafe( size_t size, WHO_PTR who )
+static void *doAlloc( size_t size, WHO_PTR who )
 {
     void        *tmp;
 
@@ -192,56 +224,87 @@ static void *doMemAllocUnsafe( size_t size, WHO_PTR who )
 }
 
 /*
- * MemAlloc - allocate some memory (always works, or editor aborts)
+ * MemAllocSafe - allocate some memory (always works, or editor aborts)
  */
-void *MemAlloc( size_t size )
+TRMEMAPI( MemAllocSafe )
+void *MemAllocSafe( size_t size )
 {
     void        *tmp;
 
 #ifdef TRMEM
-#ifndef __WATCOMC__
-    tmp = doMemAllocUnsafe( size, (WHO_PTR)1 );
+    tmp = doAlloc( size, _TRMEM_WHO( 1 ) );
 #else
-    tmp = doMemAllocUnsafe( size, _trmem_guess_who() );
-#endif
-#else
-    tmp = doMemAllocUnsafe( size, (WHO_PTR)0 );
+    tmp = doAlloc( size, NULL );
 #endif
     if( tmp == NULL ) {
         AbandonHopeAllYesWhoEnterHere( ERR_NO_MEMORY );
     }
     return( tmp );
 
+} /* MemAllocSafe */
+
+/*
+ * MemAlloc - allocate some memory, return null if it fails
+ */
+TRMEMAPI( MemAlloc )
+void *MemAlloc( size_t size )
+{
+#ifdef TRMEM
+    return( doAlloc( size, _TRMEM_WHO( 2 ) ) );
+#else
+    return( doAlloc( size, NULL ) );
+#endif
+
 } /* MemAlloc */
 
 /*
- * MemAllocUnsafe - allocate some memory, return null if it fails
+ * MemStrdup - allocate memory and duplicate string
  */
-void *MemAllocUnsafe( size_t size )
+TRMEMAPI( MemStrdup )
+char *MemStrdup( const char *str )
 {
-#ifdef TRMEM
-#ifndef __WATCOMC__
-    return( doMemAllocUnsafe( size, (WHO_PTR)3 ) );
-#else
-    return( doMemAllocUnsafe( size, _trmem_guess_who() ) );
-#endif
-#else
-    return( doMemAllocUnsafe( size, (WHO_PTR)0 ) );
-#endif
+    char        *ptr;
 
-} /* MemAllocUnsafe */
+#ifdef TRMEM
+    ptr = _trmem_strdup( str, _TRMEM_WHO( 3 ), TrHdl );
+#else
+    ptr = strdup( str );
+#endif
+    if( ptr == NULL ) {
+        AbandonHopeAllYesWhoEnterHere( ERR_NO_MEMORY );
+    }
+    return( ptr );
+
+} /* MemStrdup */
+
+/*
+ * MemStrdupSafe - allocate memory and duplicate string
+ */
+TRMEMAPI( MemStrdupSafe )
+char *MemStrdupSafe( const char *str )
+{
+    char        *ptr;
+
+#ifdef TRMEM
+    ptr = _trmem_strdup( str, _TRMEM_WHO( 3 ), TrHdl );
+#else
+    ptr = strdup( str );
+#endif
+    if( ptr == NULL ) {
+        AbandonHopeAllYesWhoEnterHere( ERR_NO_MEMORY );
+    }
+    return( ptr );
+
+} /* MemStrdupSafe */
 
 /*
  * MemFree - free up memory
  */
+TRMEMAPI( MemFree )
 void MemFree( void *ptr )
 {
 #ifdef TRMEM
-#ifndef __WATCOMC__
-    _trmem_free( ptr, (WHO_PTR)4, trmemHandle );
-#else
-    _trmem_free( ptr, _trmem_guess_who(), trmemHandle );
-#endif
+    _trmem_free( ptr, _TRMEM_WHO( 4 ), TrHdl );
 #else
     free( ptr );
 #endif
@@ -266,9 +329,9 @@ void MemFreePtrArray( void **ptr, size_t count, void(*free_fn)(void *) )
 
 
 /*
- * doMemReallocUnsafe - reallocate a block, return NULL if it fails
+ * doRealloc - reallocate a block, return NULL if it fails
  */
-static void *doMemReallocUnsafe( void *ptr, size_t size, WHO_PTR who )
+static void *doRealloc( void *ptr, size_t size, WHO_PTR who )
 {
     void        *tmp;
 
@@ -288,7 +351,7 @@ static void *doMemReallocUnsafe( void *ptr, size_t size, WHO_PTR who )
     }
 
 #ifdef TRMEM
-    tmp = _trmem_realloc( ptr, size, who, trmemHandle );
+    tmp = _trmem_realloc( ptr, size, who, TrHdl );
 #else
     /* unused parameters */ (void)who;
 
@@ -296,7 +359,7 @@ static void *doMemReallocUnsafe( void *ptr, size_t size, WHO_PTR who )
 #endif
 #ifdef __WATCOMC__
     if( tmp == NULL ) {
-        tmp = doMemAllocUnsafe( size, who );
+        tmp = doAlloc( size, who );
         if( tmp == NULL ) {
             return( NULL );
         }
@@ -315,48 +378,42 @@ static void *doMemReallocUnsafe( void *ptr, size_t size, WHO_PTR who )
     {
 #endif
         if( size > orig_size ) {
-            memset( &(((char *)tmp)[orig_size]), 0, size - orig_size );
+            memset( (char *)tmp + orig_size, 0, size - orig_size );
         }
     }
     return( tmp );
 
-} /* doMemReallocUnsafe */
+} /* doRealloc */
 
-void *MemReallocUnsafe( void *ptr, size_t size )
+TRMEMAPI( MemRealloc )
+void *MemRealloc( void *ptr, size_t size )
 {
 #ifdef TRMEM
-#ifndef __WATCOMC__
-    return( doMemReallocUnsafe( ptr, size, (WHO_PTR)6 ) );
+    return( doRealloc( ptr, size, _TRMEM_WHO( 5 ) ) );
 #else
-    return( doMemReallocUnsafe( ptr, size, _trmem_guess_who() ) );
-#endif
-#else
-    return( doMemReallocUnsafe( ptr, size, (WHO_PTR)0 ) );
+    return( doRealloc( ptr, size, NULL ) );
 #endif
 }
 
 /*
- * MemRealloc - reallocate a block, and it will succeed.
+ * MemReallocSafe - reallocate a block, and it will succeed.
  */
-void *MemRealloc( void *ptr, size_t size )
+TRMEMAPI( MemReallocSafe )
+void *MemReallocSafe( void *ptr, size_t size )
 {
     void        *tmp;
 
 #ifdef TRMEM
-#ifndef __WATCOMC__
-    tmp = doMemReallocUnsafe( ptr, size, (WHO_PTR)7 );
+    tmp = doRealloc( ptr, size, _TRMEM_WHO( 6 ) );
 #else
-    tmp = doMemReallocUnsafe( ptr, size, _trmem_guess_who() );
-#endif
-#else
-    tmp = doMemReallocUnsafe( ptr, size, (WHO_PTR)0 );
+    tmp = doRealloc( ptr, size, NULL );
 #endif
     if( tmp == NULL ) {
         AbandonHopeAllYesWhoEnterHere( ERR_NO_MEMORY );
     }
     return( tmp );
 
-} /* MemRealloc */
+} /* MemReallocSafe */
 
 static char *staticBuffs[MAX_STATIC_BUFFERS];
 static bool staticUse[MAX_STATIC_BUFFERS];
@@ -412,9 +469,9 @@ void StaticStart( void )
 {
     int i, bs;
 
-    _MemFreeArray( StaticBuffer );
+    MemFree( StaticBuffer );
     bs = EditVars.MaxLineLen + 2;
-    StaticBuffer = _MemAllocArray( char, MAX_STATIC_BUFFERS * bs );
+    StaticBuffer = _MemAllocArraySafe( char, MAX_STATIC_BUFFERS * bs );
     for( i = 0; i < MAX_STATIC_BUFFERS; i++ ) {
         staticUse[i] = false;
         staticBuffs[i] = &StaticBuffer[i * bs];
@@ -424,101 +481,6 @@ void StaticStart( void )
 
 void StaticFini( void )
 {
-    _MemFreeArray( StaticBuffer );
+    MemFree( StaticBuffer );
 }
 
-#if defined( __LINUX__ )
-void UIAPI UIMemOpen( void ) {}
-
-void UIAPI UIMemClose( void ) {}
-
-void * UIAPI uimalloc( size_t size )
-{
-    void        *tmp;
-
-#ifdef TRMEM
-#ifndef __WATCOMC__
-    tmp = doMemAllocUnsafe( size, (WHO_PTR)9 );
-#else
-    tmp = doMemAllocUnsafe( size, _trmem_guess_who() );
-#endif
-#else
-    tmp = doMemAllocUnsafe( size, (WHO_PTR)0 );
-#endif
-    if( tmp == NULL ) {
-        AbandonHopeAllYesWhoEnterHere( ERR_NO_MEMORY );
-    }
-    return( tmp );
-}
-
-void * UIAPI uirealloc( void *ptr, size_t size )
-{
-    void        *tmp;
-
-#ifdef TRMEM
-#ifndef __WATCOMC__
-    tmp = doMemReallocUnsafe( ptr, size, (WHO_PTR)10 );
-#else
-    tmp = doMemReallocUnsafe( ptr, size, _trmem_guess_who() );
-#endif
-#else
-    tmp = doMemReallocUnsafe( ptr, size, (WHO_PTR)0 );
-#endif
-    if( tmp == NULL ) {
-        AbandonHopeAllYesWhoEnterHere( ERR_NO_MEMORY );
-    }
-    return( tmp );
-}
-
-void UIAPI uifree( void *ptr )
-{
-#ifdef TRMEM
-#ifndef __WATCOMC__
-    _trmem_free( ptr, (WHO_PTR)11, trmemHandle );
-#else
-    _trmem_free( ptr, _trmem_guess_who(), trmemHandle );
-#endif
-#else
-    free( ptr );
-#endif
-}
-#endif
-
-
-#ifdef TRMEM
-
-extern void trmemPrintLine( void *handle, const char *buff, size_t len )
-/**********************************************************************/
-{
-    /* unused parameters */ (void)handle; (void)len;
-
-    if( trmemOutput != NULL ) {
-        fprintf( trmemOutput, "%s\n", buff );
-    }
-}
-
-#endif
-
-void FiniMem( void )
-{
-#ifdef TRMEM
-    _trmem_prt_list( trmemHandle );
-    _trmem_close( trmemHandle );
-    if( trmemOutput != NULL ) {
-        fclose( trmemOutput );
-        trmemOutput = NULL;
-    }
-#endif
-}
-
-void InitMem( void )
-{
-#ifdef TRMEM
-    trmemOutput = fopen( "trmem.out", "w" );
-    trmemHandle = _trmem_open( malloc, free, realloc, NULL,
-        NULL, trmemPrintLine,
-        _TRMEM_ALLOC_SIZE_0 | _TRMEM_REALLOC_SIZE_0 |
-        _TRMEM_OUT_OF_MEMORY | _TRMEM_CLOSE_CHECK_FREE );
-    // atexit( DumpTRMEM );
-#endif
-}

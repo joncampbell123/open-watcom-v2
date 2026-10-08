@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -548,19 +548,19 @@ bool WRunicode2mbcs( const char *src, char **dest, size_t *len )
 
 #endif
 
-char * WRAPI WRStringFromWResIDName( WResIDName *name )
+char * WRAPI WRStringFromWResIDName( WResIDName *name_id )
 {
     char        *string;
 
     string = NULL;
 
-    if( name != NULL ) {
+    if( name_id != NULL ) {
         /* alloc space for the string and a \0 char at the end */
-        string = MemAlloc( name->NumChars + 1 );
+        string = MemAlloc( name_id->NumChars + 1 );
         if( string != NULL ) {
             /* copy the string */
-            memcpy( string, name->Name, name->NumChars );
-            string[name->NumChars] = '\0';
+            memcpy( string, name_id->Name, name_id->NumChars );
+            string[name_id->NumChars] = '\0';
         }
     }
 
@@ -686,7 +686,7 @@ WRDLLENTRY char * WRAPI WRStringFromData( const char **pdata, bool is32bit )
         size = strlen( data ) + 1;
     }
 
-    new = WRMemAlloc( size );
+    new = MemAlloc( size );
     if( new == NULL ) {
         return( NULL );
     }

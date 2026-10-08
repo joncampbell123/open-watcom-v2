@@ -32,6 +32,7 @@
 
 #include "variety.h"
 #include "widechar.h"
+#include "seterrno.h"
 #include <wchar.h>
 #include <string.h>
 #include <mbstring.h>
@@ -42,7 +43,6 @@
 #endif
 #include "thread.h"
 #include "rtdata.h"
-#include "rterrno.h"
 #include "liballoc.h"
 #include "_tcsstr.h"
 #include "_cvtstr.h"
@@ -62,9 +62,9 @@ __F_NAME(wchar_t,char) * _WCNEAR __F_NAME(__lib_cvt_mbstowcs_errno,__lib_cvt_wcs
         lib_free( string );
     }
     if( string != NULL ) {
-        _RWD_errno = ERANGE;
+        lib_set_errno( ERANGE );
     } else {
-        _RWD_errno = ENOMEM;
+        lib_set_errno( ENOMEM );
     }
     return( NULL );
 }

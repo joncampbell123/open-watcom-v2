@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -46,7 +46,9 @@
 #include "wmsg.h"
 #include "sysall.rh"
 #include "jdlg.h"
-#include "wclbproc.h"
+#ifdef __WINDOWS__
+    #include "wclbproc.h"
+#endif
 
 
 /****************************************************************************/
@@ -76,7 +78,9 @@ static void WExpandEditWindowItem( HWND, HWND, RECT * );
 /****************************************************************************/
 /* static variables                                                         */
 /****************************************************************************/
+#ifdef __WINDOWS__
 static DLGPROC     WMenuEditWinProc = NULL;
+#endif
 static HBRUSH      WEditWinBrush    = NULL;
 static COLORREF    WEditWinColor    = 0;
 
@@ -87,7 +91,11 @@ void WInitEditWindows( HINSTANCE inst )
 {
     WEditWinColor = GetSysColor( COLOR_BTNFACE );
     WEditWinBrush = CreateSolidBrush( WEditWinColor );
+#ifdef __WINDOWS__
     WMenuEditWinProc = MakeProcInstance_DLG( WMenuEditDlgProc, inst );
+#else
+    /* unused parameters */ (void)inst;
+#endif
 }
 
 void WFiniEditWindows( void )
@@ -95,14 +103,19 @@ void WFiniEditWindows( void )
     if( WEditWinBrush != NULL ) {
         DeleteObject( WEditWinBrush );
     }
+#ifdef __WINDOWS__
     FreeProcInstance_DLG( WMenuEditWinProc );
+#endif
 }
 
 
 bool WCreateMenuEditWindow( WMenuEditInfo *einfo, HINSTANCE inst )
 {
+#ifdef __WINDOWS__
     einfo->edit_dlg = JCreateDialogParam( inst, "WMenuEditDLG", einfo->win, WMenuEditWinProc, (LPARAM)einfo );
-
+#else
+    einfo->edit_dlg = JCreateDialogParam( inst, "WMenuEditDLG", einfo->win, WMenuEditDlgProc, (LPARAM)einfo );
+#endif
     if( einfo->edit_dlg == (HWND)NULL ) {
         return( false );
     }
@@ -246,14 +259,14 @@ static bool WQueryNukePopup( WMenuEditInfo *einfo )
         FreeRCString( text );
     }
     if( title != NULL ) {
-        WRMemFree( title );
+        MemFree( title );
     }
 
     if( ret == IDYES ) {
-        return( TRUE );
+        return( true );
     }
 
-    return( FALSE );
+    return( false );
 }
 
 bool WGetEditWindowMenuEntry( WMenuEditInfo *einfo, WMenuEntry *entry,
@@ -272,7 +285,7 @@ bool WGetEditWindowMenuEntry( WMenuEditInfo *einfo, WMenuEntry *entry,
     symbol = NULL;
 
     if( reset ) {
-        *reset = FALSE;
+        *reset = false;
     }
 
     ok = (einfo != NULL && einfo->edit_dlg != NULL && entry != NULL);
@@ -304,7 +317,7 @@ bool WGetEditWindowMenuEntry( WMenuEditInfo *einfo, WMenuEntry *entry,
             ok = symbol && stricmp( entry->symbol, symbol );
             if( !ok ) {
                 iflags = entry->item->Item.Popup.ItemFlags;
-                iflags &= ~MENU_ENDMENU;
+                iflags &= ~MENU_LAST_ITEM;
                 ok = (iflags != flags);
                 if( !ok ) {
                     if( flags & MENU_POPUP ) {
@@ -335,7 +348,7 @@ bool WGetEditWindowMenuEntry( WMenuEditInfo *einfo, WMenuEntry *entry,
         if( entry->item->IsPopup ) {
             if( (flags & MENU_POPUP) == 0 ) {
                 if( reset ) {
-                    *reset = TRUE;
+                    *reset = true;
                 }
                 entry->preview_popup = (HMENU)NULL;
                 if( entry->child != NULL ) {
@@ -344,23 +357,23 @@ bool WGetEditWindowMenuEntry( WMenuEditInfo *einfo, WMenuEntry *entry,
                 }
             }
             if( entry->item->Item.Popup.ItemText ) {
-                WRMemFree( entry->item->Item.Popup.ItemText );
+                MemFree( entry->item->Item.Popup.ItemText );
             }
         } else {
             // if the item is being changed from a normal item into a popup
             // or separator then reset the preview
             if( (flags & MENU_POPUP) != 0 || (flags & MENU_SEPARATOR) != 0 ) {
                 if( reset ) {
-                    *reset = TRUE;
+                    *reset = true;
                 }
                 entry->preview_popup = (HMENU)NULL;
             }
             if( entry->item->Item.Normal.ItemText ) {
-                WRMemFree( entry->item->Item.Normal.ItemText );
+                MemFree( entry->item->Item.Normal.ItemText );
             }
         }
         if( entry->symbol != NULL ) {
-            WRMemFree( entry->symbol );
+            MemFree( entry->symbol );
         }
         entry->item->IsPopup = ((flags & MENU_POPUP) != 0);
         if( entry->item->IsPopup ) {
@@ -380,10 +393,10 @@ bool WGetEditWindowMenuEntry( WMenuEditInfo *einfo, WMenuEntry *entry,
         entry->symbol = symbol;
     } else {
         if( symbol != NULL ) {
-            WRMemFree( symbol );
+            MemFree( symbol );
         }
         if( text != NULL ) {
-            WRMemFree( text );
+            MemFree( text );
         }
     }
 
@@ -413,7 +426,7 @@ bool WSetEditWindowText( HWND dlg, MenuFlags flags, char *text )
         n = WConvertStringFrom( t, "\t\x8", "ta" );
         if( n != NULL ) {
             ok = WSetEditWithStr( GetDlgItem( dlg, IDM_MENUEDTEXT ), n );
-            WRMemFree( n );
+            MemFree( n );
         } else {
             ok = WSetEditWithStr( GetDlgItem( dlg, IDM_MENUEDTEXT ), t );
         }
@@ -432,12 +445,12 @@ bool WGetEditWindowText( HWND dlg, char **text )
     if( ok ) {
         n = WGetStrFromEdit( GetDlgItem( dlg, IDM_MENUEDTEXT ), NULL );
         if( n != NULL && *n == '\0' ) {
-            WRMemFree( n );
+            MemFree( n );
             n = NULL;
         }
         *text = WConvertStringTo( n, "\t\x8", "ta" );
         if( n != NULL ) {
-            WRMemFree( n );
+            MemFree( n );
         }
         ok = (*text != NULL);
     }
@@ -527,7 +540,7 @@ bool WGetEditWindowID( HWND dlg, char **symbol, uint_16 *id,
                 }
             } else {
                 *id = 0;
-                WRMemFree( *symbol );
+                MemFree( *symbol );
                 *symbol = NULL;
                 return( false );
             }
@@ -535,7 +548,7 @@ bool WGetEditWindowID( HWND dlg, char **symbol, uint_16 *id,
     } else {
         // the string did have a numeric representation
         *id = (uint_16)val;
-        WRMemFree( *symbol );
+        MemFree( *symbol );
         *symbol = NULL;
     }
 
@@ -719,7 +732,7 @@ bool WPasteMenuItem( WMenuEditInfo *einfo )
     }
 
     if( data != NULL ) {
-        WRMemFree( data );
+        MemFree( data );
     }
 
     return( ok );
@@ -767,7 +780,7 @@ bool WClipMenuItem( WMenuEditInfo *einfo, bool cut )
     }
 
     if( data != NULL ) {
-        WRMemFree( data );
+        MemFree( data );
     }
 
     return( ok );
@@ -790,14 +803,14 @@ static bool WQueryChangeEntry( WMenuEditInfo *einfo )
         FreeRCString( text );
     }
     if( title != NULL ) {
-        WRMemFree( title );
+        MemFree( title );
     }
 
     if( ret == IDYES ) {
-        return( TRUE );
+        return( true );
     }
 
-    return( FALSE );
+    return( false );
 }
 
 void WDoHandleSelChange( WMenuEditInfo *einfo, bool change, bool reset )
@@ -812,7 +825,7 @@ void WDoHandleSelChange( WMenuEditInfo *einfo, bool change, bool reset )
         return;
     }
 
-    reinit = FALSE;
+    reinit = false;
 
     lbox = GetDlgItem( einfo->edit_dlg, IDM_MENUEDLIST );
     if( lbox == (HWND)NULL ) {
@@ -884,7 +897,7 @@ static bool WShiftEntry( WMenuEditInfo *einfo, bool left )
     bool        entry_removed;
     bool        ok;
 
-    entry_removed = FALSE;
+    entry_removed = false;
 
     ok = ( einfo != NULL && einfo->edit_dlg != NULL );
 
@@ -908,7 +921,7 @@ static bool WShiftEntry( WMenuEditInfo *einfo, bool left )
         prev = entry->prev;
         ok = WRemoveMenuEntry( einfo->menu, entry );
         if( ok ) {
-            entry_removed = TRUE;
+            entry_removed = true;
         }
     }
 
@@ -1010,7 +1023,7 @@ WINEXPORT INT_PTR CALLBACK WMenuEditDlgProc( HWND hDlg, UINT message, WPARAM wPa
 
     case WM_SETFOCUS:
         if( einfo != NULL && einfo->preview_window != (HWND)NULL ) {
-            SendMessage( einfo->preview_window, WM_NCACTIVATE, (WPARAM)TRUE, (LPARAM)NULL );
+            SendMessage( einfo->preview_window, WM_NCACTIVATE, TRUE, 0 );
         }
         break;
 
@@ -1109,9 +1122,11 @@ WINEXPORT INT_PTR CALLBACK WTestDlgProc( HWND hDlg, UINT message, WPARAM wParam,
 
 void WInitEditDlg( HINSTANCE inst, HWND parent )
 {
-    DLGPROC     dlgproc;
-
-    dlgproc = MakeProcInstance_DLG( WTestDlgProc, inst );
+#ifdef __WINDOWS__
+    DLGPROC dlgproc = MakeProcInstance_DLG( WTestDlgProc, inst );
     JCreateDialog( inst, "WMenuEditDLG", parent, dlgproc );
     FreeProcInstance_DLG( dlgproc );
+#else
+    JCreateDialog( inst, "WMenuEditDLG", parent, WTestDlgProc );
+#endif
 }

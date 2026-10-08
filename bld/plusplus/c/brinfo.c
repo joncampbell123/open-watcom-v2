@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -483,19 +483,24 @@ static bool activeScopesReset   // RESET ACTIVE SCOPES
 static bool activeScopesAdjust  // ADJUST ACTIVE SCOPES
     ( SYMBOL sym )
 {
-    bool ok;                    // - return: true ==> scope for symbol
-    TOKEN_LOCN *locn;
+    bool        ok;             // - return: true ==> scope for symbol
+    TOKEN_LOCN  *locn;
 
-    if( NULL == sym->name ) {
+    if( sym->name == NULL ) {
         ok = false;
     } else {
         SCOPE scope = sym->name->containing;
-        if( NULL == scope ) {
+        if( scope == NULL ) {
             ok = false;
         } else {
             if( sym->locn != NULL ) {
                 locn = &sym->locn->tl;
             } else {
+                /*
+                 * handling internal symbols which have no location in source
+                 * in the future can be defined some derived location
+                 * for now this handle missing symbol source file location
+                  */
                 locn = NULL;
             }
             ok = activeScopesReset( scope, locn );
@@ -729,7 +734,7 @@ static BRI_Routines const rtns_pch =// CALL-BACK FOR PCH WRITER
 static void brinfOpen           // OPEN BROWSE-USE INFO, IF REQD
     ( void )
 {
-    usage_name = CMemStrDup( IoSuppOutFileName( OFT_BRI ) );
+    usage_name = CMemStrdup( IoSuppOutFileName( OFT_BRI ) );
     usage_file = SrcFileFOpen( usage_name, SFO_WRITE_BINARY );
     if( NULL == usage_file ) {
         usageIoErr( "(-fbi) unable to open browse file for writing" );

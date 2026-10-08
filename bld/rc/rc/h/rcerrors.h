@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -32,6 +32,9 @@
 
 
 #include <stdarg.h>
+#include "bool.h"
+#include "wnoret.h"
+#include "rctypes.h"
 #ifdef INSIDE_WLINK
     #include "wlnkmsg.rh"
 #elif defined( INSIDE_WR )
@@ -60,7 +63,5 @@ enum {
 
 extern void RcWarning( unsigned errornum, ... );
 extern void RcError( unsigned int ,... );
-#if defined(__WATCOMC__)
-#pragma aux RcFatalError __aborts
-#endif
-extern void RcFatalError( unsigned int errornum, ... );
+NO_RETURN( extern void RcFatalError( unsigned int errornum, ... ) );
+extern bool RcIOError( RcStatus ret, const char *srcname, const char *dstname, int err );

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -32,13 +32,15 @@
 
 
 #include "drwatcom.h"
-#include "wclbproc.h"
 #include "dip.h"
 #include "dipload.rh"
 #include "diplasth.h"
 #include "ldstr.h"
 #include "rcstr.grh"
 #include "jdlg.h"
+#ifdef __WINDOWS__
+    #include "wclbproc.h"
+#endif
 
 
 /* Local Window callback functions prototypes */
@@ -63,7 +65,7 @@ static void initDipMsgs( void )
     for( base_name = DIPDefaults; *base_name != '\0'; base_name += strlen( base_name ) + 1 ) {
         dipCnt++;
     }
-    theLoadInfo = MemAlloc( dipCnt * sizeof( LoadInfo ) );
+    theLoadInfo = MemAlloc( sizeof( *theLoadInfo ) * dipCnt );
 }
 
 INT_PTR CALLBACK ShowDipStatDlgProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam )
@@ -89,7 +91,7 @@ INT_PTR CALLBACK ShowDipStatDlgProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM 
         cmd = LOWORD( wparam );
         switch( cmd ) {
         case IDOK:
-            SendMessage( hwnd, WM_CLOSE, 0, 0L );
+            SendMessage( hwnd, WM_CLOSE, 0, 0 );
         }
         ret = true;
         break;
@@ -103,11 +105,13 @@ INT_PTR CALLBACK ShowDipStatDlgProc( HWND hwnd, UINT msg, WPARAM wparam, LPARAM 
 
 void ShowDIPStatus( HWND hwnd )
 {
-    DLGPROC     dlgproc;
-
-    dlgproc = MakeProcInstance_DLG( ShowDipStatDlgProc, Instance );
+#ifdef __WINDOWS__
+    DLGPROC dlgproc = MakeProcInstance_DLG( ShowDipStatDlgProc, Instance );
     JDialogBox( Instance, "DIP_STATUS_DLG", hwnd, dlgproc );
     FreeProcInstance_DLG( dlgproc );
+#else
+    JDialogBox( Instance, "DIP_STATUS_DLG", hwnd, ShowDipStatDlgProc );
+#endif
 }
 
 bool LoadTheDips( void )
@@ -148,14 +152,13 @@ bool LoadTheDips( void )
             diploaded = true;
         }
         sprintf( buf, "%-18s %s", base_name, status );
-        theLoadInfo[i].loadmsg = MemAlloc( strlen( buf ) + 1 );
+        theLoadInfo[i].loadmsg = MemStrdupSafe( buf );
         theLoadInfo[i].loaded = ( (rc & DS_ERR) == 0 );
 #ifdef __WINDOWS__
         if( theLoadInfo[i].loaded ) {
             theLoadInfo[i].hinst = DIPLastHandle;
         }
 #endif
-        strcpy( theLoadInfo[i].loadmsg, buf );
         i++;
     }
     if( !diploaded ) {

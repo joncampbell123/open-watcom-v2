@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -39,13 +39,13 @@
 #if defined( __QNX__ )
     #include <sys/seginfo.h>
 #endif
-#include "trmem.h"
 #include "linkstd.h"
 #include "library.h"
 #include "virtmem.h"
 #include "reloc.h"
 #include "objcache.h"
-#include "wresmem.h"
+#include "memfuncs.h"
+#include "trmem.h"
 #ifdef TRMEM
     #include "ideentry.h"
 #endif
@@ -56,10 +56,9 @@ unsigned LastChanceSeg;
 #endif
 
 #ifdef TRMEM
-void    *TrHdl;
-#endif
 
-#ifdef TRMEM
+void    *TrHdl;
+
 static void PrintLine( void *bogus, const char *buff, size_t len )
 {
     /* unused parameters */ (void)bogus; (void)len;
@@ -74,7 +73,8 @@ static void PrintAllMem( void )
         _trmem_prt_usage( TrHdl );
     }
 }
-#endif
+
+#endif  /* TRMEM */
 
 static bool CacheRelease( void )
 /******************************/
@@ -96,9 +96,8 @@ void LnkMemInit( void )
     LastChanceSeg = qnx_segment_alloc( 65000 );
 #endif
 #ifdef TRMEM
-    TrHdl = _trmem_open( malloc, free, realloc, NULL, NULL, PrintLine,
-            _TRMEM_ALLOC_SIZE_0 | _TRMEM_REALLOC_SIZE_0 | _TRMEM_REALLOC_NULL |
-            _TRMEM_FREE_NULL | _TRMEM_OUT_OF_MEMORY | _TRMEM_CLOSE_CHECK_FREE );
+    TrHdl = _trmem_open( malloc, free, realloc, strdup,
+            NULL, PrintLine, _TRMEM_DEF );
 #endif
 }
 
@@ -112,121 +111,175 @@ void LnkMemFini( void )
 #endif
 }
 
-#ifdef TRMEM
-static void *DoLAlloc( size_t size, void (*ra)( void ) )
-#else
-void *LAlloc( size_t size )
-#endif
+static void *check_nomem( void *ptr )
 {
-    void    *p;
-
-    for( ;; ) {
-#ifdef TRMEM
-        p = _trmem_alloc( size, ra, TrHdl );
-#else
-        p = malloc( size );
-#endif
-        if( p != NULL ) {
-            memset( p, 0, size );
-            break;
-        }
-        if( !FreeUpMemory() ) {
-            break;
-        }
-    }
-    return( p );
-}
-
-#ifdef TRMEM
- void *LAlloc( size_t size )
-/**************************/
-{
-    void        (*ra)( void );
-
-    ra = _trmem_guess_who();
-
-    return( DoLAlloc( size, ra ) );
-}
-#endif
-
-void *ChkLAlloc( size_t size )
-/****************************/
-{
-    void                *ptr;
-#ifdef TRMEM
-    void                (*ra)( void );
-
-    ra = _trmem_guess_who();
-
-    ptr = DoLAlloc( size, ra );
-#else
-    ptr = LAlloc( size );
-#endif
     if( ptr == NULL ) {
-        LnkMsg( FTL + MSG_NO_DYN_MEM, NULL );
+        LnkMsg( FTL + MSG_NO_DYN_MEM, NULL );       // see note 1 below
     }
     return( ptr );
 }
 
-void *wres_alloc( size_t size )
+#ifdef TRMEM
+static void *doAlloc( size_t size, _trmem_who who )
+#else
+static void *doAlloc( size_t size )
+#endif
+{
+    void    *ptr;
+
+    for( ;; ) {
+#ifdef TRMEM
+        ptr = _trmem_alloc( size, who, TrHdl );
+#else
+        ptr = malloc( size );
+#endif
+        if( ptr != NULL
+          || !FreeUpMemory( false ) ) {
+            break;
+        }
+    }
+    return( ptr );
+}
+
+TRMEMAPI( MemAlloc )
+void *MemAlloc( size_t size )
+/***************************/
+{
+    void    *ptr;
+
+#ifdef TRMEM
+    ptr = doAlloc( size, _TRMEM_WHO( 1 ) );
+#else
+    ptr = doAlloc( size );
+#endif
+    if( ptr != NULL )
+        memset( ptr, 0, size );
+    return( ptr );
+}
+
+TRMEMAPI( MemAllocSafe )
+void *MemAllocSafe( size_t size )
+/*******************************/
+{
+    void            *ptr;
+
+#ifdef TRMEM
+    ptr = check_nomem( doAlloc( size, _TRMEM_WHO( 1 ) ) );
+#else
+    ptr = check_nomem( doAlloc( size ) );
+#endif
+    return( memset( ptr, 0, size ) );
+}
+
+#ifdef TRMEM
+static char *doStrdup( const char *str, _trmem_who who )
+#else
+static char *doStrdup( const char *str )
+#endif
+/**************************************/
+{
+    char            *ptr;
+
+    for( ;; ) {
+#ifdef TRMEM
+        ptr = _trmem_strdup( str, who, TrHdl );
+#else
+        ptr = strdup( str );
+#endif
+        if( ptr != NULL
+          || !FreeUpMemory( false ) ) {
+            break;
+        }
+    }
+    return( ptr );
+}
+
+TRMEMAPI( MemStrdupSafe )
+char *MemStrdupSafe( const char *str )
+/************************************/
 {
 #ifdef TRMEM
-    return( _trmem_alloc( size, _trmem_guess_who(), TrHdl ) );
+    return( check_nomem( doStrdup( str, _TRMEM_WHO( 3 ) ) ) );
 #else
-    return( malloc( size ) );
+    return( check_nomem( doStrdup( str ) ) );
 #endif
 }
 
-
-void LFree( void *p )
-/**************************/
-{
-    if( p == NULL )
-        return;
 #ifdef TRMEM
-    _trmem_free( p, _trmem_guess_who(), TrHdl );
+static void *doRealloc( void *src, size_t size, _trmem_who who )
+#else
+static void *doRealloc( void *src, size_t size )
+#endif
+/***********************************************
+ * reallocate a block of memory.
+ * Notes for MemRealloc
+ * NOTE 1: we don't want to call FreeUpMemory, since that does a permshrink
+ * and this function is called from permshrink
+ */
+{
+    void    *ptr;
+
+    for( ;; ) {
+#ifdef TRMEM
+        ptr = _trmem_realloc( src, size, who, TrHdl );
+#else
+        ptr = realloc( src, size );
+#endif
+        if( ptr != NULL
+          || !FreeUpMemory( true ) ) {
+            break;
+        }
+    }
+    return( ptr );
+}
+
+TRMEMAPI( MemRealloc )
+void *MemRealloc( void *src, size_t size )
+/****************************************/
+{
+#ifdef TRMEM
+    return( doRealloc( src, size, _TRMEM_WHO( 4 ) ) );
+#else
+    return( doRealloc( src, size ) );
+#endif
+}
+
+TRMEMAPI( MemReallocSafe )
+void *MemReallocSafe( void *src, size_t size )
+/********************************************/
+{
+#ifdef TRMEM
+    return( check_nomem( doRealloc( src, size, _TRMEM_WHO( 4 ) ) ) );
+#else
+    return( check_nomem( doRealloc( src, size ) ) );
+#endif
+}
+
+TRMEMAPI( MemFree )
+void MemFree( void *p )
+/************************/
+{
+#ifdef TRMEM
+    _trmem_free( p, _TRMEM_WHO( 6 ), TrHdl );
 #else
     free( p );
 #endif
 }
 
-void wres_free( void *ptr )
+TRMEMAPI( MemToStringSafe )
+char *MemToStringSafe( const void *mem, size_t size )
+/***************************************************/
 {
-#ifdef TRMEM
-    _trmem_free( ptr, _trmem_guess_who(), TrHdl );
-#else
-    free( ptr );
-#endif
-}
+    char            *ptr;
 
-void *LnkRealloc( void *src, size_t size )
-/****************************************/
-/*
- * reallocate a block of memory.
- * Notes for LnkRealloc
- * NOTE 1: we don't want to call FreeUpMemory, since that does a permshrink
- * and this function is called from permshrink
-*/
-{
-    void    *dest;
 #ifdef TRMEM
-    void        (*ra)( void );
-
-    ra = _trmem_guess_who(); /* must be first thing */
-#endif
-    for( ;; ) {
-#ifdef TRMEM
-        dest = _trmem_realloc( src, size, ra, TrHdl );
+    ptr = check_nomem( doAlloc( size + 1, _TRMEM_WHO( 1 ) ) );
 #else
-        dest = realloc( src, size );
+    ptr = check_nomem( doAlloc( size + 1 ) );
 #endif
-        if( dest != NULL )
-            break;
-        if( !CacheRelease() && !SwapOutVirt() && !SwapOutRelocs() ) {
-            LnkMsg( FTL + MSG_NO_DYN_MEM, NULL );       // see note 1 below
-        }
-    }
-    return( dest );
+    memcpy( ptr, mem, size );
+    ptr[size] = '\0';
+    return( ptr );
 }
 
 int ValidateMem( void )
@@ -253,23 +306,30 @@ void DbgZapFreed( void *tgt, size_t size )
 }
 #endif
 
-bool FreeUpMemory( void )
-/***********************/
-// make sure LnkRealloc is kept up to date with what is put in here.
+bool FreeUpMemory( bool skip )
+/*****************************
+ * The MemRealloc.. function uses skip = true to skip PermShrink, which
+ * calls the MemRealloc function, which would cause "infinite" recursion.
+ */
 {
+    if( !skip ) {
 #if defined( __QNX__ )
-    if( LastChanceSeg != (unsigned)-1 ) {
-        /*
-            If we're low on memory, the system is low on memory. Give
-            something back to the OS so it can do it's job, and don't
-            ever ask it for anything more.
-        */
-        qnx_segment_free( LastChanceSeg );
-        LastChanceSeg = -1;
-        _heapenable( 0 );
-    }
+        if( LastChanceSeg != (unsigned)-1 ) {
+            /*
+             * If we're low on memory, the system is low on memory. Give
+             * something back to the OS so it can do it's job, and don't
+             * ever ask it for anything more.
+             */
+            qnx_segment_free( LastChanceSeg );
+            LastChanceSeg = -1;
+            _heapenable( 0 );
+        }
 #endif
-    return( PermShrink() || CacheRelease() || SwapOutVirt() || SwapOutRelocs() );
+        if( PermShrink() ) {
+            return( true );
+        }
+    }
+    return( CacheRelease() || SwapOutVirt() || SwapOutRelocs() );
 }
 
 #if defined( __WATCOMC__ )
@@ -278,16 +338,6 @@ int __nmemneed( size_t amount )
 {
     /* unused parameters */ (void)amount;
 
-    return( FreeUpMemory() );
+    return( FreeUpMemory( false ) );
 }
-
-#ifdef _M_I86
-int __fmemneed( size_t amount )
-/*****************************/
-{
-    /* unused parameters */ (void)amount;
-
-    return( FreeUpMemory() );
-}
-#endif
 #endif

@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -33,10 +34,12 @@
 #include "layer0.h"
 #include "util.h"
 
-void WResInitIDFromNum( long newnum, WResID *newid )
-/**************************************************/
-/* fill in a WResID */
+
+void WResInitIDFromNum( long num, WResID *id )
+/*********************************************
+ * fill in a WResID
+ */
 {
-    newid->IsName = false;
-    newid->ID.Num = newnum;
+    id->IsName = false;
+    id->ID.Num = num;
 }

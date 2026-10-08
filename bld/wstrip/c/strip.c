@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -47,6 +47,7 @@
 #include "machtype.h"
 #include "wdbginfo.h"
 #include "cv4.h"
+#include "hll.h"
 #include "tistrail.h"
 #include "wstrip.h"
 #include "wressetr.h"
@@ -69,16 +70,6 @@
 #define CopyData(i,o)   CopyDataLen( i, o, ~0UL )
 
 #define ARRAYSIZE(a)    (sizeof( a ) / sizeof( a[0] ))
-
-#include "pushpck1.h"
-typedef struct WResHeader {
-    uint_32     Magic[2];       /* must be WRESMAGIC0 and WRESMAGIC1 */
-    uint_32     DirOffset;      /* offset to the start of the directory */
-    uint_16     NumResources;   /* number of resourses in the file */
-    uint_16     NumTypes;       /* number of different types of resources in file */
-    uint_16     WResVer;        /* WRESVERSION */
-} WResHeader;
-#include "poppck.h"
 
 typedef enum {
     WRAP_NONE,
@@ -149,32 +140,36 @@ static void CopyDataLen( fdata *in, fdata *out, unsigned long max )
 
 static bool TryWATCOM( FILE *fp, info_info *info, bool resfile )
 {
-    master_dbg_header   header;
+    uint_8              header[sizeof( master_dbg_header )];
     unsigned long       end;
+    uint_16             sign;
+    uint_32             size;
 
     if( fseek( fp, SEEK_POSBACK( sizeof( header ) ), SEEK_END ) )
         return( false );
     end = ftell( fp );
     for( ;; ) {
-        if( fread( (void *)&header, 1, sizeof( header ), fp ) != sizeof( header ) )
+        if( fread( header, 1, sizeof( header ), fp ) != sizeof( header ) )
             return( false );
-        if( header.signature != FOX_SIGNATURE1
-          && header.signature != FOX_SIGNATURE2
-          && header.signature != (resfile ? WAT_DBG_SIGNATURE : WAT_RES_SIG) )
+        sign = MGET_LE_U16( header + offsetof( master_dbg_header, signature ) );
+        size = MGET_LE_U32_UN( header + offsetof( master_dbg_header, debug_size ) );
+        if( sign != FOX_SIGNATURE1
+          && sign != FOX_SIGNATURE2
+          && sign != (resfile ? WAT_DBG_SIGNATURE : WAT_RES_SIG) )
             break;
-        if( header.debug_size > end )
+        if( size > end )
             return( false );
-        end -= header.debug_size;
+        end -= size;
         fseek( fp, end, SEEK_SET );
     }
-    if( header.signature != (resfile ? WAT_RES_SIG : WAT_DBG_SIGNATURE) )
+    if( sign != (resfile ? WAT_RES_SIG : WAT_DBG_SIGNATURE) )
         return( false );
     end += sizeof( header );
-    if( end <= header.debug_size )
+    if( end <= size )
         return( false );
-    end -= header.debug_size;
+    end -= size;
     info->start = end;
-    info->len = header.debug_size;
+    info->len = size;
     info->type = WRAP_WATCOM;
     return( true );
 }
@@ -183,19 +178,28 @@ static bool TryTIS( FILE *fp, info_info *info )
 {
     TISTrailer      head;
     long            end;
+    char            tmp32[4];
 
     if( fseek( fp, SEEK_POSBACK( sizeof( head ) ), SEEK_END ) )
         return( false );
     end = ftell( fp );
     for( ;; ) {
-        if( fread( &head, 1, sizeof( head ), fp ) != sizeof( head ) ) {
+        if( fread( head.signature, 1, sizeof( head.signature ), fp ) != sizeof( head.signature ) )
             return( false );
-        }
-        if( head.signature != TIS_TRAILER_SIGNATURE ) {
+        if( memcmp( head.signature, TIS_TRAILER_SIGNATURE, sizeof( TIS_TRAILER_SIGNATURE ) ) != 0 )
             return( false );
-        }
+        if( fread( tmp32, 1, sizeof( tmp32 ), fp ) != sizeof( tmp32 ) )
+            return( false );
+        head.vendor = MGET_LE_U32( tmp32 );
+        if( fread( tmp32, 1, sizeof( tmp32 ), fp ) != sizeof( tmp32 ) )
+            return( false );
+        head.type = MGET_LE_U32( tmp32 );
+        if( fread( tmp32, 1, sizeof( tmp32 ), fp ) != sizeof( tmp32 ) )
+            return( false );
+        head.size = MGET_LE_U32( tmp32 );
         end -= head.size - sizeof( head );
-        if( head.vendor == TIS_TRAILER_VENDOR_TIS && head.type == TIS_TRAILER_TYPE_TIS_DWARF )
+        if( head.vendor == TIS_TRAILER_VENDOR_TIS
+          && head.type == TIS_TRAILER_TYPE_TIS_DWARF )
             break;
         fseek( fp, end, SEEK_SET );
     }
@@ -219,7 +223,8 @@ static bool TryCV4( FILE *fp, info_info *info )
     if( memcmp( head.sig, CV4_NB09, sizeof( head.sig ) ) != 0
       && memcmp( head.sig, CV4_NB08, sizeof( head.sig ) ) != 0
       && memcmp( head.sig, CV4_NB07, sizeof( head.sig ) ) != 0
-      && memcmp( head.sig, CV4_NB05, sizeof( head.sig ) ) != 0 ) {
+      && memcmp( head.sig, CV4_NB05, sizeof( head.sig ) ) != 0
+      && memcmp( head.sig, HLL_NB04, sizeof( head.sig ) ) != 0 ) {
         return( false );
     }
     info->len = head.offset;
@@ -245,16 +250,20 @@ static void FindInfoInfo( FILE *fp, info_info *info, bool resfile )
 
 static bool IsSymResFile( FILE *fp, bool resfile )
 {
-    master_dbg_header   header;
+    uint_8              header[sizeof( master_dbg_header )];
     info_info           info;
     unsigned long       end;
+    uint_16             sign;
+    uint_32             size;
 
     if( fseek( fp, SEEK_POSBACK( sizeof( header ) ), SEEK_END ) )
         return( false );
     end = ftell( fp ) + sizeof( header );
-    if( fread( (void *)&header, 1, sizeof( header ), fp ) != sizeof( header ) )
+    if( fread( header, 1, sizeof( header ), fp ) != sizeof( header ) )
         return( false );
-    if( header.signature == (resfile ? WAT_RES_SIG : WAT_DBG_SIGNATURE) && end == header.debug_size )
+    sign = MGET_LE_U16( header + offsetof( master_dbg_header, signature ) );
+    size = MGET_LE_U32_UN( header + offsetof( master_dbg_header, debug_size ) );
+    if( sign == (resfile ? WAT_RES_SIG : WAT_DBG_SIGNATURE) && end == size )
         return( true );
     if( resfile )
         return( false );
@@ -265,14 +274,14 @@ static bool IsSymResFile( FILE *fp, bool resfile )
 
 static bool IsResMagic( FILE *fp, bool resfile )
 {
-    WResHeader          wheader;
+    uint_32     Magic[2];       /* must be WRESMAGIC0 and WRESMAGIC1 */
 
     if( resfile ) {
         fseek( fp, 0, SEEK_SET );
-        if( fread( &wheader, 1, sizeof( wheader ), fp ) != sizeof( wheader ) )
+        if( fread( Magic, 1, sizeof( Magic ), fp ) != sizeof( Magic ) )
             return( false );
-        if( (wheader.Magic[0] == WRESMAGIC0) || (wheader.Magic[0] == WRESMICRO0) ) {
-            if( (wheader.Magic[1] == WRESMAGIC1) || (wheader.Magic[1] >> 16 == WRESMICRO1) ) {
+        if( (Magic[0] == WRESMAGIC0) || (Magic[0] == WRESMICRO0) ) {
+            if( (Magic[1] == WRESMAGIC1) || (Magic[1] >> 16 == WRESMICRO1) ) {
                 return( true );
             }
         }
@@ -283,7 +292,9 @@ static bool IsResMagic( FILE *fp, bool resfile )
 static void AddInfo( void )
 {
     info_info           info;
-    master_dbg_header   header;
+    uint_8              header[sizeof( master_dbg_header )];
+    uint_16             sign;
+    uint_32             size;
 
     /* initialize input file */
     fin.fp = fopen( fin.name, "rb" );
@@ -320,12 +331,14 @@ static void AddInfo( void )
         if( fseek( finfo.fp, SEEK_POSBACK( sizeof( header ) ), SEEK_END ) )
             Fatal( MSG_SEEK_ERROR, finfo.name );
         info.len = ftell( finfo.fp ) + sizeof( header );
-        if( fread( (void *)&header, 1, sizeof( header ), finfo.fp ) != sizeof( header ) )
+        if( fread( header, 1, sizeof( header ), finfo.fp ) != sizeof( header ) )
             Fatal( MSG_READ_ERROR, finfo.name );
-        if( header.signature != WAT_RES_SIG || header.debug_size != info.len ) {
-            header.signature = WAT_RES_SIG;
-            header.debug_size = info.len + sizeof( header );
-            if( fwrite( (void *)&header, 1, sizeof( header ), ftmp.fp ) != sizeof( header ) ) {
+        sign = MGET_LE_U16( header + offsetof( master_dbg_header, signature ) );
+        size = MGET_LE_U32_UN( header + offsetof( master_dbg_header, debug_size ) );
+        if( sign != WAT_RES_SIG || size != info.len ) {
+            MPUT_LE_16( header + offsetof( master_dbg_header, signature ), WAT_RES_SIG );
+            MPUT_LE_32_UN( header + offsetof( master_dbg_header, debug_size ), info.len + sizeof( header ) );
+            if( fwrite( header, 1, sizeof( header ), ftmp.fp ) != sizeof( header ) ) {
                 FatalDelTmp( MSG_ADD_HEADER_ERROR, NULL );
             }
         }
@@ -456,8 +469,8 @@ int main( int argc, char *argv[] )
     old_mtime = 0;
     old_mode = 0;
     if( in_ext[0] == '\0' ) {
-        for( i = 0; i < ARRAYSIZE( ExtLst ); ++i ) {
-            in_ext = ExtLst[i];
+        for( k = 0; k < ARRAYSIZE( ExtLst ); ++k ) {
+            in_ext = ExtLst[k];
             _makepath( fin.name, pg->drive, pg->dir, pg->fname, in_ext );
             if( stat( fin.name, &statx ) == 0 ) {
                 old_mtime = statx.st_mtime;

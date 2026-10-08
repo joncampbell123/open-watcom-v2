@@ -228,7 +228,7 @@ system begin windows1_dll
     libfile win1stub.obj
     option nocaseexact
     option stack=8k, heapsize=1k
-    libfile libent10.obj
+    libfile libentry.obj
     format windows dll ^
 :endsegment
 end
@@ -370,6 +370,20 @@ system begin netware_clib_lite
     option start=_Prelude
     option exit=_Stop
     file '%NOVELLNDK%/imports/clibpre.obj'
+    library '%WATCOM%/lib386/netware/clib3sl.lib'
+    import @'%NOVELLNDK%/imports/clib.imp'
+:endsegment
+end
+system begin netware_clib_lite_dll
+:segment Pspecs
+    ARCH i386 -bt=netware
+:elsesegment Pwlsystem
+    option osname='NetWare CLIB NLM DLL (Lite-RTL)'
+    format novell ^
+    option nodefault
+    option start=_Prelude
+    option exit=_Stop
+    file '%WATCOM%/lib386/netware/predll.obj'
     library '%WATCOM%/lib386/netware/clib3sl.lib'
     import @'%NOVELLNDK%/imports/clib.imp'
 :endsegment
@@ -826,50 +840,6 @@ system begin dos16m
     libfile dos16m.obj
     libfile d16msels.obj
     format dos16m runtime auto ^
-:endsegment
-end
-system begin zdos
-:segment Pspecs
-    ARCH i386 -bt=zdos
-:elsesegment Pwlsystem
-    option osname='ZDOS User Application'
-    libpath '%WATCOM%/lib386'
-    libpath '%WATCOM%/lib386/zdos'
-    libfile appstart.obj
-    format zdos
-:endsegment
-end
-system begin zdosfsd
-:segment Pspecs
-    ARCH i386 -bt=zdos
-:elsesegment Pwlsystem
-    option osname='ZDOS File System Driver'
-    libpath '%WATCOM%/lib386'
-    libpath '%WATCOM%/lib386/zdosdrv'
-    libfile fsdstart.obj
-    format zdos fsd
-:endsegment
-end
-system begin zdoshwd
-:segment Pspecs
-    ARCH i386 -bt=zdos
-:elsesegment Pwlsystem
-    option osname='ZDOS Hardware Driver'
-    libpath '%WATCOM%/lib386'
-    libpath '%WATCOM%/lib386/zdosdrv'
-    libfile hwdstart.obj
-    format zdos hwd
-:endsegment
-end
-system begin zdosdev
-:segment Pspecs
-    ARCH i386 -bt=zdos
-:elsesegment Pwlsystem
-    option osname='ZDOS Device Driver'
-    libpath '%WATCOM%/lib386'
-    libpath '%WATCOM%/lib386/zdosdrv'
-    libfile devstart.obj
-    format zdos sys
 :endsegment
 end
 system begin rdos

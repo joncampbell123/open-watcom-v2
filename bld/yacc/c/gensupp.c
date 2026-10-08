@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2023      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2023-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -37,22 +37,23 @@
 #include "yacc.h"
 #include "alloc.h"
 
-unsigned long bytesused;
 
-static unsigned tabcol;
-static char *tablename;
+unsigned            bytesused;
+
+static unsigned     tabcol;
+static const char   *tablename;
 
 token_n FirstNonTerminalTokenValue( void )
 {
-    index_n i;
-    token_n j;
-    token_n ntoken;
+    sym_n           sym_idx;
+    token_n         tokval;
+    token_n         ntoken;
 
     ntoken = 0;
-    for( i = 0; i < nterm; ++i ) {
-        j = symtab[i]->token;
-        if( j > ntoken ) {
-            ntoken = j;
+    for( sym_idx = 0; sym_idx < nterm; ++sym_idx ) {
+        tokval = symtab[sym_idx]->token;
+        if( ntoken < tokval ) {
+            ntoken = tokval;
         }
     }
     if( nterm > 0 ) {
@@ -63,10 +64,13 @@ token_n FirstNonTerminalTokenValue( void )
 
 static void putambig( FILE *fp, a_SR_conflict *ambig, base_n *base )
 {
-    conflict_id id;
-    index_n ambig_state, ambig_state_based;
-    index_n ambig_shift, ambig_shift_based;
-    static char *msg[] = {
+    conflict_id     id;
+    index_n         ambig_state;
+    index_n         ambig_state_based;
+    index_n         ambig_shift;
+    index_n         ambig_shift_based;
+
+    static const char * const msg[] = {
         "#define\tYYAMBIGS%u\t%d\t/* ambiguous state (%u) */\n",
         "#define\tYYAMBIGT%u\t%d\t/* token causing ambiguity */\n",
         "#define\tYYAMBIGH%u\t%d\t/* state to shift (%u) */\n",
@@ -79,8 +83,8 @@ static void putambig( FILE *fp, a_SR_conflict *ambig, base_n *base )
          */
         return;
     }
-    ambig_state = ambig->state->idx;
-    ambig_shift = ambig->shift_state->idx;
+    ambig_state = ambig->state->sidx;
+    ambig_shift = ambig->shift_state->sidx;
     if( base == NULL ) {
         ambig_state_based = ambig_state;
         ambig_shift_based = ambig_shift;
@@ -97,19 +101,19 @@ static void putambig( FILE *fp, a_SR_conflict *ambig, base_n *base )
 
 void putambigs( FILE *fp, base_n *base )
 {
-    a_SR_conflict *ambig;
+    a_SR_conflict   *ambig;
 
     for( ambig = ambiguousstates; ambig != NULL; ambig = ambig->next ) {
         putambig( fp, ambig, base );
     }
 }
 
-void putnum( FILE *fp, char *name, int i )
+void putnum( FILE *fp, const char *name, int i )
 {
     fprintf( fp, "#define\t%-20s\t%5d\n", name, i );
 }
 
-void begtab( FILE *fp, char *tipe, char *name )
+void begtab( FILE *fp, const char *tipe, const char *name )
 {
     fprintf( fp, "static const %s YYFAR %s[] = {", tipe, name );
     tablename = name;
@@ -118,17 +122,22 @@ void begtab( FILE *fp, char *tipe, char *name )
 
 void puttab( FILE *fp, value_size fits, unsigned i )
 {
-    char *format;
-    unsigned mod;
+    char            *format;
+    unsigned        mod;
 
     if( fits == FITS_A_BYTE ) {
         if(( i & 0x00ff ) != i ) {
             msg( "value cannot fit into %s table! (%x)", tablename, i );
+            /* never return */
         }
         bytesused += 1;
         format = "%3u";
         mod = 20;
     } else {
+        if(( i & 0xffff ) != i ) {
+            msg( "value cannot fit into %s table! (%x)", tablename, i );
+            /* never return */
+        }
         bytesused += sizeof( short );
         format = "%5u";
         mod = 10;
@@ -161,16 +170,17 @@ void endtab( FILE *fp )
     fprintf( fp, "\n};\n" );
 }
 
-void putcomment( FILE *fp, char *comment )
+void putcomment( FILE *fp, const char *comment )
 {
     fprintf( fp, "/* %s */\n", comment );
 }
 
 void puttokennames( FILE *fp, token_n dtoken, value_size token_size )
 {
-    unsigned rule_base;
-    an_item *item;
-    unsigned i;
+    unsigned        rule_base;
+    an_item         *item;
+    rule_n          pidx;
+    sym_n           sym_idx;
 
     if( ! denseflag ) {
         return;
@@ -178,29 +188,29 @@ void puttokennames( FILE *fp, token_n dtoken, value_size token_size )
     fprintf( fp, "#ifdef YYDEBUG\n" );
     rule_base = 0;
     begtab( fp, "unsigned short", "yyrulebase" );
-    for( i = 0; i < npro; ++i ) {
-        for( item = protab[i]->items; item->p.sym != NULL; ) {
+    for( pidx = 0; pidx < npro; ++pidx ) {
+        for( item = protab[pidx]->items; item->u.sym != NULL; ) {
             ++item;
         }
         puttab( fp, FITS_A_WORD, rule_base );
-        rule_base += (unsigned)( item - protab[i]->items );
+        rule_base += (unsigned)( item - protab[pidx]->items );
     }
     endtab( fp );
     begtab( fp, "YYTOKENTYPE", "yyrhstoks" );
-    for( i = 0; i < npro; ++i ) {
-        for( item = protab[i]->items; item->p.sym != NULL; ++item ) {
-            puttab( fp, token_size, item->p.sym->token );
+    for( pidx = 0; pidx < npro; ++pidx ) {
+        for( item = protab[pidx]->items; item->u.sym != NULL; ++item ) {
+            puttab( fp, token_size, item->u.sym->token );
         }
     }
     endtab( fp );
     begtab( fp, "char YYFAR *", "yytoknames" );
     fputc( '\n', fp );
-    for( i = 0; i < nsym; ++i ) {
-        if( dtoken != 0 && symtab[i]->token == dtoken ) {
+    for( sym_idx = 0; sym_idx < nsym; ++sym_idx ) {
+        if( dtoken != 0 && symtab[sym_idx]->token == dtoken ) {
             fprintf( fp, "\"$dtoken\",\n" );
             fprintf( fp, "\"$ptoken\",\n" );
         }
-        fprintf( fp, "\"%s\",\n", symtab[i]->name );
+        fprintf( fp, "\"%s\",\n", symtab[sym_idx]->name );
     }
     fprintf( fp, "\"\"" );
     endtab( fp );

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2020-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2020-2026 The Open Watcom Contributors. All Rights Reserved.
 *
 *  ========================================================================
 *
@@ -22,6 +22,7 @@
 #include "rcmem.h"
 #include "cvttable.h"
 #include "unitable.h"
+#include "memfuncs.h"
 
 #include "clibext.h"
 
@@ -119,8 +120,8 @@ static int compare_utf8( const cvt_chr *key, const cvt_chr *data )
     return( key->u - data->u );
 }
 
-static size_t UTF8StringToMultiByte( size_t len, const char *str, char *buf )
-/****************************************************************************
+static size_t UTF8StringToMultiByte( const char *str, size_t len, char *buf, size_t size )
+/*****************************************************************************************
  * this function convert UTF-8 buffer to Shift-JIS (CP932) buffer
  * first read UTF-8 character then convert it to CP932 and put to
  * output buffer, repeat until consume all input bytes
@@ -134,7 +135,7 @@ static size_t UTF8StringToMultiByte( size_t len, const char *str, char *buf )
 
     ret = 0;
     for( i = 0; i < len; i++ ) {
-        u = (unsigned char)*str++;
+        u = *(unsigned char *)str++;
         if( !IS_ASCII( u ) ) {
             i += getcharUTF8( &str, &u );
             x.u = u;
@@ -144,28 +145,40 @@ static size_t UTF8StringToMultiByte( size_t len, const char *str, char *buf )
                 u = '?';
             } else {
                 if( p->s > 0xFF ) {
-                    if( ret < len ) {
-                        if( buf != NULL ) {
+                    /* it is double-byte character */
+                    if( buf != NULL ) {
+                        if( ret + 1 < size ) {
                             *buf++ = (char)( p->s >> 8 );
+                            *buf++ = (char)( p->s & 0xFF );
+                            ret += 2;
                         }
-                        ret++;
+                    } else {
+                        ret += 2;
                     }
+                    /*
+                     * warning - skip next processing
+                     * already done above
+                     */
+                    continue;
                 }
-                u = (unsigned char)p->s;
+                /* it is single-byte character */
+                u = p->s & 0xFF;
             }
         }
-        if( ret < len ) {
-            if( buf != NULL ) {
+        if( buf != NULL ) {
+            if( ret + 1 < size ) {
                 *buf++ = (char)u;
+                ret++;
             }
+        } else {
             ret++;
         }
     }
     return( ret );
 }
 
-static size_t UTF8StringToCP1252( size_t len, const char *str, char *buf )
-/*************************************************************************
+static size_t UTF8StringToCP1252( const char *str, size_t len, char *buf, size_t size )
+/**************************************************************************************
  * this function convert UTF-8 buffer to Latin-1 (CP1252) buffer
  * first read UTF-8 character then convert it to CP1252 and put to
  * output buffer, repeat until consume all input bytes
@@ -178,7 +191,7 @@ static size_t UTF8StringToCP1252( size_t len, const char *str, char *buf )
 
     ret = 0;
     for( i = 0; i < len; i++ ) {
-        u = (unsigned char)*str++;
+        u = *(unsigned char *)str++;
         if( !IS_ASCII( u ) ) {
             i += getcharUTF8( &str, &u );
             /*
@@ -189,31 +202,35 @@ static size_t UTF8StringToCP1252( size_t len, const char *str, char *buf )
                 u = c;
             }
         }
-        if( ret < len ) {
-            if( buf != NULL ) {
+        if( buf != NULL ) {
+            if( ret < size ) {
                 *buf++ = (char)u;
+                ret++;
             }
+        } else {
             ret++;
         }
     }
     return( ret );
 }
 
-static size_t UTF8StringToUTF8( size_t len, const char *str, char *buf )
-/***********************************************************************
+static size_t UTF8StringToUTF8( const char *str, size_t len, char *buf, size_t size )
+/************************************************************************************
  * this function copy UTF-8 buffer to UTF-8 buffer
  */
 {
     if( len > 0 ) {
         if( buf != NULL ) {
+            if( len > size )
+                len = size;
             memcpy( buf, str, len );
         }
     }
     return( len );
 }
 
-static size_t UTF8StringToUnicode( size_t len, const char *str, char *buf )
-/**************************************************************************
+static size_t UTF8StringToUnicode( const char *str, size_t len, char *buf, size_t size )
+/***************************************************************************************
  * this function convert UTF-8 buffer to 16-bit UNICODE buffer
  * first read UTF-8 character then convert it to UNICODE and put to
  * output buffer, repeat until consume all input bytes
@@ -225,19 +242,21 @@ static size_t UTF8StringToUnicode( size_t len, const char *str, char *buf )
 
     ret = 0;
     for( i = 0; i < len; i++ ) {
-        u = (unsigned char)*str++;
+        u = *(unsigned char *)str++;
         if( !IS_ASCII( u ) ) {
             i += getcharUTF8( &str, &u );
         }
-        if( ret < len ) {
-            if( buf != NULL ) {
+        if( buf != NULL ) {
+            if( ret + 1 < size ) {
                 *buf++ = (char)u;
                 *buf++ = (char)( u >> 8 );
+                ret += 2;
             }
-            ret++;
+        } else {
+            ret += 2;
         }
     }
-    return( ret * 2 );
+    return( ret );
 }
 
 RcStatus SetUTF8toUnicode( void )
@@ -272,7 +291,7 @@ RcStatus SetUTF8toCP932( void )
                 ret = ( feof( fh ) ) ? RS_READ_INCMPLT : RS_READ_ERROR;
             } else {
                 cvt_table_len = u16;
-                cvt_table = RcMemAlloc( sizeof( cvt_chr ) * cvt_table_len );
+                cvt_table = MemAllocSafe( sizeof( cvt_chr ) * cvt_table_len );
                 if( cvt_table_len != fread( cvt_table, sizeof( cvt_chr ), cvt_table_len , fh ) ) {
                     ret = ( feof( fh ) ) ? RS_READ_INCMPLT : RS_READ_ERROR;
                 }
@@ -302,7 +321,7 @@ RcStatus SetUTF8toUTF8( void )
 void FreeCvtTable( void )
 {
     if( cvt_table != NULL ) {
-        RcMemFree( cvt_table );
+        MemFree( cvt_table );
         cvt_table = NULL;
     }
 }

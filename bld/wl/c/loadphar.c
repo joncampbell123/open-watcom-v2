@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -70,8 +70,8 @@ static unsigned_32 WritePharData( unsigned file_pos )
     fnode = Root->outfile;
     fnode->file_loc = file_pos;
     Root->u.file_loc = file_pos;
-    Root->sect_addr = Groups->grp_addr;
-    for( group = Groups; group != NULL; group = group->next_group ) {
+    Root->sect_addr = Groups->addr;
+    for( group = Groups; group != NULL; group = group->next ) {
         repos = WriteGroup( group );
         if( repos ) {
             SeekLoad( fnode->file_loc );
@@ -84,10 +84,10 @@ static unsigned_32 WritePharRelocs( void )
 /****************************************/
 // write the relocations.
 {
-    RELOC_INFO  *temp;
+    reloc_info  reloclist;
 
-    temp = Root->reloclist;             // don't want to modify original
-    return( DumpMaxRelocList( &temp, 0 ) );
+    reloclist = Root->reloclist;             // don't want to modify original
+    return( DumpMaxRelocList( &reloclist, 0 ) );
 }
 
 static void WritePharSimple( unsigned_32 start )
@@ -134,7 +134,7 @@ static void WritePharSimple( unsigned_32 start )
     _HostU16toTarg( 0x1E, header.reloc_offset );
     _HostU16toTarg( 0, header.overlay_num );
     /* allow header size to exceed 1M */
-    _HostU16toTarg( (header_size / (16*0x10000ul)) + 1, header.always_one );
+    _HostU16toTarg( (header_size / _1M) + 1, header.always_one );
     SeekLoad( start );
     WriteLoad( &header, sizeof( simple_header ) );
     if( FmtData.type & MK_PHAR_SIMPLE ) {
@@ -196,7 +196,7 @@ static unsigned_32 WritePharSegData( void )
     tss.esp = StackAddr.off;
     tss.cs = StartInfo.addr.seg;
     tss.ss = StackAddr.seg;
-    tss.ds = DataGroup->grp_addr.seg;
+    tss.ds = DataGroup->addr.seg;
     tss.ldt = 0x28;
     WriteLoad( &tss, sizeof( TSS ) );
     WriteDescriptor( 0, 0, 0 );                             // NULL GDT entry;
@@ -215,7 +215,7 @@ static unsigned_32 WritePharSegData( void )
     WriteDescriptor( 0, 0, 0 );                             // NULL IDT entry;
     WriteDescriptor( 0, 0, 0 );                             // NULL LDT entry;
     pos += size;
-    for( group = Groups; group != NULL; group = group->next_group ) {
+    for( group = Groups; group != NULL; group = group->next ) {
         flags = DR_BASE | DR_IS_APP | DR_IS_USER;
         if( (group->segflags & SEG_DATA) == 0 ) {
             flags |= DR_IS_CODE;
@@ -223,7 +223,7 @@ static unsigned_32 WritePharSegData( void )
         WriteDescriptor( pos, group->totalsize, flags );
         pos += group->totalsize;
     }
-    for( group = Groups; group != NULL; group = group->next_group ) {
+    for( group = Groups; group != NULL; group = group->next ) {
         WriteGroupLoad( group, false );
         if( group->totalsize > group->size ) {  // phar lap is stupid
             PadLoad( group->totalsize - group->size );
@@ -278,8 +278,8 @@ static unsigned_32 WriteSIT( void )
     sit.base = 0;
     sit.extra = 0;
     sit.base = FmtData.base;
-    for( group = Groups; group != NULL; group = group->next_group ) {
-        sit.selector = group->grp_addr.seg;
+    for( group = Groups; group != NULL; group = group->next ) {
+        sit.selector = group->addr.seg;
         sit.extra = group->totalsize - group->size;
         WriteLoad( &sit, sizeof( seg_info_table ) );
         size += sizeof( seg_info_table );

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -41,10 +41,10 @@
 #include "clibext.h"
 
 
-static bind_size    *dataOffsets = NULL;
-static bind_size    *entryCounts = NULL;
-static char         *DataFnameTokens = NULL;
-static long         dataStart;
+static TYPE_BIND    *files_data_offs = NULL;
+static TYPE_BIND    *files_data_lines = NULL;
+static char         *files_data = NULL;
+static long         bound_data_start_pos;
 
 /*
  * BoundDataInit - check if data is bound to our exe
@@ -53,9 +53,10 @@ void BoundDataInit( void )
 {
     int         h;
     size_t      size;
-    char        buff[sizeof( MAGIC_COOKIE ) + sizeof( bind_size )];
-    char        *tmp;
-    unsigned    dataFcnt;
+    char        buff[TRAILER_SIZE];
+    char        *p;
+    int         files_count;
+    size_t      files_data_len;
 
     /*
      * get trailer
@@ -64,51 +65,50 @@ void BoundDataInit( void )
     if( h == -1 ) {
         return;
     }
-    lseek( h, SEEK_POSBACK( sizeof( buff ) ), SEEK_END );
-    read( h, buff, sizeof( buff ) );
+    lseek( h, SEEK_POSBACK( TRAILER_SIZE ), SEEK_END );
+    read( h, buff, TRAILER_SIZE );
 
     /*
      * seek to start of data
      */
-    if( memcmp( buff, MAGIC_COOKIE, sizeof( MAGIC_COOKIE ) ) ) {
+    if( memcmp( buff, MAGIC_COOKIE, MAGIC_COOKIE_SIZE ) ) {
         close( h );
         return;
     }
-    size = *(bind_size *)( buff + sizeof( MAGIC_COOKIE ) );
-    dataStart = SEEK_POSBACK( size + sizeof( buff ) );
-    lseek( h, dataStart, SEEK_END );
+    size = GET_MAGIC_SIZE( buff );
+    bound_data_start_pos = SEEK_POSBACK( size + TRAILER_SIZE );
+    lseek( h, bound_data_start_pos, SEEK_END );
 
     /*
      * get everything
      */
-    BndMemory = _MemAllocArray( char, size );
+    BndMemory = p = _MemAllocArraySafe( char, size );
     read( h, BndMemory, size );
     close( h );
 
     /*
      * get number of files, and get space to store data
      */
-    dataFcnt = *(bind_size *)BndMemory;
-    dataOffsets = _MemAllocArray( bind_size, dataFcnt );
-    entryCounts = _MemAllocArray( bind_size, dataFcnt );
+    files_count = GET_SIZE( p );
+    p += SIZE_BIND;
+    files_data_offs = _MemAllocArraySafe( TYPE_BIND, files_count );
+    files_data_lines = _MemAllocArraySafe( TYPE_BIND, files_count );
 
     /*
      * get file names
      */
-    tmp = BndMemory + sizeof( bind_size );
-    size = *(bind_size *)tmp;
-    tmp += sizeof( bind_size );
-    DataFnameTokens = _MemAllocArray( char, size );
-    memcpy( DataFnameTokens, tmp, size );
-    tmp += size;
+    files_data_len = GET_SIZE( p );
+    p += SIZE_BIND;
+    files_data = _MemAllocArraySafe( char, files_data_len );
+    memcpy( files_data, p, files_data_len );
+    p += files_data_len;
 
     /*
-     * copy over file offset and linenumber data
+     * copy over files data offsets and lines count data
      */
-    size = dataFcnt * sizeof( bind_size );
-    memcpy( dataOffsets, tmp, size );
-    tmp += size;
-    memcpy( entryCounts, tmp, size );
+    size = files_count * SIZE_BIND;
+    memcpy( files_data_offs, p, size );
+    memcpy( files_data_lines, p + size, size );
 
     BoundData = true;
 
@@ -119,10 +119,10 @@ void BoundDataInit( void )
  */
 void BoundDataFini( void )
 {
-    _MemFreeArray( BndMemory );
-    _MemFreeArray( dataOffsets );
-    _MemFreeArray( entryCounts );
-    _MemFreeArray( DataFnameTokens );
+    MemFree( BndMemory );
+    MemFree( files_data_offs );
+    MemFree( files_data_lines );
+    MemFree( files_data );
 
 } /* BoundDataFini */
 
@@ -144,11 +144,11 @@ bool SpecialOpen( const char *fn, GENERIC_FILE *gf, bool bounddata )
         if( strcmp( fn, CONFIG_FILE ) == 0 ) {
             i = 0;
         } else {
-            i = Tokenize( DataFnameTokens, fn, true );
+            i = Tokenize( files_data, fn, true );
         }
         if( i != TOK_INVALID && bounddata ) {
 
-            shift = dataStart + dataOffsets[i];
+            shift = files_data_offs[i];
             gf->type = GF_BOUND;
             EditFlags.BndMemoryLocked = true;
 
@@ -157,18 +157,19 @@ bool SpecialOpen( const char *fn, GENERIC_FILE *gf, bool bounddata )
                 if( h == -1 ) {
                     return( false );
                 }
-
-                lseek( h, shift, SEEK_END );
+                /*
+                 * bound_data_start_pos + shift is always negative or zero
+                 */
+                lseek( h, bound_data_start_pos + shift, SEEK_END );
                 read( h, &len, 1 );
                 gf->data.handle = h;
             } else {
-                shift -= dataStart;
                 gf->data.pos = BndMemory + shift;
                 len = gf->data.pos[0];
                 gf->data.pos++;
             }
             gf->gf.a.currline = 0;
-            gf->gf.a.maxlines = entryCounts[i];
+            gf->gf.a.maxlines = files_data_lines[i];
             gf->gf.a.length = len;
             return( true );
 

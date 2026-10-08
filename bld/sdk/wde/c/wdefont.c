@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2022 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -131,12 +131,12 @@ void WdeFreeFontList( void )
         font_names = (WdeFontNames *)ListElement( flist );
         for( nlist = font_names->family_list; nlist != NULL; nlist = ListNext( nlist ) ) {
             font_data = (WdeFontData *)ListElement( nlist );
-            WRMemFree( font_data );
+            MemFree( font_data );
         }
         if( font_names->family_list != NULL ) {
             ListFree( font_names->family_list );
         }
-        WRMemFree( font_names );
+        MemFree( font_names );
     }
     ListFree( WdeFontList );
 
@@ -144,12 +144,12 @@ void WdeFreeFontList( void )
         font_names = (WdeFontNames *)ListElement( flist );
         for( nlist = font_names->family_list; nlist != NULL; nlist = ListNext( nlist ) ) {
             font_data = (WdeFontData *)ListElement( nlist );
-            WRMemFree( font_data );
+            MemFree( font_data );
         }
         if( font_names->family_list != NULL ) {
             ListFree( font_names->family_list );
         }
-        WRMemFree( font_names );
+        MemFree( font_names );
     }
     ListFree( WdeFontFamiliesList );
 }
@@ -168,13 +168,16 @@ void WdeSetFontList( HWND main )
 
     logpixelsy = GetDeviceCaps( hDc, LOGPIXELSY );
 
+#ifdef __WINDOWS__
     fontenumproc = MakeProcInstance_FONTENUM( WdeEnumFontsProc, WdeGetAppInstance() );
+#else
+    fontenumproc = WdeEnumFontsProc;
+#endif
 
     WdeFontList = NULL;
     WdeFontFamiliesList = NULL;
 
     EnumFontFamilies( hDc, NULL, fontenumproc, (LPARAM)&WdeFontFamiliesList );
-
     for( olist = WdeFontFamiliesList; olist != NULL; olist = ListNext( olist ) ) {
         font_names = (WdeFontNames *)ListElement( olist );
         if( EnumFontFamilies( hDc, font_names->name, fontenumproc, (LPARAM)&WdeFontList ) == 0 ) {
@@ -183,8 +186,9 @@ void WdeSetFontList( HWND main )
     }
 
     ReleaseDC( main, hDc );
-
+#ifdef __WINDOWS__
     FreeProcInstance_FONTENUM( fontenumproc );
+#endif
 }
 
 bool WdeAddFontFamilyMember( WdeFontNames *font_element, const ENUMLOGFONT *elf, const NEWTEXTMETRIC *ntm, int fonttype )
@@ -193,7 +197,7 @@ bool WdeAddFontFamilyMember( WdeFontNames *font_element, const ENUMLOGFONT *elf,
     WdeFontData *font_sibling;
     LIST        *olist;
 
-    font_data = (WdeFontData *)WRMemAlloc( sizeof( WdeFontData ) );
+    font_data = MemAlloc( sizeof( WdeFontData ) );
     if( font_data == NULL ) {
         WdeWriteTrail( "Could not allocate font data" );
         return( false );
@@ -210,7 +214,7 @@ bool WdeAddFontFamilyMember( WdeFontNames *font_element, const ENUMLOGFONT *elf,
     for( olist = font_element->family_list; olist != NULL; olist = ListNext( olist ) ) {
         font_sibling = (WdeFontData *)ListElement( olist );
         if( font_sibling->pointsize == font_data->pointsize ) {
-            WRMemFree( font_data );
+            MemFree( font_data );
             return( true );
         }
     }
@@ -255,7 +259,7 @@ int CALLBACK WdeEnumFontsProc( const LOGFONT FAR *lf, const TEXTMETRIC FAR *tm, 
         }
     }
 
-    font_names = (WdeFontNames *)WRMemAlloc( sizeof( WdeFontNames ) );
+    font_names = MemAlloc( sizeof( WdeFontNames ) );
     if( font_names == NULL ) {
         WdeWriteTrail( "Could not allocate font names structure." );
         return( FALSE );
@@ -381,7 +385,11 @@ bool WdeGetResizerFromFont( WdeResizeRatio *r, char *facename, int pointsize )
     inst = WdeGetAppInstance();
     dlgtemplate = DialogTemplate( WS_POPUP | DS_SETFONT, 4, 8, 4, 8, NULL, NULL, NULL, pointsize, facename, &templatelen );
     DoneAddingControls( dlgtemplate );
+#ifdef __WINDOWS__
     dlgproc = MakeProcInstance_DLG( WdeDummyDlgProc, inst );
+#else
+    dlgproc = WdeDummyDlgProc;
+#endif
     hDlg = CreateDialogIndirect( inst, GlobalLock( dlgtemplate ), (HWND)NULL, dlgproc );
     GlobalUnlock( dlgtemplate );
     GlobalFree( dlgtemplate );
@@ -395,9 +403,9 @@ bool WdeGetResizerFromFont( WdeResizeRatio *r, char *facename, int pointsize )
     } else {
         ok = false;
     }
-
+#ifdef __WINDOWS__
     FreeProcInstance_DLG( dlgproc );
-
+#endif
     return( ok );
 }
 

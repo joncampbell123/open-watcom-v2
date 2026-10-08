@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -186,7 +186,9 @@
 %type <resloc>          acc-section
 %type <integral>        id-value
 %type <accevent>        event
-%type <fullmemflags>    resource-options
+%type <resmemflags>     resource-options-mdp
+%type <resmemflags>     resource-options-md
+%type <resmemflags>     resource-options-mp
 %type <token>           resource-option
 %type <string>          file-name
 %type <resbyte>         fontitalic
@@ -263,7 +265,6 @@
 %type <strtable>        string-section
 %type <rawitem>         raw-data-item
 %type <resloc>          user-defined-data
-%type <token>           resource-type
 %type <verinforoot>     fixed-ver-section
 %type <verfixedoption>  fixed-ver-stmt
 %type <verfixedoption>  fileversion-stmt
@@ -337,9 +338,9 @@ normal-resource
 
 name-id
     : Y_NAME
-        { $$ = WResIDFromStr( $1.string ); RcMemFree( $1.string ); }
+        { $$ = WResIDFromStr( $1.string ); MemFree( $1.string ); }
     | string-constant
-        { $$ = WResIDFromStr( $1.string ); RcMemFree( $1.string ); }
+        { $$ = WResIDFromStr( $1.string ); MemFree( $1.string ); }
     | constant-expression
         {
             $$ = WResIDFromNum( $1.Value );
@@ -355,9 +356,9 @@ name-id
 
 type-id
     : Y_NAME
-        { $$ = WResIDFromStr( $1.string ); RcMemFree( $1.string ); }
+        { $$ = WResIDFromStr( $1.string ); MemFree( $1.string ); }
     | string-constant
-        { $$ = WResIDFromStr( $1.string ); RcMemFree( $1.string ); }
+        { $$ = WResIDFromStr( $1.string ); MemFree( $1.string ); }
     | constant-expression
         {
             $$ = WResIDFromNum( $1.Value );
@@ -371,14 +372,12 @@ type-id
 
 includeres-statement
     : Y_INCLUDERES file-name
-        {
-            SemWINAddResFile( $2.string );
-        }
+        { SemWINAddResFile( $2.string ); }
     ;
 
 pragma-statement
     : Y_POUND_PRAGMA Y_CODEPAGE  Y_LPAREN constant-expression Y_RPAREN
-      {}
+        { SemWINSetDefaultCodepage( $4.Value ); }
     ;
 
 keyword-name
@@ -544,17 +543,35 @@ comma-opt
     ;
 
 single-line-resource
-    : name-id resource-type file-name
-        { SemWINAddSingleLineResource( $1, $2, NULL, $3.string ); }
-    | name-id resource-type resource-options file-name
-        { SemWINAddSingleLineResource( $1, $2, &($3), $4.string ); }
+    : name-id Y_CURSOR resource-options-md file-name
+        { SemWINAddSingleLineResource( $1, Y_CURSOR, $3, $4.string ); }
+    | name-id Y_ICON resource-options-md file-name
+        { SemWINAddSingleLineResource( $1, Y_ICON, $3, $4.string ); }
+    | name-id Y_BITMAP resource-options-mp file-name
+        { SemWINAddSingleLineResource( $1, Y_BITMAP, $3, $4.string ); }
+    | name-id Y_FONT resource-options-mdp file-name
+        { SemWINAddSingleLineResource( $1, Y_FONT, $3, $4.string ); }
     ;
 
-resource-options
-    : resource-option
-        { $$ = SemWINAddFirstMemOption( $1 ); }
-    | resource-options resource-option
-        { $$ = SemWINAddMemOption( $1, $2 ); }
+resource-options-mdp
+    : /* nothing */
+        { $$ = DEFAULT_FLAGS_MDP; }
+    | resource-options-mdp resource-option
+        { $$ = SemWINAddResOption( $1, $2 ); }
+    ;
+
+resource-options-md
+    : /* nothing */
+        { $$ = DEFAULT_FLAGS_MD; }
+    | resource-options-md resource-option
+        { $$ = SemWINAddResOption( $1, $2 ); }
+    ;
+
+resource-options-mp
+    : /* nothing */
+        { $$ = DEFAULT_FLAGS_MP; }
+    | resource-options-mp resource-option
+        { $$ = SemWINAddResOption( $1, $2 ); }
     ;
 
 resource-option
@@ -580,29 +597,9 @@ file-name
     | string-constant
     ;
 
-resource-type
-    : Y_CURSOR
-        { $$ = Y_CURSOR; }
-    | Y_ICON
-        { $$ = Y_ICON; }
-    | Y_BITMAP
-        { $$ = Y_BITMAP; }
-    | Y_FONT
-        { $$ = Y_FONT; }
-    ;
-
 user-defined-resource
-    : name-id comma-opt user-defined-type-id user-defined-data
-        {
-            SemAddResourceAndFree( $1, $3,
-                    MEMFLAG_PURE | MEMFLAG_MOVEABLE | MEMFLAG_DISCARDABLE, $4 );
-        }
-    | name-id comma-opt user-defined-type-id resource-options user-defined-data
-        {
-            SemWINCheckMemFlags( &($4), 0, MEMFLAG_DISCARDABLE|MEMFLAG_MOVEABLE,
-                    MEMFLAG_PURE );
-            SemAddResourceAndFree( $1, $3, $4.flags, $5 );
-        }
+    : name-id comma-opt user-defined-type-id resource-options-mdp user-defined-data
+        { SemAddResourceAndFree( $1, $3, $4, $5 ); }
     ;
 
 user-defined-type-id
@@ -614,16 +611,16 @@ user-defined-type-id
 
 user-defined-data
     : file-name
-        { $$ = SemCopyRawFile( $1.string ); RcMemFree( $1.string ); }
+        { $$ = SemCopyRawFile( $1.string ); MemFree( $1.string ); }
     | raw-data-section
         { $$ = SemFlushDataElemList( $1, true ); }
     ;
 
 raw-data-section
     : Y_BEGIN raw-data-items Y_END
-       { $$ = $2; }
+        { $$ = $2; }
     | Y_LBRACE raw-data-items Y_RBRACE
-       { $$ = $2; }
+        { $$ = $2; }
     ;
 
 raw-data-items
@@ -650,103 +647,50 @@ raw-data-item
     ;
 
 rcdata-resource
-    : name-id Y_RCDATA opt-resource-info-stmts user-defined-data
-        {
-            SemAddResourceAndFree( $1, WResIDFromNum( RESOURCE2INT( RT_RCDATA ) ),
-                    MEMFLAG_PURE | MEMFLAG_MOVEABLE | MEMFLAG_DISCARDABLE, $4 );
-        }
-    | name-id Y_RCDATA resource-options opt-resource-info-stmts user-defined-data
-        {
-            SemWINCheckMemFlags( &($3), 0, MEMFLAG_DISCARDABLE|MEMFLAG_MOVEABLE,
-                    MEMFLAG_PURE );
-            SemAddResourceAndFree( $1, WResIDFromNum( RESOURCE2INT( RT_RCDATA ) ), $3.flags, $5 );
-        }
+    : name-id Y_RCDATA resource-options-mp opt-resource-info-stmts user-defined-data
+        { SemAddResourceAndFree( $1, WResIDFromNum( RESOURCE2INT( RT_RCDATA ) ), $3, $5 ); }
     ;
 
 string-table-resource
-    : Y_STRINGTABLE opt-resource-info-stmts string-section
-        {
-            SemWINMergeStrTable( $3,
-                MEMFLAG_PURE|MEMFLAG_MOVEABLE|MEMFLAG_DISCARDABLE );
-        }
-    | Y_STRINGTABLE resource-options opt-resource-info-stmts string-section
-        {
-            SemWINCheckMemFlags( &($2), 0, MEMFLAG_MOVEABLE | MEMFLAG_DISCARDABLE,
-                            MEMFLAG_PURE );
-            SemWINMergeStrTable( $4, $2.flags );
-        }
+    : Y_STRINGTABLE resource-options-mdp opt-resource-info-stmts string-section
+        { SemWINMergeStrTable( $4, $2 ); }
     ;
 
 toolbar-resource
-    : name-id Y_TOOLBAR resource-options constant-expression comma-opt
-      constant-expression toolbar-block
-        {
-            SemWINCheckMemFlags( &($3), 0, MEMFLAG_MOVEABLE, MEMFLAG_PURE );
-            SemWINWriteToolBar( $1, $7, $4.Value, $6.Value, $3.flags );
-        }
-    | name-id Y_TOOLBAR constant-expression comma-opt
-      constant-expression toolbar-block
-        {
-            SemWINWriteToolBar( $1, $6, $3.Value, $5.Value,
-                                MEMFLAG_PURE | MEMFLAG_MOVEABLE );
-        }
+    : name-id Y_TOOLBAR resource-options-mp constant-expression comma-opt constant-expression toolbar-block
+        { SemWINWriteToolBar( $1, $7, $4.Value, $6.Value, $3 ); }
     ;
 
 toolbar-block
     : Y_BEGIN toolbar-items Y_END
-        {
-            $$ = $2;
-        }
+        { $$ = $2; }
     | Y_LBRACE toolbar-items Y_RBRACE
-        {
-            $$ = $2;
-        }
+        { $$ = $2; }
     ;
 
 toolbar-items
     : toolbar-item
-        {
-            $$ = SemWINCreateToolBar();
-            SemWINAddToolBarItem( $$, $1 );
-        }
+        { $$ = SemWINAddToolBarItem( NULL, $1 ); }
     | toolbar-items toolbar-item
-        {
-            $$ = $1;
-            SemWINAddToolBarItem( $$, $2 );
-        }
+        { $$ = SemWINAddToolBarItem( $1, $2 ); }
     ;
 
 toolbar-item
     : Y_BUTTON constant-expression
-        {
-            $$ = (uint_16)$2.Value;
-        }
+        { $$ = (uint_16)$2.Value; }
     | Y_SEPARATOR
-        {
-            $$ = 0;
-        }
+        { $$ = 0; }
     ;
 
 message-table-resource
     : name-id Y_MESSAGETABLE file-name
-        {
-            SemWINAddMessageTable( $1, &$3 );
-        }
+        { SemWINAddMessageTable( $1, &$3 ); }
     ;
 
 
 error-table-resource
-    : Y_ERRTABLE opt-resource-info-stmts string-section
-        {
-            SemWINMergeErrTable( $3,
-                MEMFLAG_PURE|MEMFLAG_MOVEABLE|MEMFLAG_DISCARDABLE );
-        }
-    | Y_ERRTABLE resource-options opt-resource-info-stmts string-section
-        {
-            SemWINCheckMemFlags( &($2), 0, MEMFLAG_MOVEABLE | MEMFLAG_DISCARDABLE,
-                            MEMFLAG_PURE );
-            SemWINMergeErrTable( $4, $2.flags );
-        }
+    : Y_ERRTABLE resource-options-mdp opt-resource-info-stmts string-section
+        { SemWINMergeErrTable( $4, $2 ); }
     ;
 
 string-section
@@ -759,15 +703,13 @@ string-section
 string-items
     : string-item
         {
-            $$ = SemWINNewStringTable();
-            SemWINAddStrToStringTable( $$, $1.ItemID, $1.String );
-            RcMemFree( $1.String );
+            $$ = SemWINAddStrToStringTable( NULL, $1.ItemID, $1.String );
+            MemFree( $1.String );
         }
     | string-items string-item
         {
-            SemWINAddStrToStringTable( $1, $2.ItemID, $2.String );
-            $$ = $1;
-            RcMemFree( $2.String );
+            $$ = SemWINAddStrToStringTable( $1, $2.ItemID, $2.String );
+            MemFree( $2.String );
         }
     ;
 
@@ -782,17 +724,8 @@ string-id
     ;
 
 accelerators-resource
-    : name-id Y_ACCELERATORS opt-resource-info-stmts acc-section
-        {
-            SemAddResourceAndFree( $1, WResIDFromNum( RESOURCE2INT( RT_ACCELERATOR ) ),
-                MEMFLAG_PURE | MEMFLAG_MOVEABLE, $4 );
-        }
-    | name-id Y_ACCELERATORS resource-options opt-resource-info-stmts acc-section
-        {
-            SemWINCheckMemFlags( &($3), 0, MEMFLAG_MOVEABLE, MEMFLAG_PURE );
-            SemAddResourceAndFree( $1, WResIDFromNum( RESOURCE2INT( RT_ACCELERATOR ) ),
-                    $3.flags, $5 );
-        }
+    : name-id Y_ACCELERATORS resource-options-mp opt-resource-info-stmts acc-section
+        { SemAddResourceAndFree( $1, WResIDFromNum( RESOURCE2INT( RT_ACCELERATOR ) ), $3, $5 ); }
     ;
 
 acc-section
@@ -833,7 +766,7 @@ event
         {
             $$.event = SemWINStrToAccelEvent( $1.string );
             $$.strevent = true;
-            RcMemFree( $1.string );
+            MemFree( $1.string );
         }
     | constant-expression
         {
@@ -876,27 +809,13 @@ acc-item-option
     ;
 
 menuex-resource
-    : name-id Y_MENU_EX menu-section
-        { SemWINWriteMenu( $1, MEMFLAG_PURE|MEMFLAG_MOVEABLE|MEMFLAG_DISCARDABLE,
-                    $3, Y_MENU_EX ); }
-    | name-id Y_MENU_EX resource-options menu-section
-        {
-            SemWINCheckMemFlags( &($3), 0, MEMFLAG_MOVEABLE | MEMFLAG_DISCARDABLE,
-                            MEMFLAG_PURE );
-            SemWINWriteMenu( $1, $3.flags, $4, Y_MENU_EX );
-        }
+    : name-id Y_MENU_EX resource-options-mdp menu-section
+        { SemWINWriteMenu( $1, $3, $4, true ); }
     ;
 
 menu-resource
-    : name-id Y_MENU opt-resource-info-stmts menu-section
-        { SemWINWriteMenu( $1, MEMFLAG_PURE|MEMFLAG_MOVEABLE|MEMFLAG_DISCARDABLE,
-                    $4, Y_MENU ); }
-    | name-id Y_MENU resource-options opt-resource-info-stmts menu-section
-        {
-            SemWINCheckMemFlags( &($3), 0, MEMFLAG_MOVEABLE | MEMFLAG_DISCARDABLE,
-                            MEMFLAG_PURE );
-            SemWINWriteMenu( $1, $3.flags, $5, Y_MENU );
-        }
+    : name-id Y_MENU resource-options-mdp opt-resource-info-stmts menu-section
+        { SemWINWriteMenu( $1, $3, $5, false ); }
     ;
 
 menu-section
@@ -908,29 +827,29 @@ menu-section
 
 menu-items
     : menu-item
-        { $$ = SemWINNewMenu( $1 ); }
+        { $$ = SemWINAddMenuItem( NULL, $1 ); }
     | menu-items menu-item
         { $$ = SemWINAddMenuItem( $1, $2 ); }
     ;
 
 menuId
     : constant-expression
-      { $$ = (uint_16)$1.Value; }
+        { $$ = (uint_16)$1.Value; }
     ;
 
 menuType
     : constant-expression
-      { $$ = $1.Value; }
+        { $$ = $1.Value; }
     ;
 
 menuState
     : constant-expression
-      { $$ = $1.Value; }
+        { $$ = $1.Value; }
     ;
 
 helpId
     : constant-expression
-      { $$ = $1.Value; }
+        { $$ = $1.Value; }
     ;
 
 menu-item
@@ -938,7 +857,7 @@ menu-item
         {
             $$.next = NULL;
             $$.prev = NULL;
-            $$.UseUnicode = (CmdLineParms.TargetOS == RC_TARGET_OS_WIN32);
+            $$.iswin32 = CmdLineParms.iswin32;
             $$.IsPopup = false;
             $$.item.normal = $1;
         }
@@ -946,7 +865,7 @@ menu-item
         {
             $$.next = NULL;
             $$.prev = NULL;
-            $$.UseUnicode = (CmdLineParms.TargetOS == RC_TARGET_OS_WIN32);
+            $$.iswin32 = CmdLineParms.iswin32;
             $$.IsPopup = true;
             $$.item.popup = $1;
         }
@@ -1034,7 +953,7 @@ menu-entry-defn
             $$.menuData.ItemText = NULL;
             $$.menuData.ItemID = 0;
             $$.menuData.ItemFlags = 0;
-            $$.menuExData.ItemType = MENUEX_SEPARATOR;
+            $$.menuExData.ItemType = MENUEX_TYPE_SEPARATOR;
             $$.menuExData.ItemState = 0;
         }
     | menu-text comma-opt
@@ -1110,7 +1029,7 @@ menu-result
 
 menu-item-options
     : menu-item-option
-        { $$ = SemWINAddFirstMenuOption( $1 ); }
+        { $$ = SemWINAddMenuOption( 0, $1 ); }
     | menu-item-options comma-opt menu-item-option
         { $$ = SemWINAddMenuOption( $1, $3 ); }
     ;
@@ -1136,9 +1055,7 @@ menu-item-option
 
 language-resource
     : language-stmt
-        {
-            SemWINSetGlobalLanguage( &$1 );
-        }
+        { SemWINSetGlobalLanguage( &$1 ); }
     ;
 
 opt-resource-info-stmts
@@ -1153,16 +1070,14 @@ resource-info-stmts
 
 resource-info-stmt
     : language-stmt
-        {
-            SemWINSetResourceLanguage( &$1, true );
-        }
+        { SemWINSetResourceLanguage( &$1, true ); }
     | characteristics-stmt
     | version-stmt
     ;
 
 language-stmt
     : Y_LANGUAGE constant-expression Y_COMMA constant-expression
-        { $$.lang = (uint_16)$2.Value; $$.sublang = (uint_8)$4.Value; }
+        { $$.lang = (uint_16)$2.Value; $$.sublang = $4.Value; }
     ;
 
 characteristics-stmt
@@ -1190,63 +1105,13 @@ helpId-opt
     ;
 
 dlg-resource
-    : name-id dialog-or-dialogEx size-info helpId-opt diag-options-section
-              diag-control-section
-        {
-            SemWINWriteDialogBox( $1,
-               MEMFLAG_PURE|MEMFLAG_MOVEABLE|MEMFLAG_DISCARDABLE,
-               $3, $5, $6, $4, $2 );
-        }
-    | name-id dialog-or-dialogEx size-info helpId-opt diag-control-section
-        {
-            SemWINWriteDialogBox( $1,
-               MEMFLAG_PURE|MEMFLAG_MOVEABLE|MEMFLAG_DISCARDABLE,
-               $3, NULL, $5, $4, $2 );
-        }
-    | name-id dialog-or-dialogEx exstyle-equal-stmt size-info helpId-opt
-              diag-options-section diag-control-section
-        {
-            SemWINWriteDialogBox( $1,
-               MEMFLAG_PURE|MEMFLAG_MOVEABLE|MEMFLAG_DISCARDABLE,
-               $4, SemWINDiagOptions( $6, &($3) ), $7, $5, $2 );
-        }
-    | name-id dialog-or-dialogEx exstyle-equal-stmt size-info helpId-opt
-              diag-control-section
-        {
-            SemWINWriteDialogBox( $1,
-                MEMFLAG_PURE|MEMFLAG_MOVEABLE|MEMFLAG_DISCARDABLE,
-                $4, SemWINNewDiagOptions( &($3) ), $6, $5, $2 );
-        }
-    | name-id dialog-or-dialogEx resource-options comma-opt size-info helpId-opt
-               diag-options-section diag-control-section
-        {
-            SemWINCheckMemFlags( &($3), 0, MEMFLAG_MOVEABLE | MEMFLAG_DISCARDABLE,
-                            MEMFLAG_PURE );
-            SemWINWriteDialogBox( $1, $3.flags, $5, $7, $8, $6, $2 );
-        }
-    | name-id dialog-or-dialogEx resource-options comma-opt size-info helpId-opt
-                diag-control-section
-        {
-            SemWINCheckMemFlags( &($3), 0, MEMFLAG_MOVEABLE | MEMFLAG_DISCARDABLE,
-                            MEMFLAG_PURE );
-            SemWINWriteDialogBox( $1, $3.flags, $5, NULL, $7, $6, $2 );
-        }
-    | name-id dialog-or-dialogEx resource-options comma-opt exstyle-equal-stmt
-                size-info helpId-opt diag-options-section diag-control-section
-        {
-            SemWINCheckMemFlags( &($3), 0, MEMFLAG_MOVEABLE | MEMFLAG_DISCARDABLE,
-                            MEMFLAG_PURE );
-            SemWINWriteDialogBox( $1, $3.flags, $6,
-                                SemWINDiagOptions( $8, &($5) ) , $9, $7, $2 );
-        }
-    | name-id dialog-or-dialogEx resource-options comma-opt exstyle-equal-stmt
-              size-info helpId-opt diag-control-section
-        {
-            SemWINCheckMemFlags( &($3), 0, MEMFLAG_MOVEABLE | MEMFLAG_DISCARDABLE,
-                            MEMFLAG_PURE );
-            SemWINWriteDialogBox( $1, $3.flags, $6,
-                               SemWINNewDiagOptions( &($5) ), $8, $7, $2 );
-        }
+    : name-id dialog-or-dialogEx resource-options-mdp comma-opt
+            size-info helpId-opt diag-options-section diag-control-section
+        { SemWINWriteDialogBox( $1, $3, $5, $7, $8, $6, $2 ); }
+    | name-id dialog-or-dialogEx resource-options-mdp comma-opt
+            exstyle-equal-stmt size-info helpId-opt
+            diag-options-section diag-control-section
+        { SemWINWriteDialogBox( $1, $3, $6, SemWINDiagOptions( $8, &($5) ), $9, $7, $2 ); }
     ;
 
 size-info
@@ -1275,8 +1140,8 @@ size-h
     ;
 
 diag-options-section
-    : diag-options-stmt
-        { $$ = SemWINNewDiagOptions( &($1) ); }
+    : /* nothing */
+        { $$ = NULL; }
     | diag-options-section diag-options-stmt
         { $$ = SemWINDiagOptions( $1, &($2) ); }
     ;
@@ -1344,7 +1209,7 @@ menu-stmt
         {
             $$.token = Y_MENU;
             $$.Opt.Name = WResIDToNameOrOrdinal( $2 );
-            RcMemFree( $2 );
+            MemFree( $2 );
         }
     ;
 
@@ -1355,14 +1220,14 @@ class-stmt
 
 class-name
     : string-constant
-        { $$ = ResStrToNameOrOrdinal( $1.string ); RcMemFree( $1.string ); }
+        { $$ = ResStrToNameOrOrdinal( $1.string ); MemFree( $1.string ); }
     | constant-expression
         { $$ = ResNumToNameOrOrdinal( (uint_16)$1.Value ); }
     ;
 
 ctl-class-name
     : string-constant
-        { $$ = ResStrToNameOrOrdinal( $1.string ); RcMemFree( $1.string ); }
+        { $$ = ResStrToNameOrOrdinal( $1.string ); MemFree( $1.string ); }
     | Y_BUTTON
         { $$ = ResStrToNameOrOrdinal( "BUTTON" ); }
     | Y_COMBOBOX
@@ -1433,22 +1298,17 @@ font-stmt
 
 fontcharset
     : constant-expression
-      { $$ = $1.Value & 0xFF; }
+        { $$ = $1.Value & 0xFF; }
     ;
 
 fontweight
     : constant-expression
-      { $$ = (uint_16)$1.Value; }
+        { $$ = (uint_16)$1.Value; }
     ;
 
 fontitalic
     : constant-expression
-      {
-          /*
-           * the value stored is boolean and must be 1 or 0 
-           */
-          $$ = (uint_8)( $1.Value != 0 );
-      }
+        { $$ = (uint_8)( $1.Value != 0 ); }
     ;
 
 point-size
@@ -1462,9 +1322,7 @@ typeface
 
 diag-control-section
     : Y_BEGIN diag-control-stmts Y_END
-        {
-            $$ = $2;
-        }
+        { $$ = $2; }
     | Y_LBRACE diag-control-stmts Y_RBRACE
         { $$ = $2; }
     | Y_BEGIN Y_END
@@ -1476,12 +1334,12 @@ diag-control-section
 diag-data-elements
     : raw-data-section
     | /* Nothing */
-      { $$ = NULL; }
+        { $$ = NULL; }
     ;
 
 diag-control-stmts
     : diag-control-stmt diag-data-elements
-        { $$ = SemWINNewDiagCtrlList( $1, $2 ); }
+        { $$ = SemWINAddDiagCtrlList( NULL, $1, $2 ); }
     | diag-control-stmts diag-control-stmt diag-data-elements
         { $$ = SemWINAddDiagCtrlList( $1, $2, $3 ); }
     ;
@@ -1511,7 +1369,7 @@ cntl-text-options
     : string-constant cntl-options
         {
             $2.Text = ResStrToNameOrOrdinal( $1.string );
-            RcMemFree( $1.string );
+            MemFree( $1.string );
             $$ = $2;
         }
     ;
@@ -1647,7 +1505,7 @@ state3-stmt
 
 icon-name
     : name-id
-        { $$ = WResIDToNameOrOrdinal( $1 ); RcMemFree( $1 ); }
+        { $$ = WResIDToNameOrOrdinal( $1 ); MemFree( $1 ); }
     ;
 
 icon-parms
@@ -1707,15 +1565,11 @@ scrollbar-stmt
 control-stmt
     : Y_CONTROL cntl-text comma-opt cntl-id comma-opt ctl-class-name comma-opt
                     style comma-opt size-info
-        {
-            $$ = SemWINSetControlData( $8, $4, $10, $2, $6, 0L, NULL );
-        }
+        { $$ = SemWINSetControlData( $8, $4, $10, $2, $6, 0L, NULL ); }
 
     | Y_CONTROL cntl-text comma-opt cntl-id comma-opt ctl-class-name comma-opt
                     style comma-opt size-info comma-opt exstyle helpId-opt
-        {
-            $$ = SemWINSetControlData( $8, $4, $10, $2, $6, $12.Value, &($13) );
-        }
+        { $$ = SemWINSetControlData( $8, $4, $10, $2, $6, $12.Value, &($13) ); }
     ;
 
 cntl-text
@@ -1723,21 +1577,13 @@ cntl-text
     ;
 
 version-info-resource
-    : name-id Y_VERSIONINFO fixed-ver-section variable-ver-section
-        {
-            SemWINWriteVerInfo( $1, MEMFLAG_MOVEABLE | MEMFLAG_PURE, $3, $4 );
-        }
-    | name-id Y_VERSIONINFO resource-options fixed-ver-section
-                                variable-ver-section
-        {
-            SemWINCheckMemFlags( &($3), 0, MEMFLAG_MOVEABLE, MEMFLAG_PURE );
-            SemWINWriteVerInfo( $1, $3.flags, $4, $5 );
-        }
+    : name-id Y_VERSIONINFO resource-options-mp fixed-ver-section variable-ver-section
+        { SemWINWriteVerInfo( $1, $3, $4, $5 ); }
     ;
 
 fixed-ver-section
     : fixed-ver-stmt
-        { $$ = SemWINNewVerFixedInfo( $1 ); }
+        { $$ = SemWINAddVerFixedInfo( NULL, $1 ); }
     | fixed-ver-section fixed-ver-stmt
         { $$ = SemWINAddVerFixedInfo( $1, $2 ); }
     ;
@@ -1818,7 +1664,7 @@ variable-ver-section
 
 block-stmts
     : block-stmt
-        { $$ = SemWINNewBlockNest( $1 ); }
+        { $$ = SemWINAddBlockNest( NULL, $1 ); }
     | block-stmts block-stmt
         { $$ = SemWINAddBlockNest( $1, $2 ); }
     ;
@@ -1849,7 +1695,7 @@ block-body
 
 value-stmts
     : value-stmt
-        { $$ = SemWINNewBlockNest( $1 ); }
+        { $$ = SemWINAddBlockNest( NULL, $1 ); }
     | value-stmts value-stmt
         { $$ = SemWINAddBlockNest( $1, $2 ); }
     ;
@@ -1865,7 +1711,7 @@ value-name
 
 value-list
     : value-item
-        { $$ = SemWINNewVerValueList( $1 ); }
+        { $$ = SemWINAddVerValueList( NULL, $1 ); }
     | value-list comma-opt value-item
         { $$ = SemWINAddVerValueList( $1, $3 ); }
     ;
@@ -1887,20 +1733,18 @@ value-string-list
         {
             $$.IsNum = false;
             $$.strlen = strlen( $1.Value.String ) + strlen( $2.string );
-            $$.Value.String = RcMemAlloc( $$.strlen + 1 );
+            $$.Value.String = MemAllocSafe( $$.strlen + 1 );
             strcpy( $$.Value.String, $1.Value.String );
             strcat( $$.Value.String, $2.string );
-            RcMemFree( $1.Value.String );
-            RcMemFree( $2.string );
+            MemFree( $1.Value.String );
+            MemFree( $2.string );
         }
     ;
 
 string-constant
     : Y_STRING
     | Y_LSQ_BRACKET string-group Y_RSQ_BRACKET
-        {
-            $$ = $2;
-        }
+        { $$ = $2; }
     ;
 
 string-group
@@ -1909,11 +1753,11 @@ string-group
         {
             $$.lstring = ( $1.lstring | $2.lstring );
             $$.length = $1.length + $2.length;
-            $$.string = RcMemAlloc( $$.length + 1 );
+            $$.string = MemAllocSafe( $$.length + 1 );
             strcpy( $$.string, $1.string );
             strcat( $$.string, $2.string );
-            RcMemFree( $1.string );
-            RcMemFree( $2.string );
+            MemFree( $1.string );
+            MemFree( $2.string );
         }
     ;
 

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2015-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2015-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -386,7 +386,7 @@ WdeResInfo *WdeCreateNewResource( char *title )
 
     if( ok ) {
         if( title != NULL ) {
-            res_info->info->save_name = WdeStrDup( title );
+            res_info->info->save_name = WdeStrdup( title );
             ok = (res_info->info->save_name != NULL);
         }
     }
@@ -466,7 +466,7 @@ bool WdeOpenResource( char *fn )
 
     if( fn != NULL ) {
         if( WRFileExists( fn ) ) {
-            name = WdeStrDup( fn );
+            name = WdeStrdup( fn );
             gf.fn_offset = WRFindFnOffset( name );
         } else {
             return( false );
@@ -524,7 +524,7 @@ bool WdeOpenResource( char *fn )
     }
 
     if( name != NULL ) {
-        WRMemFree( name );
+        MemFree( name );
     }
 
     WdeSetWaitCursor( false );
@@ -776,7 +776,7 @@ bool WdeCreateResourceWindow( WdeResInfo *res_info, size_t fn_offset, char *titl
         } else {
             WdeResCounter++;
             win_title_len = strlen( WdeResUntitled ) + 7;
-            win_title = (char *)WRMemAlloc( win_title_len );
+            win_title = MemAlloc( win_title_len );
             sprintf( win_title, "%s.%d", WdeResUntitled, 0xffff & WdeResCounter );
             mdics.szTitle = win_title;
         }
@@ -800,7 +800,7 @@ bool WdeCreateResourceWindow( WdeResInfo *res_info, size_t fn_offset, char *titl
     ret = SendMessage( win, WM_MDICREATE, 0, (LPARAM)&mdics );
 
     if( win_title != NULL ) {
-        WRMemFree( win_title );
+        MemFree( win_title );
     }
 
 #ifdef __NT__
@@ -887,7 +887,7 @@ bool WdeSaveResource( WdeResInfo *res_info, bool prompt_name )
             fn = res_info->info->save_name;
         } else {
             res_info->info->save_type = res_info->info->file_type;
-            fn = WdeStrDup( res_info->info->file_name );
+            fn = WdeStrdup( res_info->info->file_name );
             got_name = TRUE;
         }
 
@@ -906,7 +906,7 @@ bool WdeSaveResource( WdeResInfo *res_info, bool prompt_name )
 
     if( ok ) {
         if( got_name && res_info->info->save_name != NULL ) {
-            WRMemFree( res_info->info->save_name );
+            MemFree( res_info->info->save_name );
         }
         res_info->info->save_name = fn;
         if( res_info->info->save_type == WR_DONT_KNOW ) {

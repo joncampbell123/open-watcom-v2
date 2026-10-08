@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2026      The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -36,7 +37,6 @@
 #include "global.h"
 #include "publics.h"
 #include "buffer.h"
-#include "memfuncs.h"
 #include "hashtabl.h"
 #include "main.h"
 #include "print.h"
@@ -59,7 +59,7 @@ void CreatePublicsArray( void )
     int                 index = 0;
 
     if( Publics.number ) {
-        Publics.public_symbols = (label_entry *)MemAlloc( sizeof( label_entry ) * Publics.number );
+        Publics.public_symbols = MemAlloc( sizeof( label_entry ) * Publics.number );
         for( ptr = Publics.label_lists; ptr != NULL; ptr = ptr->next ) {
             for( entry = ptr->list->first; entry != NULL; entry = entry->next ) {
                 for( ; entry != NULL; entry = entry->next ) {

@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -51,18 +51,20 @@
 #include "feprotos.h"
 
 
-block   *MakeBlock( label_handle label, block_num edges )
-/*******************************************************/
+#define BLOCK_SIZE(n)   (sizeof( block ) + (n - 1) * sizeof( block_edge ))
+
+block   *MakeBlockInit( block_num targets )
+/*****************************************/
 {
     block       *blk;
-    block_edge  *edge;
     block_num   i;
 
-    blk = CGAlloc( BLOCK_SIZE( edges ) );
+    blk = CGAlloc( BLOCK_SIZE( targets ) );
     blk->next_block = NULL;
     blk->prev_block = NULL;
-    blk->label = label;
+    blk->label = NULL;
     blk->class = 0;
+    blk->ins.head.line_num = 0;
     blk->ins.head.next = (instruction *)&blk->ins;
     blk->ins.head.prev = (instruction *)&blk->ins;
     blk->ins.head.opcode = OP_BLOCK;
@@ -81,25 +83,22 @@ block   *MakeBlock( label_handle label, block_num edges )
     blk->stack_depth = 0;
     blk->depth = 0;
     _DBitInit( blk->dom.id, 0U );
-    for( i = 0; i < edges; i++ ) {
-        edge = &blk->edge[i];
-        edge->source = blk;
+    for( i = 0; i < targets; i++ ) {
+        blk->edge[i].source = blk;
+        blk->edge[i].flags = BEF_NONE;
     }
+    blk->blk_id = BLK_ID_NONE;
+    blk->gen_blk_id = BLK_ID_NONE;
     return( blk );
 }
 
 
-block   *NewBlock( label_handle label, bool label_dies )
-/******************************************************/
+block   *MakeBlockCopy( block_num targets, block *src, block_num src_targets )
 {
     block       *blk;
 
-    blk = MakeBlock( label, 1 );
-    if( label_dies ) {
-        blk->edge[0].flags = BLOCK_LABEL_DIES;
-    } else {
-        blk->edge[0].flags = 0;
-    }
+    blk = CGAlloc( BLOCK_SIZE( targets ) );
+    Copy( src, blk, BLOCK_SIZE( src_targets ) );
     return( blk );
 }
 
@@ -128,12 +127,13 @@ void    FreeBlock( void )
 }
 
 
-void    EnLink( label_handle label, bool label_dies )
-/***************************************************/
+void    EnLink( label_handle label )
+/**********************************/
 {
     block       *blk;
 
-    blk = NewBlock( label, label_dies );
+    blk = MakeBlockInit( 1 );
+    blk->label = label;
     blk->ins.head.line_num = SrcLine;
     CurrBlock = blk;
     SrcLine = 0;
@@ -143,7 +143,8 @@ void    AddIns( instruction *ins )
 /********************************/
 {
     if( !HaveCurrBlock ) {
-        EnLink( AskForNewLabel(), true );
+        EnLink( AskForNewLabel() );
+        CurrBlock->edge[0].flags = BEF_BLOCK_LABEL_DIES;
         HaveCurrBlock = true;
     }
     ins->head.next = (instruction *)&CurrBlock->ins;
@@ -152,13 +153,13 @@ void    AddIns( instruction *ins )
     CurrBlock->ins.head.prev = ins;
     ins->head.line_num = SrcLine;
     _INS_NOT_BLOCK( ins );
-    ins->id = ++ InsId;
+    ins->id = ++InsId;
     SrcLine = 0;
 }
 
 
-void    GenBlock( block_class class, int targets )
-/************************************************/
+void    GenBlock( block_class class, block_num targets )
+/******************************************************/
 {
     block       *new_blk;
     block_edge  *edge;
@@ -167,12 +168,12 @@ void    GenBlock( block_class class, int targets )
     NamesCrossBlocks();
     if( HeadBlock == NULL ) {
         HeadBlock = CurrBlock;
-        CurrBlock->id = 1;
-        CurrBlock->gen_id = 1;
+        CurrBlock->blk_id = 1;
+        CurrBlock->gen_blk_id = 1;
     } else {
         BlockList->next_block = CurrBlock;
-        CurrBlock->id = BlockList->id + 1;
-        CurrBlock->gen_id = BlockList->gen_id + 1;
+        CurrBlock->blk_id = BlockList->blk_id + 1;
+        CurrBlock->gen_blk_id = BlockList->gen_blk_id + 1;
     }
     if( SrcLine != 0 ) {
         /*
@@ -187,8 +188,7 @@ void    GenBlock( block_class class, int targets )
     BlockList = CurrBlock;
     CurrBlock->next_block = NULL;
     if( targets > 1 ) {
-        new_blk = CGAlloc( BLOCK_SIZE( targets ) );
-        Copy( CurrBlock, new_blk, BLOCK_SIZE( 1 ) );
+        new_blk = MakeBlockCopy( targets, CurrBlock, 1 );
         if( CurrBlock->ins.head.next == (instruction *)&CurrBlock->ins ) {
             new_blk->ins.head.next = (instruction *)&new_blk->ins;
             new_blk->ins.head.prev = (instruction *)&new_blk->ins;
@@ -221,8 +221,8 @@ void    GenBlock( block_class class, int targets )
     if( _IsBlkAttr( CurrBlock, BLK_BIG_LABEL ) )        /* the only one that sticks*/
         class |= BLK_BIG_LABEL;
     CurrBlock->class = class;
-    while( --targets >= 1 ) {
-        CurrBlock->edge[targets].flags = 0;
+    while( targets-- > 1 ) {
+        CurrBlock->edge[targets].flags = BEF_NONE;
     }
 }
 
@@ -235,10 +235,9 @@ block   *ReGenBlock( block *blk, label_handle lbl )
     block_num   targets;
 
     targets = blk->targets + 1;
-    new_blk = CGAlloc( BLOCK_SIZE( targets ) );
-    Copy( blk, new_blk, BLOCK_SIZE( targets - 1 ) );
+    new_blk = MakeBlockCopy( targets, blk, targets - 1 );
     new_blk->edge[targets - 1].destination.u.lbl = lbl;
-    new_blk->edge[targets - 1].flags = 0;
+    new_blk->edge[targets - 1].flags = BEF_NONE;
     new_blk->targets = targets;
     /*
      * Move all references to blk
@@ -301,7 +300,7 @@ void    AddTarget( label_handle dest, bool dest_label_dies )
     edge->destination.u.lbl = dest;
     edge->next_source = NULL;
     if( dest_label_dies ) {
-        edge->flags |= DEST_LABEL_DIES;
+        edge->flags |= BEF_DEST_LABEL_DIES;
     }
 }
 
@@ -325,16 +324,16 @@ void    FixEdges( void )
 {
     block       *blk;
     block       *dest;
-    block_num   targets;
+    block_num   i;
     block_edge  *edge;
 
     for( blk = HeadBlock; blk != NULL; blk = blk->next_block ) {
         if( !_IsBlkAttr( blk, BLK_BIG_JUMP ) ) {
-            for( targets = blk->targets; targets-- > 0; ) {
-                edge = &blk->edge[targets];
+            for( i = blk->targets; i-- > 0; ) {
+                edge = &blk->edge[i];
                 dest = FindBlockWithLbl( edge->destination.u.lbl );
                 if( dest != NULL ) {
-                    edge->flags |= DEST_IS_BLOCK;
+                    edge->flags |= BEF_DEST_IS_BLOCK;
                     PointEdge( edge, dest );
                 }
             }
@@ -431,17 +430,17 @@ void    UnFixEdges( void )
 /************************/
 {
     block       *blk;
-    block_num   targets;
+    block_num   i;
     block_edge  *edge;
 
     for( blk = HeadBlock; blk != NULL; blk = blk->next_block ) {
         if( !_IsBlkAttr( blk, BLK_BIG_JUMP ) ) {
-            for( targets = blk->targets; targets-- > 0; ) {
-                edge = &blk->edge[targets];
-                if( edge->flags & DEST_IS_BLOCK ) {
+            for( i = blk->targets; i-- > 0; ) {
+                edge = &blk->edge[i];
+                if( edge->flags & BEF_DEST_IS_BLOCK ) {
                     RemoveInputEdge( edge );
                     edge->destination.u.lbl = edge->destination.u.blk->label;
-                    edge->flags &= ~DEST_IS_BLOCK;
+                    edge->flags &= ~BEF_DEST_IS_BLOCK;
                 }
             }
         }
@@ -480,7 +479,8 @@ bool    BlkTooBig( void )
     blk = AskForNewLabel();
     GenBlock( BLK_JUMP, 1 );
     AddTarget( blk, false );
-    EnLink( blk, true );
+    EnLink( blk );
+    CurrBlock->edge[0].flags = BEF_BLOCK_LABEL_DIES;
     return( true );
 }
 

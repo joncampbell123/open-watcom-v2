@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -139,7 +139,7 @@ static void SetDefaultVals( gui_window *gui, a_dialog_header *dlg )
     for( i = 0; (var_handle = dlg->pVariables[i]) != NO_VAR; ++i ) {
         cond = dlg->pConditions[i];
         if( !dlg->defaults_set && cond != NULL && !VarGetBoolVal( var_handle ) ) {
-            if( isdigit( *cond ) ) {
+            if( isdigit( *(unsigned char *)cond ) ) {
                 SetVariableByHandle( var_handle, cond );
             } else if( EvalCondition( cond ) ) {
                 SetBoolVariableByHandle( var_handle, true );
@@ -252,7 +252,7 @@ static void GetVariableVals( gui_window *gui, a_dialog_header *dlg, bool closing
             text = GUIGetText( gui, id );
             if( text != NULL ) {
                 SetVariableByHandle( var_handle, text );
-                GUIMemFree( text );
+                MemFree( text );
             }
             break;
         default:
@@ -395,7 +395,7 @@ static void UpdateControlVisibility( gui_window *gui, a_dialog_header *dlg, bool
 
     GUIGetFocus( gui, &focus_id );
 
-    control_on_new_line = GUIMemAlloc( sizeof( bool ) * dlg->num_controls );
+    control_on_new_line = MemAllocSafe( sizeof( bool ) * dlg->num_controls );
 
     // Figure out which controls are on a separate line from the last control
     control_on_new_line[0] = true;
@@ -480,7 +480,7 @@ static void UpdateControlVisibility( gui_window *gui, a_dialog_header *dlg, bool
         }
     }
 
-    GUIMemFree( control_on_new_line );
+    MemFree( control_on_new_line );
 
     // SetBoolVariableByName( "_Visibility_Condition_", false );
     VisibilityCondition = false;

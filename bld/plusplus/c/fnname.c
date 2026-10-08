@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -83,7 +83,10 @@ static CGOP const operatorSameAs[] = {
 };
 
 static const char *specialNamesStr[] = {
-    #define pick(e,s)    s,
+    /*
+     * add memory extension by nulls for string processing as a 32-bit array
+     */
+    #define pick(e,s)       s NAME_MEM_EXT,       
     #include "_specnam.h"
     #undef pick
 };
@@ -878,7 +881,7 @@ static char* setMangling(       // SET FOR MANGLING
     char *save;                 // - saved name
 
     setPrefix( last );
-    save = CMemStrDup( VbufString( &mangled_name ) );
+    save = CMemStrdup( VbufString( &mangled_name ) );
     VbufRewind( &mangled_name );
     return( save );
 }

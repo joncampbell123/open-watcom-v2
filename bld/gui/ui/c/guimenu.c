@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2021 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -101,7 +101,7 @@ static bool MenuConvert( const char *text, unsigned short *flags, char **new, bo
     if( end == NULL ) {
         length++; /* no & so need room for NULL as it doesn't replace & */
     }
-    new_str = (char *)GUIMemAlloc( length );
+    new_str = MemAlloc( length );
     *new = new_str;
     if( new_str == NULL ) {
         return( false );
@@ -130,22 +130,24 @@ void GUIFreeMenuItems( UIMENUITEM *menuitems )
 
     if( menuitems != NULL ) {
         for( i = 0; !MENUENDMARKER( menuitems[i] ); i++ ) {
-            GUIMemFree( menuitems[i].name );
+            MemFree( menuitems[i].name );
             if( menuitems[i].popup != NULL ) {
                 GUIFreeMenuItems( menuitems[i].popup );
             }
         }
-        GUIMemFree( menuitems );
+        MemFree( menuitems );
     }
 }
 
 UIMENUITEM *GUIAllocMenuItems( int num_items )
 {
     UIMENUITEM  *menuitems;
+    size_t      size;
 
-    menuitems = (UIMENUITEM *)GUIMemAlloc( sizeof( UIMENUITEM ) * ( num_items + 1 ) );
+    size = sizeof( *menuitems ) * ( num_items + 1 );
+    menuitems = MemAlloc( size );
     if( menuitems != NULL ) {
-        memset( menuitems, 0, sizeof( UIMENUITEM ) * ( num_items + 1 ) );
+        memset( menuitems, 0, size );
     }
     return( menuitems );
 }
@@ -288,7 +290,7 @@ bool GUIAPI GUISetMenuText( gui_window *wnd, gui_ctl_id id, const char *text, bo
     if( !MenuConvert( text, &menuitem->flags, &new, checked ) ) {
         return( false );
     }
-    GUIMemFree( menuitem->name );
+    MemFree( menuitem->name );
     menuitem->name = new;
     if( vbar ) {
         /* if the menu item changed was in the top bar of menus,
@@ -412,7 +414,7 @@ static VBARMENU *GUIAllocVBarMenu( void )
 {
     VBARMENU    *vbarmenu;
 
-    vbarmenu = (VBARMENU *)GUIMemAlloc( sizeof( VBARMENU ) );
+    vbarmenu = MemAlloc( sizeof( *vbarmenu ) );
     if( vbarmenu != NULL ) {
         vbarmenu->titles = NULL;
         vbarmenu->currmenu = -1;
@@ -427,7 +429,7 @@ static void GUIFreeVBarMenu( VBARMENU *vbarmenu )
         if( vbarmenu->titles != NULL ) {
             GUIFreeMenuItems( vbarmenu->titles );
         }
-        GUIMemFree( vbarmenu );
+        MemFree( vbarmenu );
     }
 }
 
@@ -468,29 +470,29 @@ static bool InsertMenu( gui_window *wnd, const gui_menu_struct *menu, int positi
     if( ( position > num_items ) || ( position == -1 ) ) {
         position = num_items;
     }
-    newmenuitems = (UIMENUITEM *)GUIMemAlloc( sizeof( UIMENUITEM ) * ( num_items + 2 ) );
+    newmenuitems = MemAlloc( sizeof( *newmenuitems ) * ( num_items + 2 ) );
     if( newmenuitems == NULL ) {
         return( false );
     }
     if( menuitems != NULL ) {
-        memcpy( newmenuitems, menuitems, sizeof( UIMENUITEM ) * position );
-        memcpy( &newmenuitems[position + 1], &menuitems[position], sizeof( UIMENUITEM ) * ( num_items - position + 1 ) );
+        memcpy( newmenuitems, menuitems, sizeof( *menuitems ) * position );
+        memcpy( &newmenuitems[position + 1], &menuitems[position], sizeof( *menuitems ) * ( num_items - position + 1 ) );
     } else {
-        memset( &newmenuitems[position + 1], 0, sizeof( UIMENUITEM ) );
+        memset( &newmenuitems[position + 1], 0, sizeof( *newmenuitems ) );
     }
     menus.num_items = 1;
     menus.menu = (gui_menu_struct *)menu;
-    memset( &newmenuitems[position], 0, sizeof( UIMENUITEM ) );
+    memset( &newmenuitems[position], 0, sizeof( *newmenuitems ) );
     if( !GUISetMenuItems( &menus, &newmenuitems[position] ) ) {
-        GUIMemFree( newmenuitems );
+        MemFree( newmenuitems );
         return( false );
     }
     if( !GUICreateMenuItems( &menu->child, &newmenuitems[position].popup ) ) {
-        GUIMemFree( newmenuitems );
+        MemFree( newmenuitems );
         return( false );
     }
     *pmenuitems = newmenuitems;
-    GUIMemFree( menuitems );
+    MemFree( menuitems );
     GUIMDIResetMenus( wnd, wnd->parent, &menus );
     if( append_hint ) {
         GUIAppendHintText( wnd, menu, type );
@@ -610,19 +612,19 @@ static bool DeleteMenu( gui_window *wnd, gui_ctl_id id, UIMENUITEM **pmenuitems,
     if( num_items == 1 ) {
         newmenuitems = NULL;
     } else {
-        newmenuitems = (UIMENUITEM *)GUIMemAlloc( sizeof( UIMENUITEM ) * num_items );
+        newmenuitems = MemAlloc( sizeof( *newmenuitems ) * num_items );
         if( newmenuitems == NULL ) {
             return( false );
         }
-        memcpy( newmenuitems, menuitems, sizeof( UIMENUITEM ) * position );
-        memcpy( &newmenuitems[position], &menuitems[position + 1], sizeof( UIMENUITEM ) * ( num_items - position ) );
+        memcpy( newmenuitems, menuitems, sizeof( *menuitems ) * position );
+        memcpy( &newmenuitems[position], &menuitems[position + 1], sizeof( *menuitems ) * ( num_items - position ) );
     }
     if( menuitems[position].popup != NULL ) {
         GUIFreeMenuItems( menuitems[position].popup );
     }
     *pmenuitems = newmenuitems;
-    GUIMemFree( menuitems[position].name );
-    GUIMemFree( menuitems );
+    MemFree( menuitems[position].name );
+    MemFree( menuitems );
     GUIDeleteHintText( wnd, id, MENU_HINT );
     GUIMDIDeleteMenuItem( id );
     return( true );

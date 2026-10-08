@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2025-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -37,11 +38,9 @@
 #include "ftnstd.h"
 #include "global.h"
 #include "fcodes.h"
-#include "wf77defs.h"
 #include "fcgbls.h"
-#include "cg.h"
-#include "fmthdr.h"
 #include "emitobj.h"
+#include "fcflow.h"
 #include "cgformat.h"
 
 
@@ -62,7 +61,7 @@ void    StartFmt( cs_label fmt_label ) {
             // FORMAT statement with no statement label
             OutU16( 0 );
         } else {
-            OutU16( fmt_label.st_label->u.st.address );
+            OutU16( _GetStmtLabel( fmt_label.st_label ) );
         }
     } else {
         OutU16( fmt_label.g_label );

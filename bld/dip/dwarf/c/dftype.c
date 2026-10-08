@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2023 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -141,7 +141,7 @@ typedef struct {
     imp_image_handle    *iih;
     imp_type_handle     *ith;
     location_context    *lc;
-    uint_32             num_elts;
+    uint_32             num_elems;
     int                 dim;
     bool                cont;
 } array_wlk_wlk;
@@ -171,7 +171,7 @@ static void GetArraySize( imp_image_handle *iih,
     df.dim = 0;
     df.cont = false;
     DRWalkArraySibs( ith->array.index, ArrayWlk, &df );
-    ith->array.num_elts = df.count;
+    ith->array.num_elems = df.count;
     ith->array.low = df.low;
     df.cont = true;
     dim = GetArrayDim( ith->array.index, 1 );
@@ -182,7 +182,7 @@ static void GetArraySize( imp_image_handle *iih,
     ith->typeinfo.size = df.count * ith->array.base_stride;
     if( !ith->array.column_major ) {
         base_stride = ith->typeinfo.size;
-        n_el = ith->array.num_elts;
+        n_el = ith->array.num_elems;
         base_stride = n_el ? base_stride / n_el : 0;
         ith->array.base_stride = base_stride;
     }
@@ -207,11 +207,11 @@ static void GetArraySubSize( imp_image_handle *iih,
     df.cont = false;
     DRWalkArraySibs( ith->array.index, ArrayWlk, &df );
     new_size = ith->typeinfo.size;
-    n_el = ith->array.num_elts;
+    n_el = ith->array.num_elems;
     new_size = n_el ? new_size / n_el : 0;
     if( ith->array.column_major ) {
         base_stride = ith->array.base_stride;
-        base_stride *= ith->array.num_elts;
+        base_stride *= ith->array.num_elems;
         ith->array.base_stride = base_stride;
     } else {
         base_stride = ith->typeinfo.size;
@@ -219,7 +219,7 @@ static void GetArraySubSize( imp_image_handle *iih,
         ith->array.base_stride = base_stride;
     }
     ith->typeinfo.size = new_size;
-    ith->array.num_elts = df.count;
+    ith->array.num_elems = df.count;
     ith->array.low = df.low;
     --ith->array.dims;
     ith->array.is_set = true;
@@ -278,13 +278,13 @@ static void InitTypeHandle( imp_image_handle *iih,
                             info.count = 1;
                         }
                         ith->typeinfo.size = info.count * ith->array.base_stride;
-                        ith->array.num_elts= info.count;
+                        ith->array.num_elems= info.count;
                     }else{
                         ith->typeinfo.size = ith->array.base_stride;
                     }
                     if( !ith->array.column_major ) {
                         base_stride = ith->typeinfo.size;
-                        n_el = ith->array.num_elts;
+                        n_el = ith->array.num_elems;
                         base_stride = n_el ? base_stride / n_el : 0;
                         ith->array.base_stride = base_stride;
                     }
@@ -706,8 +706,8 @@ dip_status DIPIMPENTRY( TypeArrayInfo )( imp_image_handle *iih,
         return( DS_ERR | DS_BAD_PARM  );
     }
     ai->low_bound = array_ith->array.low;
-    ai->num_elts = array_ith->array.num_elts;
-    ai->num_dims = array_ith->array.dims;
+    ai->num_elems = array_ith->array.num_elems;
+    ai->dims = array_ith->array.dims;
     ai->column_major = array_ith->array.column_major;
     ai->stride = array_ith->array.base_stride;
     if( index_ith != NULL ) {
@@ -1060,26 +1060,30 @@ static bool AMemLookup( drmem_hdl var, int index, void *_d )
     len = strlen( name );
     if( len == d->li->name.len && d->scompn( name, d->li->name.start, len ) == 0 ) {
         ish = DCSymCreate( d->com.iih, d->com.d );
-        SetSymHandle( (type_wlk *)d, ish );
-        ish->sym = var;
-        switch( index ) {
-        case 0:
-            ish->sclass = SYM_MEM;
-            break;
-        case 2:
-            ish->sclass = SYM_MEMVAR;     // static member
-            break;
-        case 3:
-            if( DRGetVirtuality( var ) == DR_VIRTUALITY_VIRTUAL ) {
-                ish->sclass = SYM_VIRTF;   // virtual func
-            }else if( !DRIsSymDefined( var ) ) {
-                ish->sclass = SYM_MEMF;    // memfunc decl
-            }else{
-                ish->sclass = SYM_MEMVAR;   // inlined defn treat like a var
+        if( ish == NULL ) {
+            d->sr = SR_FAIL;
+        } else {
+            SetSymHandle( (type_wlk *)d, ish );
+            ish->sym = var;
+            switch( index ) {
+            case 0:
+                ish->sclass = SYM_MEM;
+                break;
+            case 2:
+                ish->sclass = SYM_MEMVAR;     // static member
+                break;
+            case 3:
+                if( DRGetVirtuality( var ) == DR_VIRTUALITY_VIRTUAL ) {
+                    ish->sclass = SYM_VIRTF;   // virtual func
+                } else if( !DRIsSymDefined( var ) ) {
+                    ish->sclass = SYM_MEMF;    // memfunc decl
+                } else {
+                    ish->sclass = SYM_MEMVAR;   // inlined defn treat like a var
+                }
+                break;
             }
-            break;
+            d->sr = SR_EXACT;
         }
-        d->sr = SR_EXACT;
     }
     DCFree( name );
     return( true );
@@ -1151,9 +1155,13 @@ static bool AEnumMemLookup( drmem_hdl var, int index, void *_d )
     len = strlen( name );
     if( len == d->li->name.len && d->scompn( name, d->li->name.start, len ) == 0 ) {
         ish = DCSymCreate( d->com.iih, d->com.d );
-        SetSymHandle( (type_wlk *)d, ish );
-        ish->sym = var;
-        d->sr = SR_EXACT;
+        if( ish == NULL ) {
+            d->sr = SR_FAIL;
+        } else {
+            SetSymHandle( (type_wlk *)d, ish );
+            ish->sym = var;
+            d->sr = SR_EXACT;
+        }
     }
     DCFree( name );
     return( true );

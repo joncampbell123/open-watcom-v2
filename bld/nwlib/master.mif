@@ -36,7 +36,6 @@ additional_clean = *.gh *.grh *.grc *.gc
 !include dllrule.mif
 !include deftarg.mif
 !include dllbase.mif
-!include trmem.mif
 
 !include $(orl_dir)/client.mif
 
@@ -46,10 +45,10 @@ additional_clean = *.gh *.grh *.grc *.gc
 !ifdef bootstrap
 !include $(orl_dir)/orlobjs.mif
 .c: ../c;$(lib_misc_dir)/c;$(fe_misc_dir)/c;$(watcom_dir)/c;$(trmem_dir);$(cli_orl_c_dirs)
-inc_dirs =  -I. -I.. -I"../h" $(cli_orl_inc_dirs) -I"$(lib_misc_dir)/h" -I"$(fe_misc_dir)/h" $(cli_orl_inc_dirs_internal)
+inc_dirs =  -I. -I.. -I"../h" $(cli_orl_inc_dirs) -I"$(lib_misc_dir)/h" -I"$(fe_misc_dir)/h" $(cli_orl_inc_dirs_internal) -I"$(trmem_dir)"
 !else
 .c: ../c;$(lib_misc_dir)/c;$(fe_misc_dir)/c;$(watcom_dir)/c;$(trmem_dir)
-inc_dirs =  -I. -I.. -I"../h" $(cli_orl_inc_dirs) -I"$(lib_misc_dir)/h" -I"$(fe_misc_dir)/h"
+inc_dirs =  -I. -I.. -I"../h" $(cli_orl_inc_dirs) -I"$(lib_misc_dir)/h" -I"$(fe_misc_dir)/h" -I"$(trmem_dir)"
 !endif
 
 extra_cpp_flags = -DINSIDE_WLIB
@@ -59,10 +58,14 @@ extra_cpp_flags += -DIDE_PGM
 
 extra_cpp_flags_f_idedrv   = -DSTATIC_LINKAGE
 extra_cpp_flags_f_maindrv  = -DDLL_NAME=$(dlltarg_name)
-extra_cpp_flags_f_memfuncs = $(trmem_cpp_flags)
 
-extra_c_flags_f_memfuncs = $(trmem_cover_cflags)
-extra_c_flags_f_cmdlnprs = $(incl_file_opts)fesupp.h
+!ifeq trmem 1
+! ifdef __WATCOM_TOOLS__
+!  if $(__WATCOM_TOOLS__) < 1300
+extra_c_flags_f_mem = -of+
+!  endif
+! endif
+!endif
 
 #
 # lflags
@@ -99,15 +102,14 @@ common_objs = &
     $(_subdir_)implib.obj &
     $(_subdir_)elfobjs.obj &
     $(_subdir_)orlrtns.obj &
-    $(_subdir_)memfuncs.obj &
+    $(_subdir_)mem.obj &
     $(_subdir_)demangle.obj &
     $(_subdir_)omfhash.obj &
     $(_subdir_)omfutil.obj &
     $(_subdir_)coffwrt.obj &
     $(_subdir_)inlib.obj &
     $(_subdir_)idemsgpr.obj &
-    $(_subdir_)ideentry.obj &
-    $(trmem_objs)
+    $(_subdir_)ideentry.obj $(trmem_objs)
 
 !ifdef bootstrap
 wlib_orl_objs = $(cli_orl_objs)

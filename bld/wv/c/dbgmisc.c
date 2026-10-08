@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2024 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -33,10 +33,10 @@
 #include "dbgdefn.h"
 #include "dbgdata.h"
 #include "dbgerr.h"
-#include "dbgmem.h"
+#include "memfuncs.h"
 #include "dui.h"
 #include "liteng.h"
-#include "madinter.h"
+#include "wvmadcli.h"
 #include "i64.h"
 #include "strutil.h"
 #include "dbgscan.h"
@@ -454,14 +454,14 @@ void ProcIf( void )
     for( ;; ) {
         if( have_true ) {
             ChkExpr();
-            U64Clear( res );
+            Set64ValZero( res );
         } else {
             res = ReqU64Expr();
         }
         if( !ScanQuote( &start, &len ) ) {
             Error( ERR_LOC, LIT_ENG( ERR_WANT_COMMAND_LIST ) );
         }
-        if( U64Test( &res ) != 0 ) {
+        if( U64isntZero( res ) ) {
             true_start = start;
             true_len   = len;
             have_true  = true;
@@ -502,7 +502,7 @@ void ProcWhile( void )
         Error( ERR_LOC, LIT_ENG( ERR_WANT_COMMAND_LIST ) );
     }
     ReqEOC();
-    if( U64Test( &res ) != 0 ) {
+    if( U64isntZero( res ) ) {
         cmd = AllocCmdList( start, len );
         ReScan( CmdStart );
         PushCmdList( cmd );
@@ -545,19 +545,20 @@ void ProcQuit( void )
 
 static void FormThdState( thread_state *thd, char *buff, unsigned buff_len )
 {
-    char *p;
-    char *p1;
+    char        *p;
+    char        *p1;
+    const char  *s;
 
     p = CnvULongHex( thd->tid, buff, buff_len );
     *p++ = ' ';
     *p++ = ' ';
     switch( thd->state ) {
-    case THD_THAW:  p1 = LIT_ENG( Runnable ); break;
-    case THD_FREEZE:p1 = LIT_ENG( Frozen );   break;
-    case THD_DEAD:  p1 = LIT_ENG( Dead );     break;
-    default:        p1 = "";              break;
+    case THD_THAW:      s = LIT_ENG( Runnable );    break;
+    case THD_FREEZE:    s = LIT_ENG( Frozen );      break;
+    case THD_DEAD:      s = LIT_ENG( Dead );        break;
+    default:            s = "";                     break;
     }
-    p1 = StrCopyDst( p1, p );
+    p1 = StrCopyDst( s, p );
     while( (p1 - p) < 10 )
         *p1++ = ' ';
     StrCopyDst( thd->name, p1 );
@@ -656,7 +657,7 @@ static thread_state     *AddThread( dtid_t tid, unsigned state )
             if( _IsOn( SW_THREAD_EXTRA_CHANGED ) ) {
                 *owner = thd->link;
                 state = thd->state & ~THD_DEAD;
-                _Free( thd );
+                MemFree( thd );
                 break;
             }
             thd->state &= ~THD_DEAD;
@@ -668,7 +669,7 @@ static thread_state     *AddThread( dtid_t tid, unsigned state )
     } else {
         RemoteThdName( tid, name );
     }
-    _Alloc( thd, sizeof( thread_state ) + strlen( name ) );
+    thd = MemAlloc( sizeof( *thd ) + strlen( name ) );
     if( thd == NULL )
         return( NULL );
     thd->link = *owner;
@@ -709,12 +710,12 @@ void NameThread( dtid_t tid, const char *name )
 
     for( owner = &HeadThd; (curr = *owner) != NULL; owner = &curr->link ) {
         if( curr->tid == tid ) {
-            _Alloc( new, sizeof( thread_state ) + strlen( name ) );
+            new = MemAllocSafe( sizeof( *new ) + strlen( name ) );
             *new = *curr;
             *owner = new;
             strcpy( new->name, name );
             DbgUpdate( UP_THREAD_STATE );
-            _Free( curr );
+            MemFree( curr );
             break;
         }
     }
@@ -737,7 +738,7 @@ static void KillDeadThreads( void )
     for( owner = &HeadThd; (thd = *owner) != NULL; ) {
         if( thd->state & THD_DEAD ) {
             *owner = thd->link;
-            _Free( thd );
+            MemFree( thd );
         } else {
             owner = &thd->link;
         }
@@ -865,6 +866,6 @@ void FreeThreads( void )
 
     while( (thd = HeadThd) != NULL ) {
         HeadThd = thd->link;
-        _Free( thd );
+        MemFree( thd );
     }
 }

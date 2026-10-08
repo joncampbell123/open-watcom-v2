@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2024      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2024-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -43,9 +43,9 @@
 #include "litdui.h"
 
 
-static const char * GUICALLBACK ModGetName( const void *data_handle, int item )
+static const char * GUICALLBACK ModGetName( data_handle data, int item )
 {
-    const module_list *list = data_handle;
+    const module_list *list = (const module_list *)data;
 
     if( item >= ModListNumRows( list ) )
         return( NULL );
@@ -62,7 +62,7 @@ void ModComplete( gui_window *gui, gui_ctl_id id )
     char        *savebuff;
 
     match = DlgGetMatchString( gui, id, &matchoff );
-    savebuff = DupStr( TxtBuff );
+    savebuff = MemStrdupSafe( TxtBuff );
     ModListInit( &list, *match == NULLCHAR ? NULL : match );
     ModListAddModules( &list, NO_MOD, false );
     switch( ModListNumRows( &list ) ) {
@@ -75,7 +75,7 @@ void ModComplete( gui_window *gui, gui_ctl_id id )
         break;
     default:
         new = -1;
-        DlgPickWithRtn( LIT_DUI( Modules ), &list, 0, ModGetName, ModListNumRows( &list ), &new );
+        DlgPickWithRtn( LIT_DUI( Modules ), (data_handle)&list, 0, ModGetName, ModListNumRows( &list ), &new );
         break;
     }
     strcpy( TxtBuff, savebuff );
@@ -85,6 +85,6 @@ void ModComplete( gui_window *gui, gui_ctl_id id )
     }
     GUISetFocus( gui, id );
     ModListFree( &list );
-    WndFree( match );
-    WndFree( savebuff );
+    MemFree( match );
+    MemFree( savebuff );
 }

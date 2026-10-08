@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -74,7 +74,8 @@ typedef enum {
 } os_type;              // Type of operating system
 #define NUM_OS 2
 
-enum {
+typedef enum {
+    TAB_NONE = -1,
     TAB_SEG,            // order seg, grp, lname is important
     TAB_GRP,
     TAB_EXT,
@@ -89,7 +90,7 @@ enum {
     TAB_LIB,
     TAB_FPPATCH,
     TAB_SIZE,
-};
+} table_type;
 
 #define TAB_SYMSPACE_SIZE   TAB_CLASS_LNAME
 
@@ -220,6 +221,7 @@ typedef struct parm_list {
     char                *replace;       // string that replaces the label
     bool                required;       // is parm required ( T/F )
     char                *def;           // is there a default parm?
+    char                delim;          // opening '\''/'"' delimiter of a single quoted string arg, 0 otherwise
 } parm_list;
 
 typedef struct asmline {
@@ -245,7 +247,6 @@ typedef struct local_label {
     char                *local;
     size_t              local_len;
     char                *label;
-    size_t              label_len;
 } local_label;
 
 typedef struct {
@@ -363,10 +364,11 @@ extern symbol_queue     Tables[TAB_SIZE];   // tables of definitions
 
 extern dir_node_handle  AllocD( const char * );
 
-extern dir_node_handle  dir_insert( const char *, int );
+extern dir_node_handle  dir_insert( const char *, table_type );
 extern void             dir_to_sym( dir_node_handle );
-extern void             dir_change( dir_node_handle, int );
-extern void             dir_init( dir_node_handle, int );
+extern void             dir_change( dir_node_handle, table_type );
+extern void             dir_init( dir_node_handle, table_type );
+extern void             dir_fini( dir_node_handle );
 
 extern uint_32          GetCurrAddr( void );    // Get offset from current segment
 
@@ -398,7 +400,7 @@ extern bool             Include( token_buffer *tokbuf, token_idx );         // h
 extern bool             IncludeLib( token_buffer *tokbuf, token_idx );      // handle an INCLUDELIB statement
 extern bool             Model( token_buffer *tokbuf, token_idx );           // handle .MODEL statement
 
-extern bool             CheckForLang( token_buffer *tokbuf, token_idx, int *lang );
+extern bool             CheckForLang( token_buffer *tokbuf, token_idx, lang_type *langtype );
 
 /* Init/fini the information about the module, which are contained in ModuleInfo */
 extern void             ModuleInit( void );
@@ -453,11 +455,9 @@ extern bool             NameDirective( token_buffer *tokbuf, token_idx );
 extern bool             Comment( int, token_buffer *tokbuf, token_idx, const char * ); /* handle COMMENT directives */
 
 extern bool             AddAlias( token_buffer *tokbuf, token_idx );
-extern void             FreeInfo( dir_node_handle );
 extern void             push( void *stack, void *elt );
 extern void             *pop( void *stack );
 extern uint_32          GetCurrSegAlign( void );
-extern void             wipe_space( char *token );
 extern bool             SetUse32Def( bool );
 
 #if defined( DEBUG_OUT )
@@ -471,6 +471,7 @@ extern void             heap( char *func ); // for debugging only
 extern dir_node_handle  CurrProc;      // current procedure
 extern unsigned long    LineNumber;
 extern bool             PhaseError;
+extern bool             write_to_file;
 
 extern void             FlushCurrSeg( void );
 extern const FNAME      *AddFlist( char const *filename );

@@ -3,10 +3,10 @@
 
 #include "scanner.h"
 
-#define YYCHKTYPE       int_16
-#define YYACTTYPE       int_16
-#define YYPLENTYPE      int_16
-#define YYPLHSTYPE      int_16
+#define YYCHKTYPE       uint_16
+#define YYACTTYPE       uint_16
+#define YYPLENTYPE      uint_16
+#define YYPLHSTYPE      uint_16
 
 
 
@@ -26,7 +26,7 @@
 #define YYERROR         goto yyerrlab
 
 extern const TokenStruct  xtokens[];
-extern const int          xtokcnt;
+extern const idx_type     xtokcnt;
 
 YYPARSER::YYPARSER( const char * fileName )
 //-----------------------------------------
@@ -84,8 +84,8 @@ int YYPARSER::yyparse()
     YYSTYPE *yyvp;
     int yyerrflag;
 
-    yyval = 0;
-    yylval = 0;
+    yyval.flags = 0;
+    yylval.flags = 0;
     yyerrflag = 0;
     yyaction = 0;
     yysp = yys;

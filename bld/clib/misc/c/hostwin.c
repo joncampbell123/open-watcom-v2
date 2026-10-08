@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2025      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2025-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -42,65 +42,50 @@
 
 #if defined(__WINDOWS__) || defined(__NT__)
 
-static int win_nt( void )
-/***********************/
+static int _WCNEAR win_nt( void )
+/*******************************/
 {
-    #ifdef __NT__                               /* Win32 app */
-        return( WIN32_IS_NT );
-    #else                                       /* Win16 app */
-        DWORD           flags;
-
-        flags = GetWinFlags() & 0x4000;
-        if( flags > 0 ) {
-            return( 1 );
-        } else {
-            return( 0 );
-        }
-    #endif
+  #ifdef __NT__                             /* Win32 app */
+    return( WIN32_IS_NT );
+  #else                                     /* Win16 app */
+    return( (GetWinFlags() & 0x4000) != 0 );
+  #endif
 }
 
 
-static int win_95( void )
-/***********************/
+static int _WCNEAR win_9x( void )
+/*******************************/
 {
-    #ifdef __NT__                               /* Win32 app */
-        return( WIN32_IS_WIN95 );
-    #else                                       /* Win16 app */
-        DWORD           ver;
+  #ifdef __NT__                             /* Win32 app */
+    return( WIN32_IS_WIN9X );
+  #else                                     /* Win16 app */
+    DWORD           ver;
 
-        ver = GetVersion() & 0xFFFF;
-        if( ver/256 == 95 ) {
-            return( 1 );
-        } else {
-            return( 0 );
-        }
-    #endif
+    ver = GetVersion() & 0xFFFF;
+    return( ver / 256 == 95 );
+  #endif
 }
 
 
-static int win_32s( void )
-/************************/
+static int _WCNEAR win_32s( void )
+/********************************/
 {
-    #ifdef __NT__                               /* Win32 app */
-        return( WIN32_IS_WIN32S );
-    #else                                       /* Win16 app */
-        return( 0 );
-    #endif
+  #ifdef __NT__                             /* Win32 app */
+    return( WIN32_IS_WIN32S );
+  #else                                     /* Win16 app */
+    return( 0 );
+  #endif
 }
 
 
-static int win_3x( void )
-/************************/
+static int _WCNEAR win_3x( void )
+/*******************************/
 {
-    #if defined(__WINDOWS__)
-        if( !win_nt() && !win_95() ) {
-            return( 1 );
-        } else {
-            return( 0 );
-        }
-    #else
-        return( 0 );
-    #endif
+  #if defined( __WINDOWS__ )
+    return( win_nt() == 0 && win_9x() == 0 );
+  #else
+    return( 0 );
+  #endif
 }
 
 #endif
@@ -109,13 +94,13 @@ static int win_3x( void )
 _WCRTLINK int _host_os_id( void )
 /*******************************/
 {
-    int                 id;
+    int             id;
 
 #if defined(__WINDOWS__) || defined(__NT__)
     if( win_nt() ) {
         id = HOST_OS_WINNT;
-    } else if( win_95() ) {
-        id = HOST_OS_WIN95;
+    } else if( win_9x() ) {
+        id = HOST_OS_WIN9X;
     } else if( win_32s() ) {
         id = HOST_OS_WIN32S;
     } else if( win_3x() ) {
@@ -134,14 +119,14 @@ _WCRTLINK int _host_os_id( void )
 _WCRTLINK const char *_host_os_name( void )
 /*****************************************/
 {
-    const char *        osname;
-    int                 id = _host_os_id();
+    const char      *osname;
+    int             id = _host_os_id();
 
 #if defined(__WINDOWS__) || defined(__NT__)
     if( id == HOST_OS_WINNT ) {
         osname = "Windows NT";
-    } else if( id == HOST_OS_WIN95 ) {
-        osname = "Windows 95";
+    } else if( id == HOST_OS_WIN9X ) {
+        osname = "Windows 9x";
     } else if( id == HOST_OS_WIN32S ) {
         osname = "Win32s under Windows 3.x";
     } else if( id == HOST_OS_WIN3X ) {

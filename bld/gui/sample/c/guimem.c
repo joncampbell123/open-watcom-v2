@@ -2,6 +2,7 @@
 *
 *                            Open Watcom Project
 *
+* Copyright (c) 2018-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -24,43 +25,173 @@
 *
 *  ========================================================================
 *
-* Description:  WHEN YOU FIGURE OUT WHAT THIS FILE DOES, PLEASE
-*               DESCRIBE IT HERE!
+* Description:  Cover routines to access the trmem memory tracker
 *
 ****************************************************************************/
 
 
+//#include "guiwind.h"
 #include <stdlib.h>
+#include <string.h>
+#include "guimem.h"
+#include "memfuncs.h"
+#include "trmem.h"
 
-void * GUIAlloc( unsigned size )
-/******************************/
+
+#ifdef TRMEM
+
+static _trmem_hdl  TrHdl = _TRMEM_HDL_NONE;
+
+static FILE *TrFile = NULL;   /* stream to put output on */
+
+static void MemPrintLine( void *parm, const char *buff, size_t len )
+/******************************************************************/
 {
-    return( malloc( size ) );
+    /* unused parameters */ (void)parm; (void)len;
+
+    if( TrFile != NULL ) {
+        fprintf( TrFile, "%s\n", buff );
+    }
 }
 
-void GUIFree( void *chunk )
+#endif  /* TRMEM */
+
+void GUIMemPrtUsage( void )
 /*************************/
 {
-    free( chunk );
+#ifdef TRMEM
+    _trmem_prt_usage( TrHdl );
+#endif
 }
 
-void * GUIRealloc( void * chunk, unsigned size )
-/**********************************************/
+void GUIMemRedirect( FILE *fp )
+/*****************************/
 {
-    return( realloc( chunk, size ) );
+#ifdef TRMEM
+    TrFile = fp;
+#else
+    /* unused parameters */ (void)fp;
+#endif
 }
 
 void GUIMemOpen( void )
 /*********************/
 {
+#ifdef TRMEM
+    char * tmpdir;
+
+    if( TrHdl == _TRMEM_HDL_NONE ) {
+        TrFile = stderr;
+        TrHdl = _trmem_open( malloc, free, realloc, strdup,
+            NULL, MemPrintLine, _TRMEM_DEF );
+
+        tmpdir = getenv( "TRMEMFILE" );
+        if( tmpdir != NULL ) {
+            TrFile = fopen( tmpdir, "w" );
+        }
+    }
+#endif
 }
 
 void GUIMemClose( void )
 /**********************/
 {
+#ifdef TRMEM
+    _trmem_prt_list( TrHdl );
+    _trmem_close( TrHdl );
+    if( TrFile != stderr ) {
+        fclose( TrFile );
+        TrFile = NULL;
+    }
+#endif
 }
 
-void GUIMemPrtUsage( void )
-/*************************/
+static void *check_nomem( void *ptr )
 {
+    if( ptr == NULL ) {
+        exit( 1 );
+    }
+    return( ptr );
+}
+
+/*
+ * Alloc functions
+ */
+
+TRMEMAPI( MemAlloc )
+void *MemAlloc( size_t size )
+/***************************/
+{
+#ifdef TRMEM
+    return( _trmem_alloc( size, _TRMEM_WHO( 1 ), TrHdl ) );
+#else
+    return( malloc( size ) );
+#endif
+}
+
+TRMEMAPI( MemAllocSafe )
+void *MemAllocSafe( size_t size )
+/*******************************/
+{
+#ifdef TRMEM
+    return( check_nomem( _trmem_alloc( size, _TRMEM_WHO( 2 ), TrHdl ) ) );
+#else
+    return( check_nomem( malloc( size ) ) );
+#endif
+}
+
+/*
+ * Strdup functions
+ */
+
+TRMEMAPI( MemStrdup )
+char *MemStrdup( const char *str )
+/********************************/
+{
+#ifdef TRMEM
+    return( _trmem_strdup( str, _TRMEM_WHO( 3 ), TrHdl ) );
+#else
+    return( strdup( str ) );
+#endif
+}
+
+TRMEMAPI( MemStrdupSafe )
+char *MemStrdupSafe( const char *str )
+/************************************/
+{
+#ifdef TRMEM
+    return( check_nomem( _trmem_strdup( str, _TRMEM_WHO( 3 ), TrHdl ) ) );
+#else
+    return( check_nomem( strdup( str ) ) );
+#endif
+}
+
+/*
+ * Free functions
+ */
+
+TRMEMAPI( MemFree )
+void MemFree( void *ptr )
+/***********************/
+{
+#ifdef TRMEM
+    _trmem_free( ptr, _TRMEM_WHO( 4 ), TrHdl );
+#else
+    free( ptr );
+#endif
+}
+
+/*
+ * Realloc functions
+ */
+
+TRMEMAPI( MemRealloc )
+void *MemRealloc( void *ptr, size_t size )
+/****************************************/
+{
+#ifdef TRMEM
+    return( _trmem_realloc( ptr, size, _TRMEM_WHO( 5 ), TrHdl ) );
+#else
+    return( realloc( ptr, size ) );
+#endif
 }

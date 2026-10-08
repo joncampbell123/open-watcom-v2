@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2002-2025 The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2002-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -51,8 +51,6 @@
 #include "clibext.h"
 
 
-#define IS_WHITESPACE(ptr) (*(ptr) == ' ' || *(ptr) =='\t' || *(ptr) == '\r')
-
 cmdfilelist     *CmdFile = NULL;
 
 static bool WildCard( bool (*rtn)( void ), tokcontrol ctrl )
@@ -81,7 +79,8 @@ static bool WildCard( bool (*rtn)( void ), tokcontrol ctrl )
                 break;     // don't wildcard a quoted string.
             if( *p == ' ' )
                 break;
-            if( *p == '?' || *p == '*' ) {
+            if( *p == '?'
+              || *p == '*' ) {
                 wildcrd = true;
                 break;
             }
@@ -92,7 +91,7 @@ static bool WildCard( bool (*rtn)( void ), tokcontrol ctrl )
     } else {
         retval = true;
         /* expand file names */
-        start = tostring();
+        start = getstring();
         dirp = opendir( start );
         if( dirp != NULL ) {
             _splitpath2( start, pg.buffer, &pg.drive, &pg.dir, NULL, NULL );
@@ -113,7 +112,7 @@ static bool WildCard( bool (*rtn)( void ), tokcontrol ctrl )
         } else {
             retval = rtn();
         }
-        _LnkFree( start );
+        MemFree( start );
     }
     return( retval );
 #endif
@@ -149,17 +148,19 @@ bool ProcArgListEx( bool (*rtn)( void ), tokcontrol ctrl, cmdfilelist *resetpoin
             if( CheckFence() ) {
                 break;
             } else if( !GetTokenEx( SEP_NO, ctrl, resetpoint, &bfilereset ) ) {
-                LnkMsg( LOC+LINE+ERR+MSG_BAD_CURLY_LIST, NULL );
+                LnkMsg( ERR+LOC+LINE+MSG_BAD_CURLY_LIST, NULL );
                 break;
             }
         }
     } else {
-        if( resetpoint != NULL && bfilereset )
+        if( resetpoint != NULL
+          && bfilereset )
             return( true );
         if( !GetTokenEx( SEP_NO, ctrl, resetpoint, &bfilereset ) )
             return( false );
         do {
-            if( resetpoint != NULL && bfilereset )
+            if( resetpoint != NULL
+              && bfilereset )
                 return( true );
             if( !WildCard( rtn, ctrl ) ) {
                 return( false );
@@ -184,31 +185,31 @@ static bool procOne( parse_entry *entry, sep_type req, bool suicide, bool subset
     const char          *ptr;
     size_t              len;
     bool                ret;
-    char                keybuff[20];
 
     if( !GetToken( req, TOK_INCLUDE_DOT ) )
         return( false );
     ret = true;
     for( ; entry->keyword != NULL; ++entry ) {
-        if( subset && (entry->flags & CF_SUBSET) == 0 ) {
+        if( subset
+          && (entry->flags & CF_SUBSET) == 0 ) {
             continue;
         }
         key = entry->keyword;
         ptr = Token.this;
         len = Token.len;
         for( ;; ) {
-            if( len == 0 && !isupper( *key ) ) {
+            if( len == 0
+              && !isupper( *key ) ) {
                 if( HintFormat( entry->format ) ) {
                     ret = (*entry->rtn)();
                     CmdFlags |= entry->flags & ~CF_SUBSET;
                 } else {
-                    strcpy( keybuff, entry->keyword );
-                    strlwr( keybuff );
-                    LnkMsg( LOC+LINE+WRN+MSG_FORMAT_BAD_OPTION, "s", keybuff );
+                    LnkMsg( WRN+LOC+LINE+MSG_FORMAT_BAD_OPTION, "s", entry->keyword );
                 }
                 return( ret );
             }
-            if( *key == '\0' || tolower( *ptr ) != tolower( *key ) )
+            if( *key == '\0'
+              || tolower( *(unsigned char *)ptr ) != tolower( *(unsigned char *)key ) )
                 break;
             ptr++;
             key++;
@@ -259,10 +260,12 @@ bool MatchOne( parse_entry *entry, sep_type req, const char *match, size_t match
         ptr = match;
         len = match_len;
         for( ;; ) {
-            if( len == 0 && !isupper( *key ) ) {
+            if( len == 0
+              && !isupper( *key ) ) {
                 return( true );
             }
-            if( *key == '\0' || tolower( *ptr ) != tolower( *key ) )
+            if( *key == '\0'
+              || tolower( *(unsigned char *)ptr ) != tolower( *(unsigned char *)key ) )
                 break;
             ptr++;
             key++;
@@ -302,6 +305,7 @@ ord_state getatol( unsigned_32 *pnt )
     bool                isdig;
     bool                gotdigit;
     int                 ch;
+    char                c;
 
     len = Token.len;
     if( len == 0 )
@@ -310,44 +314,44 @@ ord_state getatol( unsigned_32 *pnt )
     gotdigit = false;
     value = 0;
     radix = 10;
-    if( len >= 2 && *p == '0' ) {
-        --len;
-        ++p;
-        if( tolower( *(unsigned char *)p ) == 'x' ) {
-            radix = 16;
-            ++p;
-            --len;
-        }
+    if( p[0] == '0'
+      && ( p[1] == 'x'
+      || p[1] == 'X' ) ) {
+        radix = 16;
+        len -= 2;
+        p += 2;
     }
     for( ; len != 0; --len ) {
-        ch = tolower( *(unsigned char *)p++ );
-        if( ch == 'k' ) {               // constant of the form 64k
-            if( len > 1 || !gotdigit ) {
+        c = ch = tolower( *(unsigned char *)p++ );
+        if( c == 'k' ) {               // constant of the form 64k
+            if( len > 1
+              || !gotdigit ) {
                 return( ST_NOT_ORDINAL );
             } else {
                 value <<= 10;           // value = value * 1024;
             }
-        } else if( ch == 'm' ) {        // constant of the form 64M
-            if( len > 1 || !gotdigit ) {
+        } else if( c == 'm' ) {        // constant of the form 64M
+            if( len > 1
+              || !gotdigit ) {
                 return( ST_NOT_ORDINAL );
             } else {
                 value <<= 20;
             }
         } else {
             isdig = ( isdigit( ch ) != 0 );
-            if( radix == 10 ) {
-                isvalid = isdig;
-            } else {
+            if( radix == 16 ) {
                 isvalid = ( isxdigit( ch ) != 0 );
+            } else {
+                isvalid = isdig;
             }
             if( !isvalid ) {
                 return( ST_NOT_ORDINAL );
             }
             value *= radix;
             if( isdig ) {
-                value += ch - '0';
+                value += c - '0';
             } else {
-                value += ch - 'a' + 10;
+                value += c - 'a' + 10;
             }
             gotdigit = true;
         }
@@ -385,22 +389,11 @@ bool GetLong( unsigned_32 *addr )
     return( true );
 }
 
-char *tostring( void )
-/********************/
+char *getstring( void )
+/*********************/
 // make the current token into a C string.
 {
-    return( ChkToString( Token.this, Token.len ) );
-}
-
-char *totext( void )
-/******************/
-/* get a possiblly quoted string */
-{
-    Token.thumb = true;
-    if( !GetToken( SEP_NO, TOK_NORMAL ) ) {
-        GetToken( SEP_NO, TOK_INCLUDE_DOT );
-    }
-    return( tostring() );
+    return( MemToStringSafe( Token.this, Token.len ) );
 }
 
 static unsigned ParseNumber( const char *str, int radix, int *shift )
@@ -410,16 +403,17 @@ static unsigned ParseNumber( const char *str, int radix, int *shift )
     bool        isdig;
     bool        isvalid;
     int         ch;
+    char        c;
     int         size;
     unsigned    value;
 
     size = 0;
     value = 0;
     for( ;; ) {
-        ch = tolower( *(unsigned char *)str );
+        c = ch = tolower( *(unsigned char *)str );
         isdig = ( isdigit( ch ) != 0 );
         if( radix == 8 ) {
-            isvalid = ( isdig && ch != '8' && ch != '9' );
+            isvalid = ( isdig && c != '8' && c != '9' );
         } else {
             isvalid = ( isxdigit( ch ) != 0 );
         }
@@ -427,9 +421,9 @@ static unsigned ParseNumber( const char *str, int radix, int *shift )
             break;
         value *= radix;
         if( isdig ) {
-            value += ch - '0';
+            value += c - '0';
         } else {
-            value += ch - 'a' + 10;
+            value += c - 'a' + 10;
         }
         size++;
         str++;
@@ -445,11 +439,11 @@ static void MapEscapeChar( void )
 {
     const char      *str;
     int             shift;
-    int             c;
+    char            c;
 
     shift = 2;
     str = Token.next + 1;
-    switch( *(unsigned char *)str ) {
+    switch( *str ) {
     case 'a':
         c = '\a';
         break;
@@ -472,7 +466,7 @@ static void MapEscapeChar( void )
         c = '\v';
         break;
     case 'x':   /* '\x' */
-        c = (unsigned char)ParseNumber( ++str, 16, &shift );
+        c = ParseNumber( ++str, 16, &shift );
         break;
     case '0':
     case '1':
@@ -484,7 +478,7 @@ static void MapEscapeChar( void )
     case '7':
     case '8':
     case '9':
-        c = (unsigned char)ParseNumber( str, 8, &shift );
+        c = ParseNumber( str, 8, &shift );
         break;
     default:
         c = *str;
@@ -502,7 +496,10 @@ static unsigned MapDoubleByteChar( int c )
 {
     switch( CmdFlags & CF_LANGUAGE_MASK ) {
     case CF_LANGUAGE_JAPANESE:
-        if( (c >= 0x81 && c <= 0x9F) || (c >= 0xE0 && c <=0xFC) ) {
+        if( (c >= 0x81
+          && c <= 0x9F)
+          || (c >= 0xE0
+          && c <=0xFC) ) {
             Token.next++;
             return( 1 );
         }
@@ -526,7 +523,7 @@ static bool MakeToken( tokcontrol ctrl, sep_type separator )
 /**********************************************************/
 {
     bool        quit;
-    int         hmm;
+    char        c;
     size_t      len;
     bool        forcematch;
     bool        hitmatch;
@@ -541,16 +538,18 @@ static bool MakeToken( tokcontrol ctrl, sep_type separator )
         len--;                  /* length token for parsing wlib files, so */
         Token.next--;           /* artificially back up one here. */
     }
-    if( *Token.next == '\\' && separator == SEP_QUOTE && (ctrl & TOK_IS_FILENAME) == 0 ) {
+    if( *Token.next == '\\'
+      && separator == SEP_QUOTE
+      && (ctrl & TOK_IS_FILENAME) == 0 ) {
         MapEscapeChar();        /* get escape chars starting in 1st pos. */
     }
-    hmm = *(unsigned char *)Token.next;
-    len += MapDoubleByteChar( hmm );
+    c = *Token.next;
+    len += MapDoubleByteChar( (unsigned char)c );
     hitmatch = false;
     for( ;; ) {
         len++;
-        hmm = *(unsigned char *)++Token.next;
-        switch( hmm ) {
+        c = *++Token.next;
+        switch( c ) {
         case '\'':
             if( separator == SEP_QUOTE ) {
                 ++Token.next;      // don't include end quote in next token.
@@ -615,14 +614,15 @@ static bool MakeToken( tokcontrol ctrl, sep_type separator )
             quit = true;
             break;
         default:
-            len += MapDoubleByteChar( hmm );
+            len += MapDoubleByteChar( (unsigned char)c );
         }
         if( quit ) {
             break;
         }
     }
     Token.len = len;
-    if( forcematch && !hitmatch ) {
+    if( forcematch
+      && !hitmatch ) {
         return( false );     // end quote/paren not found before token end.
     }
     return( true );
@@ -640,26 +640,27 @@ static void ExpandEnvVariable( tokcontrol ctrl, sep_type req )
 
     Token.next++;
     if( !MakeToken( TOK_INCLUDE_DOT, SEP_PERCENT ) ) {
-        LnkMsg( LOC+LINE+FTL+MSG_ENV_NAME_INCORRECT, NULL );
+        LnkMsg( FTL+LOC+LINE+MSG_ENV_NAME_INCORRECT, NULL );
     }
-    envname = tostring();
+    envname = getstring();
     env = GetEnvString( envname );
     if( env == NULL ) {
-        LnkMsg( LOC+LINE+WRN+MSG_ENV_NOT_FOUND, "s", envname );
+        LnkMsg( WRN+LOC+LINE+MSG_ENV_NOT_FOUND, "s", envname );
     } else {
         MakeToken( ctrl, req );
         envlen = strlen( env );
         toklen = Token.len;
-        if( req == SEP_QUOTE && Token.this[toklen] == '\'' )
+        if( req == SEP_QUOTE
+          && Token.this[toklen] == '\'' )
             toklen++;
-        _ChkAlloc( buff, envlen + toklen + 1);
+        buff = MemAllocSafe( envlen + toklen + 1);
         memcpy( buff, env, envlen );
         memcpy( buff + envlen, Token.this, toklen );
         buff[toklen + envlen] = '\0';
         NewCommandSource( envname, buff, ENVIRONMENT );
-        _LnkFree( buff );
+        MemFree( buff );
     }
-    _LnkFree( envname );
+    MemFree( envname );
 }
 
 static void GetNewLine( void )
@@ -705,21 +706,21 @@ static void StartNewFile( void )
     fname = FileName( Token.this, Token.len, E_NONE, false );
     file = QObjOpen( fname );
     if( file == NIL_FHANDLE ) {
-        _LnkFree( fname );
-        fname = tostring();
+        MemFree( fname );
+        fname = getstring();
         envstring = GetEnvString( fname );
         if( envstring != NULL ) {
             NewCommandSource( fname, envstring, ENVIRONMENT );
-            _LnkFree( fname );
+            MemFree( fname );
         } else {
-            LnkMsg( LOC+LINE+ERR+MSG_CANT_OPEN_NO_REASON, "s", fname );
-            _LnkFree( fname );
+            LnkMsg( ERR+LOC+LINE+MSG_CANT_OPEN_NO_REASON, "s", fname );
+            MemFree( fname );
             Suicide();
         }
     } else {
         SetCommandFile( file, fname );
         DEBUG(( DBG_OLD, "processing command file %s", fname ));
-        _LnkFree( fname );
+        MemFree( fname );
     }
 }
 
@@ -728,7 +729,7 @@ static void BackupParser( void )
 /* move the parser temporarily back to a previous input source */
 {
     if( CmdFile->prev == NULL ) {
-        LnkMsg( LOC+LINE+WRN + MSG_NO_PREVIOUS_INPUT, NULL );
+        LnkMsg( WRN+LOC+LINE + MSG_NO_PREVIOUS_INPUT, NULL );
         return;
     }
     memcpy( &CmdFile->token, &Token, sizeof( tok ) );   // save current state
@@ -752,7 +753,7 @@ bool GetTokenEx( sep_type req, tokcontrol ctrl, cmdfilelist *resetpoint, bool *p
 /* return true if no problem */
 /* return false if problem   */
 {
-    char    hmm;
+    char    c;
     bool    ret;
     bool    need_sep;
 
@@ -783,7 +784,8 @@ bool GetTokenEx( sep_type req, tokcontrol ctrl, cmdfilelist *resetpoint, bool *p
         //  prefix token(s) may also appear anywhere in the file.
         */
 
-        if( Token.skipToNext && (req == SEP_COMMA) ) {
+        if( Token.skipToNext
+          && (req == SEP_COMMA) ) {
             Token.skipToNext = false;
             need_sep = false;
         }
@@ -791,20 +793,20 @@ bool GetTokenEx( sep_type req, tokcontrol ctrl, cmdfilelist *resetpoint, bool *p
         switch( Token.where ) {
         case MIDST:
             EatWhite();
-            hmm = *Token.next;
-            switch( hmm ) {
+            c = *Token.next;
+            switch( c ) {
             case '\0':
                 if( Token.how == BUFFERED
-                 || Token.how == ENVIRONMENT
-                 || Token.how == SYSTEM ) {
+                  || Token.how == ENVIRONMENT
+                  || Token.how == SYSTEM ) {
                     Token.where = ENDOFFILE;
                     break;
                 }
                 /* fall through */
             case '\n':
                 if( Token.how == BUFFERED
-                 || Token.how == ENVIRONMENT
-                 || Token.how == SYSTEM ) {
+                  || Token.how == ENVIRONMENT
+                  || Token.how == SYSTEM ) {
                     Token.next++;               // just skip this.
                 } else if( Token.how == COMMANDLINE ) {
                     Token.where = ENDOFCMD;
@@ -849,43 +851,44 @@ bool GetTokenEx( sep_type req, tokcontrol ctrl, cmdfilelist *resetpoint, bool *p
                     Token.quoted = false;
                     switch( req ) {
                     case SEP_NO:
-                        if( hmm == ',' || hmm == '=' )
+                        if( c == ','
+                          || c == '=' )
                             return( false );
                         break;
                     case SEP_COMMA:
-                        if(hmm != ',' )
+                        if( c != ',' )
                             return( false);
                         Token.next++;
                         break;
                     case SEP_EQUALS:
-                        if( hmm != '=' )
+                        if( c != '=' )
                             return( false );
                         Token.next++;
                         break;
                     case SEP_PERIOD:
                     case SEP_DOT_EXT:
-                        if( hmm != '.' )
+                        if( c != '.' )
                             return( false );
                         Token.next++;
                         break;
                     case SEP_PAREN:
-                        if( hmm != '(' )
+                        if( c != '(' )
                             return( false );
                         Token.next++;
                         break;
                     case SEP_LCURLY:
-                        if( hmm != '{' )
+                        if( c != '{' )
                             return( false );
                         Token.next++;
                         break;
                     case SEP_QUOTE:
-                        if( hmm != '\'' )
+                        if( c != '\'' )
                             return( false );
                         Token.next++;
                         Token.quoted = true;
                         break;
                     case SEP_RCURLY:
-                        if( hmm != '}' )
+                        if( c != '}' )
                             return( false );
                         Token.next++;
                         return( true );
@@ -895,7 +898,9 @@ bool GetTokenEx( sep_type req, tokcontrol ctrl, cmdfilelist *resetpoint, bool *p
                     need_sep = false;
                     EatWhite();
                 } else {                /*  must have good separator here */
-                    if( hmm == '\'' && req != SEP_PAREN && req != SEP_SPACE ) {
+                    if( c == '\''
+                      && req != SEP_PAREN
+                      && req != SEP_SPACE ) {
                         req = SEP_QUOTE;   /* token has been quoted */
                         Token.next++;      /* don't include the quote */
                         Token.quoted = true;
@@ -925,7 +930,8 @@ bool GetTokenEx( sep_type req, tokcontrol ctrl, cmdfilelist *resetpoint, bool *p
                 Token.next = Token.this;        /* re-process last token */
             }
             Token.quoted = false;
-            if( resetpoint != NULL && (CmdFile == resetpoint) ) {
+            if( resetpoint != NULL
+              && (CmdFile == resetpoint) ) {
                 if( *Token.next == ',' )
                     break;
                 if( pbreset != NULL )
@@ -958,7 +964,7 @@ static char *getCmdLine( void )
     char    *cmd_line;
 
     cmd_len = _bgetcmd( NULL, 0 ) + 1;
-    _ChkAlloc( cmd_line, cmd_len );
+    cmd_line = MemAlloc( cmd_len );
     if( cmd_line != NULL ) {
         _bgetcmd( cmd_line, cmd_len );
     }
@@ -971,7 +977,7 @@ void NewCommandSource( const char *name, const char *buff, method how )
 {
     cmdfilelist     *newfile;
 
-    _ChkAlloc( newfile, sizeof( cmdfilelist ) );
+    newfile = MemAllocSafe( sizeof( cmdfilelist ) );
     newfile->file = STDIN_FILENO;
     newfile->symprefix = NULL;
     if( CmdFile != NULL ) {     /* save current state */
@@ -989,16 +995,16 @@ void NewCommandSource( const char *name, const char *buff, method how )
     }
     CmdFile = newfile;
     if( name != NULL ) {
-        newfile->name = ChkStrDup( name );
+        newfile->name = MemStrdupSafe( name );
     } else {
         newfile->name = NULL;
     }
     newfile->token.how = how;
     if( how == NONBUFFERED ) {
         /* have to have at least this size */
-        _ChkAlloc( newfile->token.buff, MAX_REC + 1 );
+        newfile->token.buff = MemAlloc( MAX_REC + 1 );
     } else if( buff != NULL ) {
-        newfile->token.buff = ChkStrDup( buff );
+        newfile->token.buff = MemStrdupSafe( buff );
     } else if( how == COMMANDLINE ) {
         newfile->token.buff = getCmdLine();
     } else {
@@ -1030,14 +1036,14 @@ void SetCommandFile( f_handle file, const char *fname )
     if( long_size < 0x10000 - 16 - 1 ) {       // if can alloc a chunk big enough
         size_t  size = (size_t)long_size;
 
-        _LnkAlloc( buff, size + 1 );
+        buff = MemAlloc( size + 1 );
         if( buff != NULL ) {
             size = QRead( file, buff, size, fname );
             if( size == IOERROR )
                 size = 0;
             buff[size] = '\0';
             NewCommandSource( fname, buff, BUFFERED );
-            _LnkFree( buff );
+            MemFree( buff );
         }
     }
     if( buff == NULL ) {  // if couldn't buffer for some reason.
@@ -1051,7 +1057,7 @@ void SetCommandFile( f_handle file, const char *fname )
 void EatWhite( void )
 /*******************/
 {
-    while( IS_WHITESPACE( Token.next ) ) {
+    while( isspace( *(unsigned char *)Token.next ) ) {
         Token.next++;
     }
 }
@@ -1062,19 +1068,20 @@ static void deleteCmdFile( cmdfilelist *cmdfile )
     f_handle    file;
 
     file = cmdfile->file;
-    if( file != NIL_FHANDLE && file != STDIN_FILENO ) {
+    if( file != NIL_FHANDLE
+      && file != STDIN_FILENO ) {
         QClose( file, cmdfile->name );
     }
     if( cmdfile->symprefix != NULL ) {
-        _LnkFree( cmdfile->symprefix );
+        MemFree( cmdfile->symprefix );
     }
     if( cmdfile->name != NULL ) {
-        _LnkFree( cmdfile->name );
+        MemFree( cmdfile->name );
     }
     if( cmdfile->token.buff != NULL ) {
-        _LnkFree( cmdfile->token.buff );
+        MemFree( cmdfile->token.buff );
     }
-    _LnkFree( cmdfile );
+    MemFree( cmdfile );
 }
 
 void RestoreCmdLine( void )
@@ -1107,7 +1114,7 @@ void BurnUtils( void )
     cmdfilelist     *temp;
 
     if( CmdFile->next != NULL ) {
-        LnkMsg( LOC+LINE+ERR+MSG_NO_INPUT_LEFT, NULL );
+        LnkMsg( ERR+LOC+LINE+MSG_NO_INPUT_LEFT, NULL );
     }
     while( (temp = CmdFile) != NULL ) {
         CmdFile = CmdFile->prev;
@@ -1141,12 +1148,12 @@ outfilelist *NewOutFile( char *filename )
 
     for( fnode = OutFiles; fnode != NULL; fnode = fnode->next ) {
         if( FNAMECMPSTR( filename, fnode->fname ) == 0 ) {
-            _LnkFree( filename );       // don't need this now.
+            MemFree( filename );       // don't need this now.
             return( fnode );
         }
     }
     // file name not already in list, so add a list entry.
-    _ChkAlloc( fnode, sizeof( outfilelist ) );
+    fnode = MemAllocSafe( sizeof( outfilelist ) );
     InitBuffFile( fnode, filename, true );
     fnode->next = OutFiles;
     OutFiles = fnode;
@@ -1166,7 +1173,7 @@ char *GetFileName( char **membname )
     namelen = Token.len;
     if( GetToken( SEP_PAREN, TOK_INCLUDE_DOT ) ) {   // got LIBNAME(LIB_MEMBER)
         fullmemb = GetBaseName( Token.this, Token.len, &memblen );
-        *membname = ChkToString( fullmemb, memblen );
+        *membname = MemToStringSafe( fullmemb, memblen );
         ptr = FileName( objname, namelen, E_LIBRARY, false );
     } else {
         *membname = NULL;
@@ -1196,7 +1203,7 @@ version_state GetGenVersion( version_block *vb, version_state enq, bool novell_r
     /* process major value */
     retval = getatol( &value );
     if( retval != ST_IS_ORDINAL ) {
-        LnkMsg( LOC+LINE+WRN+MSG_VALUE_INCORRECT, "s", vb->message );
+        LnkMsg( WRN+LOC+LINE+MSG_VALUE_INCORRECT, "s", vb->message );
         return( state );
     }
     /* setup component limits */
@@ -1212,8 +1219,9 @@ version_state GetGenVersion( version_block *vb, version_state enq, bool novell_r
      */
     state = GENVER_MAJOR;
     if( enq & GENVER_MAJOR ) {
-        if( ( major_limit ) && ( value > major_limit ) ) {
-            LnkMsg( LOC+LINE+WRN+MSG_VALUE_INCORRECT, "s", vb->message );
+        if( ( major_limit )
+          && ( value > major_limit ) ) {
+            LnkMsg( WRN+LOC+LINE+MSG_VALUE_INCORRECT, "s", vb->message );
             return( state );
         }
         vb->major = value;
@@ -1228,13 +1236,14 @@ version_state GetGenVersion( version_block *vb, version_state enq, bool novell_r
     }
     retval = getatol( &value );
     if( retval != ST_IS_ORDINAL ) {
-        LnkMsg( LOC+LINE+WRN+MSG_VALUE_INCORRECT, "s", vb->message );
+        LnkMsg( WRN+LOC+LINE+MSG_VALUE_INCORRECT, "s", vb->message );
         return( state );
     }
     state |= GENVER_MINOR;
     if( enq & GENVER_MINOR ) {
-        if( ( minor_limit ) && ( value > minor_limit ) ) {
-            LnkMsg( LOC+LINE+WRN+MSG_VALUE_INCORRECT, "s", vb->message );
+        if( ( minor_limit )
+          && ( value > minor_limit ) ) {
+            LnkMsg( WRN+LOC+LINE+MSG_VALUE_INCORRECT, "s", vb->message );
             return( state );
         }
         vb->minor = value;
@@ -1252,21 +1261,23 @@ version_state GetGenVersion( version_block *vb, version_state enq, bool novell_r
         /*
          * Netware supports a revision field 0-26 (null or a-z(A-Z))
          */
-        if( retval == ST_NOT_ORDINAL && Token.len == 1 ) {
-            value  = tolower( *(unsigned char *)Token.this ) - 'a' + 1;
+        if( retval == ST_NOT_ORDINAL
+          && Token.len == 1 ) {
+            value = (char)tolower( *(unsigned char *)Token.this ) - 'a' + 1;
         } else if( retval == ST_NOT_ORDINAL ) {
-            LnkMsg( LOC+LINE+WRN+MSG_VALUE_INCORRECT, "s", vb->message );
+            LnkMsg( WRN+LOC+LINE+MSG_VALUE_INCORRECT, "s", vb->message );
             return( state );
         }
     } else {
         if( retval != ST_IS_ORDINAL ) {
-            LnkMsg( LOC+LINE+WRN+MSG_VALUE_INCORRECT, "s", vb->message );
+            LnkMsg( WRN+LOC+LINE+MSG_VALUE_INCORRECT, "s", vb->message );
             return( state );
         }
     }
     state |= GENVER_REVISION;
-    if( ( revision_limit ) && ( value > revision_limit ) ) {
-        LnkMsg( LOC+LINE+WRN+MSG_VALUE_INCORRECT, "s", vb->message );
+    if( ( revision_limit )
+      && ( value > revision_limit ) ) {
+        LnkMsg( WRN+LOC+LINE+MSG_VALUE_INCORRECT, "s", vb->message );
         return( state );
     }
     vb->revision = value;

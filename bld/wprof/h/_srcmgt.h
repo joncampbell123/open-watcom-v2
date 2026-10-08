@@ -2,7 +2,7 @@
 *
 *                            Open Watcom Project
 *
-* Copyright (c) 2025      The Open Watcom Contributors. All Rights Reserved.
+* Copyright (c) 2025-2026 The Open Watcom Contributors. All Rights Reserved.
 *    Portions Copyright (c) 1983-2002 Sybase, Inc. All Rights Reserved.
 *
 *  ========================================================================
@@ -32,11 +32,13 @@
 
 
 #include <stdio.h>
+#include "memfuncs.h"
+
 
 #define SMTabIntervalGet()              8
 
-#define _SMAlloc( pointer, size )       (pointer) = ProfAlloc( size )
-#define _SMFree( pointer )              ProfFree( pointer )
+#define _SMAlloc( pointer, size )       (pointer) = MemAlloc( size )
+#define _SMFree( pointer )              MemFree( pointer )
 
 #define sm_file_handle                  FILE *
 #define sm_mod_handle                   int
@@ -61,7 +63,3 @@
 #define SMReadError( fp, len )          ( ferror( fp ) != 0 )
 
 #define SMFileIsRemote( fp )            0
-
-
-extern void *ProfAlloc( size_t size );
-extern void ProfFree( void *ptr );
